@@ -1,0 +1,120 @@
+#Settings for plan4res format.py
+#
+#########################################"
+
+inputpath: 'data/local/Input_plan4res/' #repository where to find input data
+outputpath: 'data/local/Input_plan4res/nc4_invest/'  # repository where netcdf files are created
+timeseriespath: 'data/local/TimeSeries/'  # directory where stochastic timeseries are stored
+
+# names of csv output files 
+csvfiles: 
+    ZP_ZonePartition: 'ZP_ZonePartition.csv'  # mandatory, contains description of regions
+    IN_Interconnections: 'IN_Interconnections.csv'  # optionnal, contains description of network
+    ZV_ZoneValues: 'ZV_ZoneValues.csv' # mandatory, contains description of coupling constraints
+    TU_ThermalUnits: 'TU_ThermalUnits.csv' # optionnal, contains description of thermal units
+    SS_SeasonalStorage: 'SS_SeasonalStorage.csv' # optionnal, containsescription of seasonal storages
+    STS_ShortTermStorage: 'STS_ShortTermStorage.csv' # optionnal, contains description of short term storages
+    RES_RenewableUnits: 'RES_RenewableUnits.csv' # optionnal, contains description of renewable units
+    #SYN_SynchCond: 'SYN.csv' # optionnal, contains description of synchronous condensers
+
+# the variable FormatMode defines what the formatting tool will do
+# FormatMode= SingleUC : generates ONE UCBlock for the first period (first SSVTimestep) of the dataset
+# FormatMode= UC : generates a serie of UCBlocks for each period (each SSVTimestep) of the dataset
+# FormatMode= SDDP : generates only the SDDPBlock
+# FormatMode= SDDPandUC : generates the SDDPBlock and all the UCBlocks
+# FormatMode= INVEST : generates the InvestmentBlock 
+# FormatMode= INVESTandSDDP : generates the InvestmentBlock and the SDDPBlock
+# FormatMode= INVESTandSDDPandUC : generates the InvestmentBlock and the SDDPBlock and all the UCBlocks
+FormatMode: INVESTandSDDPandUC
+
+# the variable FormatVU defines the input for Bellman values
+# FormatVU= None : no bellman values are used as input
+# FormatVU= PerReservoir :  bellman values computed independently reservoir per reservoir are used
+# In this case all bellmanvalue files in the same hydrosystem must have the same number of volume steps
+# the format of bellman values files for each upstream reservoir is 3 columns : dates, volume steps, corresponding bellman values
+# the names of the columns must be Volume and Value
+# FormatVU= Polyhedral :  A polyhedral function is used: \sum_i a_i*x_i+b (x_i being the volume of reservoir i)
+# in this case there should exist one datafile per hydrosystem
+# the format of this file is  2+N columns where N is the number of reservoirs: 
+# first column: dates, 1 column per reservoir with the a coefficients, 1 column with value of b
+# the names of the columns must be a_i (i from 0 to Number of reservoirs -1), and b
+FormatVU: Polyhedral
+
+# the variable IncludeVU defines when to include external water values in input
+# IncludeVU= None : no bellman values are used as input
+# IncludeVU= Last :  water values included only in the last Block
+# IncludeVU= All :  water values included in all blocks
+IncludeVU: Last
+
+# the variable Invest defines if additionnal constraints are created for the investment optimisation
+# Invest= Simple : no additional constraints are created
+# Invest= NRJ : regions are autonomous in energy (ie the amount of energy is sufficient for each node)
+# Invest= TargetRES: each region has a target of renewable energies
+Invest: Simple
+
+IncludeScenarisedData: yes # if yes, the scenarised data are included in the blocks, if not the corresponding variables are filled with 0
+
+Parameters: 
+    # dates information:
+    # - dayfirst: True if the format is giving the day first (01/07/2050 means first of july)
+    # - BeginTimeSeries : first day of the datasets
+    # - EndTimeSeries : last day of the datasets
+    # - BeginDataset : first day of the instance to create
+    # - EndDataset: last day of the instance to create
+    # by copying the data starting at UCBeginExtendedData and ending at UCEndExtendedData at the end of the data timeseries
+    Calendar:
+        dayfirst: True 
+        BeginTimeSeries: '01/01/2050  00:00:00'   # timescale where timeseries are available
+        EndTimeSeries: '31/12/2050  23:00:00'   # timescale where timeseries are available
+        BeginDataset: '02/07/2030  00:00:00'
+        #EndDataset: '30/06/2031  23:00:00'
+        EndDataset: '31/12/2031  23:00:00'
+        SSVTimeStep:  # duration of a timeset for the SDDP = duration of a unit commitment problem
+            Unit: hours
+            Duration: 168
+            #Duration: 24
+        TimeStep:  # duration of timesteps 
+            Unit: hours
+            Duration: 1
+
+    DownReservoirVolumeMultFactor: 2  # mult factor for computing the size of virtual downstream reservoir from max volume of upstream reservoir
+    DownDeltaRampUpMultFactor: 100 # mult factor for computing the max ramp up of virtual downstream reservoir from ramp up of upstream reservoir
+    DownDeltaRampDownMultFactor: 100 # mult factor for computing the max ramp down of virtual downstream reservoir from ramp down of upstream reservoir
+    NumberHoursInYear: 8760
+    InertiaMultFactor: 1.2 # mult factor for computing inertia contributions
+    InflowsMultiFactor: 168 # mult factor for computing the inflows (for the case where they are given eg weekly but the value per week is in MW
+    PumpingEfficiency: 0.8 # if pumpingeffiency is not in data for storage
+    RunOfRiverMultFactor: 24 # mult factor for computing the run of river (for the case where they are given eg daily but the value per day is in MW
+    # CouplingConstraints gives list of coupling constraints : 
+    # for each one : 
+    #   - unit of the data, 
+    #   - level of regional partitions to which it is applied (levels which are described in ZP_Partition)
+    #   - list of components of the constraint, to be summed (eg electricity demand is composed of the share for heating, the share for cooling....)
+    CouplingConstraints: 
+        ActivePowerDemand:
+            Partition: 'Countries'
+            #SumOf: ['Total']
+            SumOf: ['ElecHeating','ElecVehicle','AirCondition','nonthermo']
+            MaxPower: 500000  # max power of the slack group linked to this constraint
+            Cost: 10000  # cost of the slack group linked to this constraint
+        # PrimaryDemand:
+            # Partition: 'Countries'
+            # SumOf: ['Primary']
+            # MaxPower: 20000
+            # Cost: 18000
+        # PollutantBudget:
+            # CO2:
+                # Name: 'CO2'
+                # Partition: 'Continent'  
+    Scenarios: ['1982','1983'] # list of scenarios to include in the instance (names of scenarios)
+
+    # ScenarisedData contains the list of scenarised data, among 'ActivePowerDemand','Hydro:Inflows','Renewable:MaxPowerProfile' and 'Thermal:MaxPowerProfile'
+    ScenarisedData: ['ActivePowerDemand','Hydro:Inflows','Renewable:MaxPowerProfile']
+    ThermalMaxPowerTimeSpan: # frequency of the data for scenarised thermal max power profiles
+        Unit: hours
+        Duration: 168
+    CoeffSpillage: 3  # it is allowed to spill CoeffSpillage*Maximum Flow
+    LowerBound: 0.0 # optional: lower bound for SDDP
+    
+# data can be given as an excel file plus additional csv time series, or as a set of csv files
+inputformat: csv # excel or csv
