@@ -23,6 +23,7 @@ with open(settings_file,"r") as mysettings:
 	#cfg=yaml.load(mysettings)
 
 if cfg['USEPLAN4RESROOT']:
+	path = os.environ.get("PLAN4RESROOT")
 	cfg['outputpath']=path+cfg['outputpath']
 	cfg['inputpath']=path+cfg['inputpath']
 	cfg['timeseriespath']=path+cfg['timeseriespath']
