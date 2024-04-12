@@ -74,13 +74,18 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	cfg['scenario']=current_scenario
 	cfg['year']=current_year
 	print('create dataset for ',current_scenario,', ',current_year, ' and ',current_option)
-	if not current_option=='None':
+	if len(cfg['scenarios'])==1 and len(cfg['years'])==1 and len(cfg['options'])<2:
+		outputdir=cfg['outputpath']
+		if not os.path.isdir(outputdir):os.mkdir(outputdir)
+	elif not current_option=='None':
 		outputdir=cfg['outputpath']+'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])+'-'+current_option
 		if not os.path.isdir(outputdir):os.mkdir(outputdir)
+		outputdir=outputdir+'/'
 	else:
 		outputdir=cfg['outputpath']+'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])
 		if not os.path.isdir(outputdir):os.mkdir(outputdir)
-	outputdir=outputdir+'/'
+		outputdir=outputdir+'/'
+	
 
 	timestepduration=cfg['TimeStep']['number']										 
 
