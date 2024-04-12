@@ -13,10 +13,18 @@ from datetime import timedelta
 from calendar import monthrange
 from itertools import product
 
+path = os.environ.get("PLAN4RESROOT")
 cfg={}
 # open the configuration file using the pathway defined below
 with open("settingsCreateInputPlan4res.yml","r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
+if cfg['USEPLAN4RESROOT']:
+	cfg['outputpath']=path+cfg['outputpath']
+	cfg['dirTimeSeries']=path+cfg['dirTimeSeries']
+	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
+	for datagroup in cfg['datagroups']:
+		cfg['datagroups'][datagroup]['inputdatapath']=path+cfg['datagroups'][datagroup]['inputdatapath']
+print('path: ',cfg['outputpath'])
 	
 isInertia= ( 'Inertia' in cfg['Parameters']['CouplingConstraints'] )
 isPrimary= ( 'Primary' in cfg['Parameters']['CouplingConstraints'] )
