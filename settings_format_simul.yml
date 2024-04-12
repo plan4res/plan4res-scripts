@@ -2,9 +2,12 @@
 #
 #########################################"
 
-inputpath: 'data/local/Input_plan4res/' #repository where to find input data
-outputpath: 'data/local/Input_plan4res/nc4_simul/'  # repository where netcdf files are created
-timeseriespath: 'data/local/TimeSeries/'  # directory where stochastic timeseries are stored
+# if data are located within the plan4res container, use plan4res path
+USEPLAN4RESROOT: True
+
+inputpath: '/data/local/Input_plan4res/' #repository where to find input data
+outputpath: '/data/local/Input_plan4res/nc4_simul/'  # repository where netcdf files are created
+timeseriespath: '/data/local/TimeSeries/'  # directory where stochastic timeseries are stored
 
 # names of csv output files 
 csvfiles: 
