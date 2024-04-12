@@ -22,6 +22,12 @@ with open(settings_file,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 	#cfg=yaml.load(mysettings)
 
+if cfg['USEPLAN4RESROOT']:
+	cfg['outputpath']=path+cfg['outputpath']
+	cfg['inputpath']=path+cfg['inputpath']
+	cfg['timeseriespath']=path+cfg['timeseriespath']
+print('path: ',cfg['inputpath'])
+
 format=cfg['inputformat']
 if format=='excel':
 	p4r_excel=cfg['inputpath']+cfg['excelfile']
