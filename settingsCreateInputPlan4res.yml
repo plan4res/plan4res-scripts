@@ -6,12 +6,15 @@
 scenarios: ['Techno-Friendly 2.0']
 years: [2030]
 
+# if data are located within the plan4res container, use plan4res path
+USEPLAN4RESROOT: True
+
 # path where to output the plan4res format csv data
-outputpath: 'data/local/'
+outputpath: '/data/local/'
 # path where to find the stochastic time series csv files
-dirTimeSeries: 'data/local/TimeSeries/'
+dirTimeSeries: '/data/local/TimeSeries/'
 # path where openentrance nomenclature is cloned
-nomenclatureDir: 'scripts/python/openentrance/definitions/'
+nomenclatureDir: '/scripts/python/openentrance/definitions/'
 treat: # list of csv files to create in the plan4res excel file (comment line if not treated)
     ZP: 'ZP_ZonePartition.csv'
     ZV: 'ZV_ZoneValues.csv'
@@ -36,7 +39,6 @@ aggregateregions: # how to aggregate regions in plan4res dataset
       'East': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia','Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia','Turkey' ]
       'Iberia': ['Spain','Portugal']
       'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
-      'West': ['France','Germany','Italy','Switzerland']
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
@@ -262,7 +264,7 @@ listdatagroups: ['genesys1','genesys2','ehighway','entsoe']
 
 datagroups:
     genesys1:  # here the group with data from Open Entrance Scenario
-        inputdatapath: 'data/local/GENeSYS-MOD/'  
+        inputdatapath: '/data/local/GENeSYS-MOD/'  
         inputdata: 'openENTRANCE_GENeSYS-MOD_pathways.xlsx' 
         model: 'GENeSYS-MOD 3.1'
         regions:
@@ -289,7 +291,7 @@ datagroups:
                 runofriver:
                     add: ['Capacity|Electricity|']
     genesys2:  # here the group with recomputed data out of GENeSYS-MOD xlsx outputs
-        inputdatapath: 'data/local/GENeSYS-MOD/'  
+        inputdatapath: '/data/local/GENeSYS-MOD/'  
         inputdata: 'GENeSYS-MOD-pathways_D3.2_with_transmission_244_IAMC.csv' 
         model: 'GENeSYS-MOD 3.1'
         regions:
@@ -309,7 +311,7 @@ datagroups:
                 runofriver:
                     add: ['Secondary Energy|Electricity|']
     ehighway:
-        inputdatapath: '/home/Plan4Res/plan4res/Data/'  
+        inputdatapath: '/data/local/GENeSYS-MOD/'  
         inputdata: 'eHighway2050__EDF__V2.0.csv'        
         model: 'plan4eu-V1.1'
         scenario: 'eHighway2050'
@@ -322,7 +324,7 @@ datagroups:
             coupling: 
                 mean: ['Share|Final Energy|Electricity|Cooling']
     entsoe:
-        inputdatapath: '/home/Plan4Res/plan4res/Data/'  
+        inputdatapath: '/data/local/GENeSYS-MOD/'  
         inputdata: 'ENTSOE__EDF__V2.0.csv' 
         model: 'plan4eu-V1.1'
         scenario: 'ENTSOETransparency'
