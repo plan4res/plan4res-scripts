@@ -2172,8 +2172,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					# Analysis n specific weeks: stacked and marg costs graphs
 					################################################################################################
 						for week in cfg['PostTreat']['SpecificPeriods']['periods']:
-							start_week=pd.to_datetime(cfg['PostTreat']['SpecificPeriods']['periods'][week]['begin'])
-							end_week = pd.to_datetime(cfg['PostTreat']['SpecificPeriods']['periods'][week]['end'])
+							start_week=pd.to_datetime(cfg['PostTreat']['SpecificPeriods']['periods'][week]['begin'],dayfirst=cfg['Calendar']['dayfirst'])
+							end_week = pd.to_datetime(cfg['PostTreat']['SpecificPeriods']['periods'][week]['end'],dayfirst=cfg['Calendar']['dayfirst'])
 							start_short=str(start_week)[0:10]
 							end_short= str(end_week)[0:10]
 							WeekTimeIndex=pd.date_range(start=start_week,end=end_week, freq='1H')	
