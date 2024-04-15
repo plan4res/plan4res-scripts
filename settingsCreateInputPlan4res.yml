@@ -10,24 +10,20 @@ years: [2030]
 USEPLAN4RESROOT: True
 
 # path where to output the plan4res format csv data
-outputpath: '/data/local/InputPlan4res/'
+path: '/data/local/InputPlan4res/'
 # path where to find the stochastic time series csv files
-dirTimeSeries: '/data/local/TimeSeries/'
+timeseriespath: '/data/local/TimeSeries/'
 # path where openentrance nomenclature is cloned
 nomenclatureDir: '/scripts/python/openentrance/definitions/'
-treat: # list of csv files to create in the plan4res excel file (comment line if not treated)
-    ZP: 'ZP_ZonePartition.csv'
-    ZV: 'ZV_ZoneValues.csv'
-    TU: 'TU_ThermalUnits.csv'
-    IN: 'IN_Interconnections.csv'
-    SS: 'SS_SeasonalStorage.csv'
-    RES: 'RES_RenewableUnits.csv'
-    STS: 'STS_ShortTermStorage.csv'
-
-# timestep duration in plan4res dataset 
-TimeStep:
-    type: hours
-    number: 1
+csvfiles: # list of csv files to create in the plan4res excel file (comment line if not treated)
+    ZP_ZonePartition: 'ZP_ZonePartition.csv'  # mandatory, contains description of regions
+    IN_Interconnections: 'IN_Interconnections.csv'  # optionnal, contains description of network
+    ZV_ZoneValues: 'ZV_ZoneValues.csv' # mandatory, contains description of coupling constraints
+    TU_ThermalUnits: 'TU_ThermalUnits.csv' # optionnal, contains description of thermal units
+    SS_SeasonalStorage: 'SS_SeasonalStorage.csv' # optionnal, containsescription of seasonal storages
+    STS_ShortTermStorage: 'STS_ShortTermStorage.csv' # optionnal, contains description of short term storages
+    RES_RenewableUnits: 'RES_RenewableUnits.csv' # optionnal, contains description of renewable units
+    #SYN_SynchCond: 'SYN.csv' # optionnal, contains description of synchronous condensers
 
 # Regions
 #######################################
@@ -35,14 +31,19 @@ TimeStep:
 # list of regions to get from data sources 
 listregionsGET: ['Austria' , 'Belgium' , 'Bulgaria' , 'Croatia' , 'Czech Republic' , 'Denmark' , 'Estonia' , 'Finland' , 'France' , 'Germany' ,'Greece' , 'Hungary' , 'Ireland' , 'Italy' , 'Latvia' , 'Lithuania' , 'Luxembourg' , 'Non-EU-Balkans' , 'North Macedonia', 'Norway' , 'Poland' , 'Portugal' , 'Romania' , 'Slovakia' , 'Slovenia' , 'Spain' , 'Sweden' , 'Switzerland' , 'The Netherlands' , 'Turkey' ,'United Kingdom']
 aggregateregions: # how to aggregate regions in plan4res dataset
-      'North': ['Norway','Sweden','Finland','Denmark','Estonia', 'Latvia', 'Lithuania']
-      'East': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia','Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia','Turkey' ]
+      #'North': ['Norway','Sweden','Finland','Denmark','Estonia', 'Latvia', 'Lithuania']
+      #'East': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia','Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia','Turkey' ]
       'Iberia': ['Spain','Portugal']
-      'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
+      #'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
+      #'Baltics': ['Estonia', 'Latvia', 'Lithuania']
+      #'Balkans': ['Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia']   #for CS1
+      #'EasternEurope': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia' ]
+      #'Britain': ['Ireland' ,'United Kingdom']   
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
-    Countries: ['North','East','Iberia','Benelux','France','Germany','Italy','Switzerland']
+    #Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
+    Countries: ['Iberia','France']
     Continent: ['Continent']
 
 technos: # list of technologies and link to modelling in plan4res
@@ -58,18 +59,56 @@ technos: # list of technologies and link to modelling in plan4res
 # list of the names of the scenarised timeseries for scenarised data 
 # if using plan4res scenarised data, they are named from the meteorological year
 # that was used for their creation
-UCScenarios: [1982,1983,1984,1985,1986,1987,1988,1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018]
+StochasticScenarios: [1982,1983,1984,1985,1986,1987,1988,1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018]
 
-# list of the components that being sumed (multiplied by the loadfactors if varying with time
-# and scenarised if the load profiles are scenarised) to compute de electricity demand
-ActivePowerDemand: [ElecHeating,AirCondition,nonthermo,ElecVehicle]
+CouplingConstraints: # MaxPower and variable cost to use for creating slack units (units for non served)
+    # Coupling constraints which are not listed here will not be created in dataset
+    # Coupling contraints can be : Demand, Primary, Secondary, Inertia, CO2
+    # For the case of CO2, MaxPower and Cost are not needed, Budget can be defined (tons/CO2)
+    # Partition defines the level at which the coupling constraint applies
+    ActivePowerDemand : # mandatory - demand constraint
+        Partition: 'Countries'
+        MaxPower : 1500000
+        Cost : 10000
+        #SumOf: ['ElecHeating','ElecVehicle','AirCondition','nonthermo']
+        SumOf: ['Total']
+    # PrimaryDemand : # optional - primary reserve constraint
+        # Partition: 'Countries'
+        # MaxPower : 1000
+        # Cost : 15000
+        # SumOf: ['Primary']
+    # SecondaryDemand : # optional - primary reserve constraint
+        # Partition: 'Countries'
+        # MaxPower : 1000
+        # Cost : 15000
+        # SumOf: ['Secondary']
+    # InertiaDemand : # optional - inertia constraint
+        # Partition: 'Continent'
+        # MaxPower : 10000
+        # Cost : 15000
+        # SumOf: ['Inertia']
+    # PollutantBudget:
+        # CO2: # optional - emissions constraints (in further versions there can be multiple gases)
+            # Partition: 'Continent'
+            # Budget: 100000
+            # SumOf: ['CO2']
 
 ############################################################
-# General parameters
+# General parameters for dataset creation
 #############################################################
 
+# these are used when data are not available
+PumpingEfficiency:
+    battery:
+        Compressed Air: 0.7
+        Lithium-Ion: 0.7
+    hydrostorage:
+        Pumped Storage: 0.8
+    reservoir:
+        Reservoir: 0.8
+
 # list of parameters for treating the data
-Parameters:
+ParametersCreate:
     CapacityExpansion: # define capacity expansion dataset - list of technos which can be invested
         thermal: 
             Biomass|w/ CCS: 
@@ -156,12 +195,6 @@ Parameters:
     invest: no # yes: create a dataset for the Capacity Expansion model
     MultFactor:  # list of technos where MaxPower is computed as energy/(mean load profile*8760)
         Hydro|Run of River : 8760
-    PumpingEfficiency:
-        battery:
-            Compressed Air: 0.7
-            Lithium-Ion: 0.7
-        hydrostorage:
-            Pumped Storage: 0.8
     Volume2CapacityRatio :  # used to compute the MaxPower or MaxVolume of storage units
         battery: 
             Compressed Air: 100
@@ -176,30 +209,7 @@ Parameters:
         fuel:  # in the case of 'Price', gives the name of the correspondent fuel for which the price should be used
             Gas|Hydrogen|OCGT|w/o CHP: Gas|Hydrogen
             Gas|Hydrogen|CCGT|w/o CHP: Gas|Hydrogen
-    CouplingConstraints: # MaxPower and variable cost to use for creating slack units (units for non served)
-        # Coupling constraints which are not listed here will not be created in dataset
-        # Coupling contraints can be : Demand, Primary, Secondary, Inertia, CO2
-        # For the case of CO2, Max and Cost are not needed, Budget can be defined (tons/CO2)
-        # Partition defines the level at which the coupling constraint applies
-        Demand : # mandatory - demand constraint
-            Partition: 'Countries'
-            Max : 1500000
-            Cost : 10000
-        Primary : # optional - primary reserve constraint
-            Partition: 'Countries'
-            Max : 1000
-            Cost : 15000
-        Secondary : # optional - primary reserve constraint
-            Partition: 'Countries'
-            Max : 1000
-            Cost : 15000
-        Inertia : # optional - inertia constraint
-            Partition: 'Continent'
-            Max : 10000
-            Cost : 15000
-        CO2: # optional - emissions constraints (in further versions there can be multiple gases)
-            Partition: 'Continent'
-            Budget: 100000
+    
     InitialFillingrate:  # initial filling rates of reservoirs per countries
         Austria : 0.37
         Czech Republic : 0.37
@@ -270,7 +280,7 @@ datagroups:
         regions:
             global: 'Europe (incl. Turkey)'  # region to be used for global data
             local: []   # additional regions to include compared to general list
-        subannual : no
+        subannual: no
         listvariables:
             coupling: 
                 mean: ['Price|Carbon']
@@ -297,7 +307,7 @@ datagroups:
         regions:
             global: 'Europe (incl. Turkey)'  # region to be used for global data
             local: []   # additional regions to include compared to general list
-        subannual : no
+        subannual: no
         listvariables:
             coupling: 
                 flow: ['Network|Electricity|Maximum Flow']
@@ -319,7 +329,7 @@ datagroups:
         regions:
             global: 'Europe'
             local: []
-        subannual : no
+        subannual: no
         listvariables: 
             coupling: 
                 mean: ['Share|Final Energy|Electricity|Cooling']
@@ -332,7 +342,7 @@ datagroups:
         regions:
             global: 'Europe'
             local: []
-        subannual : no
+        subannual: no
         listvariables:
             techno:
                 reservoir:
@@ -342,6 +352,6 @@ datagroups:
 user: 'user'
 password: 'pass'
 
-# mode : 'platform' (download data), 'files' (one 1 csv file per data type), 'fulldata' (use data already filtered from fulldatafile, merged, aggregated)
+# mode : 'platform' or 'files' (one 1 csv file per data type)
 mode_annual: 'files'
 mode_subannual: 'files'

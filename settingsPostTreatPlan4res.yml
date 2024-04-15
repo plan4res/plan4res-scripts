@@ -1,17 +1,12 @@
-# start and end date of the full plan4res results
-# start date of output - Format: yyyy-mm-ddThh:mm+hh:mm  (+hh:mm express timezone)
-BeginDataset: '2030-07-02T00:00+01:00'
-DatasetTimestep: # duration of timestep (simulation timestep)
-    Unit: days
-    Duration: 1
+# settings for PostTreatPlan4res.py
 
 # optional: dates on which to treat the output
-BeginTreatData: '2030-07-02T00:00+01:00'
-EndTreatData: '2031-06-30T23:00+01:00'
+BeginTreatData: '02/07/2030 00:00'
+EndTreatData: '30/06/2031 23:00'
 
 # directories
 # dir: for reading results of plan4res : 
-dir: 'data/local/Input_plan4res/results/' # repository where all results are in subdirectories mydirectory/variant/  or mydirectory/variant-option/
+Resultsdir: 'results/' # repository where all results are in subdirectories mydirectory/variant/  or mydirectory/variant-option/
 
 # variables for defining which treatments  will be done
 map: yes   # if True: maps will be created ; only possible if geopandas is available
@@ -41,7 +36,7 @@ PostTreat:
     MarginalCost: 
         read: yes # reads volume outputs and create volume files to be used by 'draw' , 'latex' and 'iamc'
         draw: yes
-        latex: yes
+        latex: yes 
         iamc: yes
         update: yes  # compute "marginal cost" as the highest cost of started asset
         Dir: 'MarginalCosts/'
@@ -75,8 +70,6 @@ PostTreat:
             # myperiod2:       
                 # begin: '2030-12-09T00:00+01:00'
                 # end: '2030-12-15T23:00+01:00'
-
-
 
 # dimensions of graphics
 Graphs:
@@ -272,3 +265,34 @@ graphVolumes:
         Name: 'Batteries'
         Technos: ['Compressed Air','Lithium-Ion']
 
+#############################################
+#
+# optional data to be included only if theres
+# is not a settingsCreateInputPlan4res.yml 
+# config file, ie if the csv files were
+# created by other means than using the
+# CreateInputPlan4res.py script
+# nor a settings_format_XXX.yml file
+# ie if the nc4 files were not created
+# using format.py
+#
+#############################################
+# if data are located within the plan4res container, use plan4res path
+#USEPLAN4RESROOT: True
+
+# dates information:
+# - dayfirst: True if the format is giving the day first (01/07/2050 means first of july)
+# - BeginTimeSeries : first day of the datasets
+# - EndTimeSeries : last day of the datasets
+# - BeginDataset : first day of the instance to create
+# - EndDataset: last day of the instance to create
+# Calendar:
+    # dayfirst: True 
+    # BeginDataset: '02/07/2030  00:00:00'
+    # TimeStep:  # duration of timesteps 
+        # Unit: hours
+        # Duration: 1
+# # path where the dataset is located (in subdirs nc4*)
+# path: '/data/local/InputPlan4res/'
+#ParametersFormat: 
+#    Scenarios: ['1982','1983'] # list of scenarios to include in the instance (names of scenarios)

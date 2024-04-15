@@ -13,14 +13,24 @@ import sys
 
 nbargs=len(sys.argv)
 if nbargs>0: 
-	settings_file=sys.argv[1]
+	settings_format=sys.argv[1]
 else:
-	settings_file="settings_format.yml"
+	settings_format="settings_format.yml"
 # read config file
-cfg={}
-with open(settings_file,"r") as mysettings:
-	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
-	#cfg=yaml.load(mysettings)
+cfg1={}
+with open(settings_format,"r") as mysettings:
+	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
+# it is possible to also pass the createplan4res config file which makes some data optional in settings format
+if nbargs>1:
+	settings_create=sys.argv[2]
+	cfg2={}
+	with open(settings_create,"r") as mysettings:
+		cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
+	cfg = {**cfg1, **cfg2}
+else:
+	cfg=cfg1
+cfg['inputpath']=cfg['path']
+cfg['outputpath']=cfg['path']+cfg['outputDir']
 
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
@@ -28,6 +38,20 @@ if cfg['USEPLAN4RESROOT']:
 	cfg['inputpath']=path+cfg['inputpath']
 	cfg['timeseriespath']=path+cfg['timeseriespath']
 print('path: ',cfg['inputpath'])
+
+cfg['treat']=cfg['csvfiles']
+cfg['treat']['ZP']=cfg['csvfiles']['ZP_ZonePartition']
+cfg['treat']['IN']=cfg['csvfiles']['IN_Interconnections']
+cfg['treat']['ZV']=cfg['csvfiles']['ZV_ZoneValues']
+cfg['treat']['TU']=cfg['csvfiles']['TU_ThermalUnits']
+cfg['treat']['SS']=cfg['csvfiles']['SS_SeasonalStorage']
+cfg['treat']['STS']=cfg['csvfiles']['STS_ShortTermStorage']
+cfg['treat']['RES']=cfg['csvfiles']['RES_RenewableUnits']
+if 'SYN_SynchCond' in cfg['csvfiles']:
+	cfg['treat']['SYN']=cfg['csvfiles']['SYN_SynchCond']
+
+
+if not os.path.isdir(cfg['outputpath']):os.mkdir(cfg['outputpath'])
 
 format=cfg['inputformat']
 if format=='excel':
@@ -59,39 +83,39 @@ else:
 # create table of coupling constraints
 ListPossibleTypesCoupling=['ActivePowerDemand','PrimaryDemand','SecondaryDemand','InertiaDemand','PollutantBudget']
 
-ListCouplingConstraints=[elem for elem in cfg['Parameters']['CouplingConstraints'] if 'Pollutant' not in elem]
+ListCouplingConstraints=[elem for elem in cfg['CouplingConstraints'] if 'Pollutant' not in elem]
 ListPollutants=[]
-if 'PollutantBudget' in cfg['Parameters']['CouplingConstraints']:
-	for pollutant in cfg['Parameters']['CouplingConstraints']['PollutantBudget']:
+if 'PollutantBudget' in cfg['CouplingConstraints']:
+	for pollutant in cfg['CouplingConstraints']['PollutantBudget']:
 		ListPollutants=ListPollutants+[pollutant]
 Coupling=pd.DataFrame(index=ListCouplingConstraints+ListPollutants,dtype=object,columns=['Partition','Sum'])
 
 NumberPollutants=0
-for coupling_constraint in cfg['Parameters']['CouplingConstraints']:
+for coupling_constraint in cfg['CouplingConstraints']:
 	if coupling_constraint not in ListPossibleTypesCoupling:
 		print('Constraint ',coupling_constraint, 'is not possible')
 		print('Possible constraints are:')
 		for constraint in ListPossibleTypesCoupling: print('   - ',constraint)
 		exit()
 	if coupling_constraint=="PollutantBudget":
-		NumberPollutants=len(cfg['Parameters']['CouplingConstraints']['PollutantBudget'])
+		NumberPollutants=len(cfg['CouplingConstraints']['PollutantBudget'])
 		for pollutant in ListPollutants:
-			Coupling.loc[pollutant]['Sum']=[cfg['Parameters']['CouplingConstraints']['PollutantBudget'][pollutant]['Name']]
-			Coupling.loc[pollutant]['Partition']=cfg['Parameters']['CouplingConstraints']['PollutantBudget'][pollutant]['Partition']
+			Coupling.loc[pollutant]['Sum']=[cfg['CouplingConstraints']['PollutantBudget'][pollutant]['SumOf']]
+			Coupling.loc[pollutant]['Partition']=cfg['CouplingConstraints']['PollutantBudget'][pollutant]['Partition']
 	else:
-		Coupling.loc[coupling_constraint,'Sum']=cfg['Parameters']['CouplingConstraints'][coupling_constraint]['SumOf']
-		Coupling.loc[coupling_constraint,'Partition']=cfg['Parameters']['CouplingConstraints'][coupling_constraint]['Partition']
+		Coupling.loc[coupling_constraint,'Sum']=cfg['CouplingConstraints'][coupling_constraint]['SumOf']
+		Coupling.loc[coupling_constraint,'Partition']=cfg['CouplingConstraints'][coupling_constraint]['Partition']
 print('Coupling constraints:',ListCouplingConstraints)
 print('Emissions constraints:',ListPollutants)
 # get dates
 dates=pd.Series()
-beginTS=pd.to_datetime(cfg['Parameters']['Calendar']['BeginTimeSeries'],dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCBeginData']=pd.Timestamp(year=beginTS.year,month=beginTS.month,day=beginTS.day,hour=beginTS.hour,minute=beginTS.minute)
-beginDS=pd.to_datetime(cfg['Parameters']['Calendar']['BeginDataset'],dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+beginDS=pd.to_datetime(cfg['Calendar']['BeginDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCBegin']=pd.Timestamp(year=beginDS.year,month=beginDS.month,day=beginDS.day,hour=beginDS.hour,minute=beginDS.minute)
-endTS=pd.to_datetime(cfg['Parameters']['Calendar']['EndTimeSeries'],dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+endTS=pd.to_datetime(cfg['Calendar']['EndTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEndData']=pd.Timestamp(year=endTS.year,month=endTS.month,day=endTS.day,hour=endTS.hour,minute=endTS.minute)
-endDS=pd.to_datetime(cfg['Parameters']['Calendar']['EndDataset'],dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+endDS=pd.to_datetime(cfg['Calendar']['EndDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEnd']=pd.Timestamp(year=endDS.year,month=endDS.month,day=endDS.day,hour=endDS.hour,minute=endDS.minute)
 print('dates: timeseries start: ',dates['UCBeginData'],' end: ',dates['UCEndData'])
 print('       plan4res dataset start: ',dates['UCBegin'],' end: ',dates['UCEnd'])
@@ -105,28 +129,28 @@ dates['UCEndDataYearP4R']=dates['UCBeginDataYearP4R']+DurationTimeSeries
 dates['UCBeginExtendedData']=dates['UCBeginDataYearP4R']
 dates['UCEndExtendedData']=dates['UCEndDataYearP4R']
 
-SSVTimeStep=cfg['Parameters']['Calendar']['SSVTimeStep']['Duration']
-UnitSSV=cfg['Parameters']['Calendar']['SSVTimeStep']['Unit']
+SSVTimeStep=cfg['Calendar']['SSVTimeStep']['Duration']
+UnitSSV=cfg['Calendar']['SSVTimeStep']['Unit']
 if UnitSSV=='days': SSVTimeStep=SSVTimeStep*24
 if UnitSSV=='weeks': SSVTimeStep=SSVTimeStep*168
-UCTimeStep=cfg['Parameters']['Calendar']['TimeStep']['Duration']
-UnitUC=cfg['Parameters']['Calendar']['TimeStep']['Unit']
+UCTimeStep=cfg['Calendar']['TimeStep']['Duration']
+UnitUC=cfg['Calendar']['TimeStep']['Unit']
 if UnitUC=='days': UCTimeStep=UCTimeStep*24
 if UnitUC=='weeks': UCTimeStep=UCTimeStep*168
 
 # get scenarios
-ListScenarios=cfg['Parameters']['Scenarios']
-ScenarisedData=cfg['Parameters']['ScenarisedData']
+ListScenarios=cfg['ParametersFormat']['Scenarios']
+ScenarisedData=cfg['ParametersFormat']['ScenarisedData']
 
 # other parameters
-if 'ThermalMaxPowerTimeSpan' in cfg['Parameters']:
-	ThermalMaxPowerTimeSpan=cfg['Parameters']['ThermalMaxPowerTimeSpan']['Duration']
-	UnitTMPTS=cfg['Parameters']['ThermalMaxPowerTimeSpan']['Unit']
+if 'ThermalMaxPowerTimeSpan' in cfg['ParametersFormat']:
+	ThermalMaxPowerTimeSpan=cfg['ParametersFormat']['ThermalMaxPowerTimeSpan']['Duration']
+	UnitTMPTS=cfg['ParametersFormat']['ThermalMaxPowerTimeSpan']['Unit']
 	if UnitTMPTS=='days': ThermalMaxPowerTimeSpan=ThermalMaxPowerTimeSpan*24
 	if UnitTMPTS=='weeks': ThermalMaxPowerTimeSpan=ThermalMaxPowerTimeSpan*168
 else: 
 	ThermalMaxPowerTimeSpan=SSVTimeStep
-CoeffSpillage=cfg['Parameters']['CoeffSpillage']
+CoeffSpillage=cfg['ParametersFormat']['CoeffSpillage']
 
 # dates treatments
 ############################
@@ -150,7 +174,7 @@ TimeHorizonUC=int(SSVTimeStep/UCTimeStep)
 NumberIntervals=TimeHorizonUC
 NumberSSVTimeSteps=int(NumberUCTimeSteps*UCTimeStep/SSVTimeStep)
 TimeHorizonSSV=NumberSSVTimeSteps
-print('Number of SSV time steps:',NumberSSVTimeSteps,' of duration:',TimeHorizonUC,' timesteps')
+print('Number of SSV time steps:',NumberSSVTimeSteps,' of duration:',TimeHorizonUC,' timesteps = ',durationSSVTimeStep)
 
 # create dataframe with start and end dates of all SSV timesteps
 datesSSV=pd.DataFrame(index=list(range(NumberSSVTimeSteps)),columns=['start','end'])
@@ -414,8 +438,9 @@ print(NumberUnits,' units, ',NumberElectricalGenerators,' generators')
 #																																				#
 #																																				#
 #################################################################################################################################################
-def ExtendAndResample(TS):
-	# change timeindex to adapt to dataset calendar
+def ExtendAndResample(name,TS,isEnergy=True):
+	#print(name)
+	# change timeindex to adapt to dataset calendarb
 	beginSerie=TS.index[0]
 	if beginSerie>dates['UCBeginDataYearP4R']:
 		datesDelta=pd.Timedelta(beginSerie-dates['UCBeginDataYearP4R'])
@@ -423,42 +448,47 @@ def ExtendAndResample(TS):
 	else:
 		datesDelta=pd.Timedelta(dates['UCBeginDataYearP4R']-beginSerie)
 		TS.index=TS.index+datesDelta
-
-	# extend 
+	
+	# Extension is a copy of TS on the extended dates UCBeginExtendedData and UCEndExtendedData 
 	Extension=TS[ TS.index>= dates['UCBeginExtendedData'] ]
 	Extension=Extension[ Extension.index<= dates['UCEndExtendedData'] ]
 	
+	# good
 	# resample
-	freq=str(UCTimeStep)+'h'
+	newfreq=str(UCTimeStep)+'h'
 	TS_freq=pd.infer_freq(TS.index)
 
+	# upsample=True means that timeseries is given at a frequency
+	# bigger than hour (eg 2 hours, daily, weekly)
 	upsample=False
+	
+	# calcul de la frequence de la série en nombre d'heures
 	if 'D' in TS_freq or 'W' in TS_freq or 'M' in TS_freq:
 		upsample=True
 		if 'D' in TS_freq:
 			if len(TS_freq)>1:
-				Hours_freq=int(TS_freq[-1])*24
+				Hours_freq=int(TS_freq[:-1])*24
 			else:
 				Hours_freq=24
 		if 'W' in TS_freq:
 			if '-' in TS_freq: TS_freq=TS_freq.split('-')[0]
 			if len(TS_freq)>1:
-				Hours_freq=int(TS_freq[-1])*168
+				Hours_freq=int(TS_freq[:-1])*168
 			else:
 				Hours_freq=168
 		if 'M' in TS_freq:
 			if len(TS_freq)>1:
-				Hours_freq=int(TS_freq[-1])*728
+				Hours_freq=int(TS_freq[:-1])*728
 			else:
 				Hours_freq=728
 				
 	if 'H' in TS_freq or 'h' in TS_freq:
 		if len(TS_freq)>1:
-			Hours_freq=int(TS_freq[-1])
+			Hours_freq=int(TS_freq[:-1])
 		else:
 			Hours_freq=1
 		if Hours_freq>int(UCTimeStep): upsample=True
-	newfreq=str(UCTimeStep)+'h'
+	
 
 	duration_TS_timestep=pd.Timedelta(str(Hours_freq)+' hours')
 	
@@ -469,6 +499,7 @@ def ExtendAndResample(TS):
 		Extension.index=Extension.index+pd.Timedelta(TS.index[-1]-TS.index[0])+pd.Timedelta(str(Hours_freq)+' hours')
 	TS=pd.concat([TS,Extension])
 	
+	
 	TS=TS[ TS.index>= dates['UCBegin'] ]
 	TS=TS[ TS.index<= dates['UCEnd'] ]
 	
@@ -478,9 +509,14 @@ def ExtendAndResample(TS):
 		TS2.index=TS2.index+pd.Timedelta(str(Hours_freq)+' hours')
 		TS=pd.concat([TS,TS2])
 
+	# case where timeserie is given at frequency bigger than hour
+	# resample to hour frequecy before resampling to the required frequency
 	if upsample:
-		TS=(1/Hours_freq)*TS.resample('h').ffill()  # convert to hourly frequency
-		
+		#TS=(1/Hours_freq)*TS.resample('h').ffill()  # convert to hourly frequency
+		TS=TS.resample('h').ffill()		# convert to hourly frequency
+		#if isEnergy:
+		#	TS=(1/Hours_freq)*TS
+
 		# extend with missing dates: duplicate last dates
 		if TS.index[-1]< dates['UCEnd']:
 			dur_missing=dates['UCEnd']-TS.index[-1] # compute duration of missing data
@@ -488,32 +524,35 @@ def ExtendAndResample(TS):
 			Extension.index=Extension.index+dur_missing # shift over time
 			TS=pd.concat([TS,Extension]) # add at end of serie
 
-		TS=TS.resample(newfreq).sum()  # converts to new frequency
-
+		#TS=TS.resample(newfreq).sum()  # converts to new frequency
+		TS=TS.resample(newfreq).sum()
 	else:
-		TS=TS.resample(freq).sum()
+		TS=TS.resample(newfreq).sum()
+
 	return TS
 
 def read_deterministic_timeseries(IsDT):
 	if IsDT:
 		DeterministicTS=pd.read_csv(cfg['inputpath']+cfg['DeterministicTimeSeries'],index_col=0)
-		DeterministicTS.index=pd.to_datetime(DeterministicTS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+		DeterministicTS.index=pd.to_datetime(DeterministicTS.index,dayfirst=cfg['Calendar']['dayfirst'])
 	
-		DeterministicTS=ExtendAndResample(DeterministicTS)
+		DeterministicTS=ExtendAndResample('DET',DeterministicTS)
 
 		# add constant serie
 		DeterministicTS['One']=1.0
 		DeterministicTS['Zero']=0.0
 	else:
 		DeterministicTS=pd.DataFrame(index=datesData['start'])
-		DeterministicTS.index=pd.to_datetime(DeterministicTS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+		DeterministicTS.index=pd.to_datetime(DeterministicTS.index)
 		DeterministicTS['One']=1.0
 		DeterministicTS['Zero']=0.0
-		DeterministicTS=ExtendAndResample(DeterministicTS)
+		DeterministicTS.to_csv('detTS.csv')
+		DeterministicTS=ExtendAndResample('DET',DeterministicTS)
 	return DeterministicTS
 	
 def create_demand_scenarios():
 	DemandScenarios=pd.Series(dtype=object)
+	isEnergy=(cfg['ParametersFormat']['ScenarisedData']['ActivePowerDemand']['MultiplyTimeSerieBy']=='Energy')
 	for node in Nodes:
 		firstPart=True
 		for component in Coupling.loc['ActivePowerDemand']['Sum']:
@@ -534,8 +573,8 @@ def create_demand_scenarios():
 				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
 					
-				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-				TS=ExtendAndResample(TS)
+				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+				TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
 				if firstPart:
 					DemandScenarios[node]=pd.DataFrame(index=TS.index,columns=ListScenarios)
@@ -562,7 +601,9 @@ def create_demand_scenarios():
 	return DemandScenarios
 	
 def create_inflows_scenarios():
+	isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Hydro:Inflows']['MultiplyTimeSerieBy']['reservoir']=='Energy')
 	InflowsScenarios=pd.Series(dtype=object,index=SS.index)
+	
 	for reservoir in SS.index:
 		nameTS=SS.loc[reservoir]['InflowsProfile']
 		valTS=SS.loc[reservoir]['Inflows']
@@ -572,9 +613,9 @@ def create_inflows_scenarios():
 			InflowsScenarios[reservoir]=pd.DataFrame(columns=ListScenarios)
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['Parameters']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
 		elif '.csv' in nameTS:  # stochastic series
-			TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
-			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-			TS=ExtendAndResample(TS)
+			TS=pd.read_csv(cfg['timeseriespath']+nameTS,index_col=0)
+			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
 				InflowsScenarios[reservoir]=pd.DataFrame(index=TS.index,columns=TS.columns)
 				InflowsScenarios[reservoir]=valTS*TS
@@ -587,7 +628,7 @@ def create_inflows_scenarios():
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=DTS
 		#InflowsScenarios.loc[reservoir].to_csv('Inflows_'+str(reservoir[1])+'.csv')
 					
-	return cfg['Parameters']['InflowsMultiFactor']*InflowsScenarios
+	return InflowsScenarios
 	
 def create_res_scenarios():
 	ResScenarios=pd.Series(dtype=object,index=RES.index)
@@ -595,24 +636,27 @@ def create_res_scenarios():
 	for res in RES.index:
 		nameTS=RES.loc[res]['MaxPowerProfile']
 		valTS=RES.loc[res]['MaxPower']
+		nameAsset=res[0]
+		for namekind in cfg['technos']:
+			for nametechno in cfg['technos'][namekind]:
+				if nametechno in nameAsset:
+					technoAsset=namekind
+		
+		isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Renewable:MaxPowerProfile']['MultiplyTimeSerieBy'][technoAsset]=='Energy')
+					
 		# read timeserie 
 		if '.csv' in nameTS:  # stochastic series
 			TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
-			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-			TS=ExtendAndResample(TS)
+			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
 				ResScenarios[res]=pd.DataFrame(index=TS.index,columns=TS.columns)
-				if 'RunOfRiver' in nameTS:
-					ResScenarios[res]=cfg['Parameters']['RunOfRiverMultFactor']*valTS*TS
-				else:
-					ResScenarios[res]=valTS*TS
+				ResScenarios[res]=valTS*TS
+				
 			else: #deterministic
 				ResScenarios[res]=pd.DataFrame(index=TS.index,columns=ListScenarios)
-				if 'RunOfRiver' in nameTS:
-					for col in ListScenarios: ResScenarios[res][col]=cfg['Parameters']['RunOfRiverMultFactor']*valTS*TS[TS.columns.tolist()[0]]
-				else:
-					for col in ListScenarios: ResScenarios[res][col]=valTS*TS[TS.columns.tolist()[0]]
-			
+				for col in ListScenarios: ResScenarios[res][col]=valTS*TS[TS.columns.tolist()[0]]
+				
 			newIndex.append(res)
 #
 	
@@ -622,6 +666,8 @@ def create_res_scenarios():
 def create_thermal_scenarios():
 	# define wether there is one profile per techno/region, or one profile per unit
 	newIndex=[]
+	isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Thermal:MaxPowerProfile']['MultiplyTimeSerieBy']=='Energy')
+
 	if True in np.column_stack(TU['MaxPowerProfile'].str.contains(r",", na=False)): # there exist multiple profiles for the same row
 		multipleTHSeries=True
 		listIndexes=[list(TU.index[0]),list(TU.index[1]),list(range(TU['NumberUnits'].max()))]
@@ -637,8 +683,8 @@ def create_thermal_scenarios():
 				# read timeserie 
 				if '.csv' in nameTS:  # stochastic series
 					TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
-					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-					TS=ExtendAndResample(TS)
+					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+					TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
 					if len(TS.columns) > 1: # stochastic serie
 						ThermalScenarios[th[0],th[1],unit]=pd.DataFrame(index=TS.index,columns=TS.columns)
@@ -657,8 +703,8 @@ def create_thermal_scenarios():
 			# read timeserie 
 			if '.csv' in nameTS:  # stochastic series
 				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
-				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-				TS=ExtendAndResample(TS)
+				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+				TS=ExtendAndResample(nameTS,TS)
 				
 				if len(TS.columns) > 1: # stochastic serie
 					ThermalScenarios[th]=pd.DataFrame(index=TS.index,columns=TS.columns)
@@ -795,7 +841,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				if 'TurbineEfficiency' in SS.columns: TurbineEfficiency=HSSS.loc[hydrosystem]['TurbineEfficiency'][hydrounit]
 				else: TurbineEfficiency=1
 				if 'PumpingEfficiency' in SS.columns: PumpingEfficiency=HSSS.loc[hydrosystem]['PumpingEfficiency'][hydrounit]
-				else: PumpingEfficiency=cfg['PumpingEfficiency']['PumpingEfficiency']
+				else: PumpingEfficiency=cfg['PumpingEfficiency']['reservoir']['Reservoir']
 				if type(MaxPowerData)==str:
 					MaxFlow=HBlock.createVariable("MaxFlow",np.double,("NumberIntervals","NumberArcs"))
 					MaxPower=HBlock.createVariable("MaxPower",np.double,("NumberIntervals","NumberArcs"))
@@ -1046,7 +1092,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					BVfile=HSSS.loc[hydrosystem]['WaterValues'][hydrounit]
 					if BVfile!='':
 						BVdata=pd.read_csv(cfg['inputpath']+BVfile,index_col=0,skiprows=skip)
-						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
 						BVdata=BVdata[ (BVdata.index >=start) & (BVdata.index <=end)   ]
 						
@@ -1092,8 +1138,8 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
-				WVdata=pd.read_csv(cfg['inputpath']+WVfile,index_col=0,skiprows=0,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
-				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Parameters']['Calendar']['dayfirst'])
+				WVdata=pd.read_csv(cfg['inputpath']+WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
 				# keep only the last date within this pediod
@@ -1135,18 +1181,24 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			TBlock.createDimension("NumberIntervals",NumberIntervals)
 
 			# add minpower and maxpower
-			MaxPowerData=TU['MaxPower'][tu]*UCTimeStep
+			MaxPowerData=TU['MaxPower'][tu]
 			if 'MaxPowerProfile' in TU.columns and len(TU['MaxPowerProfile'][tu])>0:
 				MaxPowerProfile=TU['MaxPowerProfile'][tu]
 				MaxPower=TBlock.createVariable("MaxPower",np.double,("NumberIntervals"))
 				
 				if '.csv' in MaxPowerProfile:
-					if cfg['IncludeScenarisedData'] and 'Thermal:MaxPowerProfile' in ScenarisedData:
-						MaxPower[:]=np.array(ThermalScenarios.loc[tu][scenario][ ( ThermalScenarios.loc[tu].index >= start ) & ( ThermalScenarios.loc[tu].index <= end ) ])
-						pmax=ThermalScenarios.loc[tu][scenario][ ( ThermalScenarios.loc[tu].index >= start ) & ( ThermalScenarios.loc[tu].index <= end ) ]
+					if 'Thermal:MaxPowerProfile' in ScenarisedData:
+						if cfg['IncludeScenarisedData']:
+							MaxPower[:]=np.array(ThermalScenarios.loc[tu][scenario][ ( ThermalScenarios.loc[tu].index >= start ) & ( ThermalScenarios.loc[tu].index <= end ) ])
+							pmax=ThermalScenarios.loc[tu][scenario][ ( ThermalScenarios.loc[tu].index >= start ) & ( ThermalScenarios.loc[tu].index <= end ) ]
+						else:
+							MaxPower[:]=np.array(DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+							pmax=MaxPowerData*DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 					else:
-						MaxPower[:]=np.array(DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
-						pmax=MaxPowerData*DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
+						print('deterministic timeseries for maxpower not implemented')
+						# not implemented
+						# read det time serie
+						# extend and resample
 				else:
 					MaxPower[:]=np.array(MaxPowerData*DeterministicTimeSeries[MaxPowerProfile][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 					pmax=MaxPowerData*DeterministicTimeSeries[MaxPowerProfile][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
@@ -1154,7 +1206,7 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				pmax=MaxPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 				MaxPowerProfile=''
 				MaxPower=TBlock.createVariable("MaxPower",np.double,())
-				MaxPower[:]=MaxPowerData
+				MaxPower[:]=MaxPowerData*UCTimeStep
 			if 'MinPower' in TU.columns:
 				MinPowerData=TU['MinPower'][tu]
 				if type(MinPowerData)==str :
@@ -1162,14 +1214,14 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					pmin=np.minimum(DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 					MinPower[:]=pmin
 				else:
-					MinPowerData=MinPowerData*UCTimeStep
+					#MinPowerData=MinPowerData*UCTimeStep
 					if len(MaxPowerProfile)>0 and  ( (MinPowerData>pmax).isin([True]).sum()>0 ):
 						pmin=np.minimum(MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 						MinPower=TBlock.createVariable("MinPower",np.double,("NumberIntervals"))
 						MinPower[:]=pmin
 					else:
 						MinPower=TBlock.createVariable("MinPower",np.double,())
-						MinPower[:]=MinPowerData
+						MinPower[:]=MinPowerData*UCTimeStep
 
 			# create cost variables
 			if 'QuadTerm' in TU.columns:
@@ -1206,7 +1258,7 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				FixedCostData=TU['FixedCost'][tu]*int(UCTimeStep)/8760 # FixedCost is in €/MW/year
 				if type(FixedCostData)==str:
 					ConstTerm=TBlock.createVariable("ConstTerm",np.double,("NumberIntervals"))
-					ConstTerm[:]=np.array(DeterministicTimeSeries[FixedCostData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					ConstTerm[:]=UCTimeStep*np.array(DeterministicTimeSeries[FixedCostData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				elif FixedCostData>0 or FixedCostData<0:
 					ConstTerm=TBlock.createVariable("ConstTerm",np.double,())
 					ConstTerm[:]=[FixedCostData]
@@ -1282,10 +1334,10 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				
 			# create consumption when started but producing 0
 			if 'Pauxiliary' in TU.columns:
-				FixedConsumptionData=TU['Pauxiliary'][tu]
+				FixedConsumptionData=TU['Pauxiliary'][tu]*UCTimeStep
 				if type(FixedConsumptionData)==str:
 					FixedConsumption=TBlock.createVariable("FixedConsumption",np.double,("NumberIntervals"))
-					FixedConsumption[:]=np.array(DeterministicTimeSeries[FixedConsumptionData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					FixedConsumption[:]=UCTimeStep*np.array(DeterministicTimeSeries[FixedConsumptionData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					FixedConsumption=TBlock.createVariable("FixedConsumption",np.double,())
 					FixedConsumption[:]=[FixedConsumptionData]
@@ -1319,9 +1371,10 @@ def addIntermittentUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				MaxPower=IBlock.createVariable("MaxPower",np.double,("NumberIntervals"))
 				
 				if '.csv' in MaxPowerProfile:
-					if cfg['IncludeScenarisedData']  and 'Renewable:MaxPowerProfile' in ScenarisedData:
-						MaxPower[:]=np.array(RESScenarios.loc[tu][scenario][ ( RESScenarios.loc[tu].index >= start ) & ( RESScenarios.loc[tu].index <= end ) ])
-						pmax=RESScenarios.loc[tu][scenario][ ( RESScenarios.loc[tu].index >= start ) & ( RESScenarios.loc[tu].index <= end ) ]
+					if 'Renewable:MaxPowerProfile' in ScenarisedData:
+						if cfg['IncludeScenarisedData']:
+							MaxPower[:]=np.array(RESScenarios.loc[tu][scenario][ ( RESScenarios.loc[tu].index >= start ) & ( RESScenarios.loc[tu].index <= end ) ])
+							pmax=RESScenarios.loc[tu][scenario][ ( RESScenarios.loc[tu].index >= start ) & ( RESScenarios.loc[tu].index <= end ) ]
 					else:
 						MaxPower[:]=np.array(DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 						pmax=MaxPowerData*DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
@@ -1329,7 +1382,7 @@ def addIntermittentUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					MaxPower[:]=np.array(MaxPowerData*DeterministicTimeSeries[MaxPowerProfile][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 					pmax=MaxPowerData*DeterministicTimeSeries[MaxPowerProfile][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 			else:
-				pmax=MaxPowerData*UCTimeStep*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
+				pmax=MaxPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 				MaxPowerProfile=''
 				MaxPower=IBlock.createVariable("MaxPower",np.double,())
 				MaxPower[:]=[MaxPowerData*UCTimeStep]
@@ -1342,7 +1395,7 @@ def addIntermittentUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					MinPower[:]=pmin
 				else:
 					if len(MaxPowerProfile)>0 and  ( (MinPowerData>pmax).isin([True]).sum()>0 ):
-						pmin=np.minimum(MinPowerData*UCTimeStep*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
+						pmin=np.minimum(MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 						MinPower=IBlock.createVariable("MinPower",np.double,("NumberIntervals"))
 						MinPower[:]=pmin
 					else:
@@ -1422,8 +1475,13 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 			TBlock.setncattr("name",tu[0]+'_'+tu[1]+'_'+str(index_subunit))
 			TBlock.createDimension("NumberIntervals",NumberIntervals)
 
+			nameAsset=tu[0]
+			for nametechno in cfg['technos']['hydrostorage']+cfg['technos']['battery']:
+				if nametechno in nameAsset:
+					technoAsset=nametechno
+
 			# add minpower and maxpower
-			MaxPowerData=STS['MaxPower'][tu]*UCTimeStep
+			MaxPowerData=STS['MaxPower'][tu]
 			if 'MaxPowerProfile' in STS.columns and len(STS['MaxPowerProfile'][tu])>0:
 				MaxPowerProfile=STS['MaxPowerProfile'][tu]
 				MaxPower=TBlock.createVariable("MaxPower",np.double,("NumberIntervals"))
@@ -1433,22 +1491,22 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 				pmax=MaxPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 				MaxPowerProfile=''
 				MaxPower=TBlock.createVariable("MaxPower",np.double,())
-				MaxPower[:]=[MaxPowerData]
+				MaxPower[:]=[MaxPowerData*UCTimeStep]
 			
 			if 'MinPower' in STS.columns:
-				MinPowerData=STS['MinPower'][tu]*UCTimeStep
+				MinPowerData=STS['MinPower'][tu]
 				if type(MinPowerData)==str:
 					MinPower=TBlock.createVariable("MinPower",np.double,("NumberIntervals"))
 					pmin=np.minimum(DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 					MinPower[:]=pmin
 				else:
-					if len(MaxPowerProfile)>0 and  ( (MinPowerData>pmax).isin([True]).sum()>0 ):
+					if len(MaxPowerProfile)>0 and  ( (MinPowerData*UCTimeStep>pmax).isin([True]).sum()>0 ):
 						pmin=np.minimum(MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 						MinPower=TBlock.createVariable("MinPower",np.double,("NumberIntervals"))
 						MinPower[:]=pmin
 					else:
 						MinPower=TBlock.createVariable("MinPower",np.double,())
-						MinPower[:]=[MinPowerData]
+						MinPower[:]=[MinPowerData*UCTimeStep]
 						
 			# add minstorage and maxstorage
 			MaxStorageData=STS['MaxVolume'][tu]
@@ -1550,7 +1608,7 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 					StoringBatteryRho[:]=[PumpingEfficiency]
 			else:
 				StoringBatteryRho=TBlock.createVariable("StoringBatteryRho",np.double,())
-				StoringBatteryRho[:]=[1]
+				StoringBatteryRho[:]=[ cfg['PumpingEfficiency'][technoAsset][nameAsset] ]
 				
 			if 'TurbineEfficiency' in STS.columns:
 				TurbineEfficiency=STS['TurbineEfficiency'][tu]
@@ -1581,8 +1639,8 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 					Demand=TBlock.createVariable("Demand",np.double,("NumberIntervals"))
 					Demand[:]=np.array((-1)*DeterministicTimeSeries[Inflow][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
-					Demand=TBlock.createVariable("Demand",np.double,())
-					Demand[:]=[(-1)*Inflow*UCTimeStep]
+					Demand=TBlock.createVariable("Demand",np.double,("NumberIntervals"))					
+					Demand[:]=np.array((-1)*Inflow*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 
 			if 'Kappa' in STS.columns:
 				KappaData=STS['Kappa'][tu]
@@ -1614,8 +1672,8 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 		if ('MaxActivePowerDemand',node) in ZV.index:
 			MaxPowerData=ZV.loc['MaxActivePowerDemand',node]['value']
 			MaxPowerProfile=ZV.loc['MaxActivePowerDemand',node]['Profile_Timeserie']
-		elif 'MaxPower' in cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']:
-			MaxPowerData=cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']['MaxPower']
+		elif 'MaxPower' in cfg['CouplingConstraints']['ActivePowerDemand']:
+			MaxPowerData=cfg['CouplingConstraints']['ActivePowerDemand']['MaxPower']
 			MaxPowerProfile=''
 		else:
 			MaxPowerData=100000
@@ -1631,8 +1689,8 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 		if ('CostActivePowerDemand',node) in ZV.index:
 			CostPowerData=ZV.loc['CostActivePowerDemand',node]['value']
 			CostPowerProfile=ZV.loc['CostActivePowerDemand',node]['Profile_Timeserie']
-		elif 'Cost' in cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']:
-			CostPowerData=cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']['Cost']
+		elif 'Cost' in cfg['CouplingConstraints']['ActivePowerDemand']:
+			CostPowerData=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 			CostPowerProfile=''
 		else:
 			CostPowerData=0.0
@@ -1649,9 +1707,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('MaxPrimaryDemand',node) in ZV.index:
 				MaxPrimaryPowerData=ZV.loc['MaxPrimaryDemand',node]['value']
 				MaxPrimaryPowerProfile=ZV.loc['MaxPrimaryDemand',node]['Profile_Timeserie']
-			elif 'PrimaryDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'MaxPower' in cfg['Parameters']['CouplingConstraints']['PrimaryDemand']:
-					MaxPrimaryPowerData=cfg['Parameters']['CouplingConstraints']['PrimaryDemand']['MaxPower']
+			elif 'PrimaryDemand' in cfg['CouplingConstraints']:
+				if 'MaxPower' in cfg['CouplingConstraints']['PrimaryDemand']:
+					MaxPrimaryPowerData=cfg['CouplingConstraints']['PrimaryDemand']['MaxPower']
 					MaxPrimaryPowerProfile=''
 				else:
 					MaxPrimaryPowerData=10000
@@ -1666,9 +1724,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('CostPrimaryDemand',node) in ZV.index:
 				CostPrimaryPowerData=ZV.loc['CostPrimaryDemand',node]['value']
 				CostPrimaryPowerProfile=ZV.loc['CostPrimaryDemand',node]['Profile_Timeserie']
-			elif 'PrimaryDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'Cost' in cfg['Parameters']['CouplingConstraints']['PrimaryDemand']:
-					PrimaryCost=cfg['Parameters']['CouplingConstraints']['PrimaryDemand']['Cost']
+			elif 'PrimaryDemand' in cfg['CouplingConstraints']:
+				if 'Cost' in cfg['CouplingConstraints']['PrimaryDemand']:
+					PrimaryCost=cfg['CouplingConstraints']['PrimaryDemand']['Cost']
 					MaxPrimaryPowerProfile=''
 				else:
 					MaxPrimaryPowerData=10000
@@ -1685,9 +1743,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('MaxSecondaryDemand',node) in ZV.index:
 				MaxSecondaryPowerData=ZV.loc['MaxSecondaryDemand',node]['value']
 				MaxSecondaryPowerProfile=ZV.loc['MaxSecondaryDemand',node]['Profile_Timeserie']
-			elif 'SecondaryDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'MaxPower' in cfg['Parameters']['CouplingConstraints']['SecondaryDemand']:
-					MaxSecondaryPowerData=cfg['Parameters']['CouplingConstraints']['SecondaryDemand']['MaxPower']
+			elif 'SecondaryDemand' in cfg['CouplingConstraints']:
+				if 'MaxPower' in cfg['CouplingConstraints']['SecondaryDemand']:
+					MaxSecondaryPowerData=cfg['CouplingConstraints']['SecondaryDemand']['MaxPower']
 					MaxSecondaryPowerProfile=''
 				else:
 					MaxSecondaryPowerData=10000
@@ -1702,9 +1760,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('CostSecondaryDemand',node) in ZV.index:
 				CostSecondaryPowerData=ZV.loc['CostSecondaryDemand',node]['value']
 				CostSecondaryPowerProfile=ZV.loc['CostSecondaryDemand',node]['Profile_Timeserie']
-			elif 'SecondaryDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'Cost' in cfg['Parameters']['CouplingConstraints']['SecondaryDemand']:
-					SecondaryCost=cfg['Parameters']['CouplingConstraints']['SecondaryDemand']['Cost']
+			elif 'SecondaryDemand' in cfg['CouplingConstraints']:
+				if 'Cost' in cfg['CouplingConstraints']['SecondaryDemand']:
+					SecondaryCost=cfg['CouplingConstraints']['SecondaryDemand']['Cost']
 					MaxSecondaryPowerProfile=''
 				else:
 					MaxSecondaryPowerData=10000
@@ -1721,9 +1779,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('InertiaDemand',node) in ZV.index:
 				MaxInertiaData=ZV.loc['MaxInertiaDemand',node]['value']
 				MaxInertiaProfile=ZV.loc['MaxInertiaDemand',node]['Profile_Timeserie']
-			elif 'InertiaDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'MaxPower' in cfg['Parameters']['CouplingConstraints']['InertiaDemand']:
-					MaxInertiaData=cfg['Parameters']['CouplingConstraints']['InertiaDemand']['MaxPower']
+			elif 'InertiaDemand' in cfg['CouplingConstraints']:
+				if 'MaxPower' in cfg['CouplingConstraints']['InertiaDemand']:
+					MaxInertiaData=cfg['CouplingConstraints']['InertiaDemand']['MaxPower']
 					MaxInertiaProfile=''
 				else:
 					MaxInertiaData=10000
@@ -1738,9 +1796,9 @@ def addSlackUnitBlocks(Block,indexUnitBlock,start,end):
 			if ('CostInertiaDemand',node) in ZV.index:
 				CostInertiaData=ZV.loc['CostInertiaDemand',node]['value']
 				CostInertiaProfile=ZV.loc['CostInertiaDemand',node]['Profile_Timeserie']
-			elif 'InertiaDemand' in cfg['Parameters']['CouplingConstraints']:
-				if 'Cost' in cfg['Parameters']['CouplingConstraints']['InertiaDemand']:
-					InertiaCost=cfg['Parameters']['CouplingConstraints']['InertiaDemand']['Cost']
+			elif 'InertiaDemand' in cfg['CouplingConstraints']:
+				if 'Cost' in cfg['CouplingConstraints']['InertiaDemand']:
+					InertiaCost=cfg['CouplingConstraints']['InertiaDemand']['Cost']
 					MaxInertiaProfile=''
 				else:
 					MaxInertiaData=10000

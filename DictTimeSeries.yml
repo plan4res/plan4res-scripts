@@ -27,7 +27,6 @@ ZV:
         Denmark : EDF__HourlyCoef-AirCondition-PresentClimate-NO__20062019__28062019__v1.csv
         Slovakia : EDF__HourlyCoef-AirCondition-PresentClimate-SK__20062019__28062019__v1.csv
         United Kingdom : EDF__HourlyCoef-AirCondition-PresentClimate-UK__20062019__28062019__v1.csv
-        Britain : EDF__HourlyCoef-AirCondition-PresentClimate-UK__20062019__28062019__v1.csv
     ElecHeating:
         Austria : EDF__HourlyCoef-Heating-PresentClimate-AT__20062019__28062019__v1.csv
         Non-EU-Balkans : EDF__HourlyCoef-Heating-PresentClimate-HR__20062019__28062019__v1.csv
@@ -57,7 +56,6 @@ ZV:
         Sweden : EDF__HourlyCoef-Heating-PresentClimate-NO__20062019__28062019__v1.csv
         Slovakia : EDF__HourlyCoef-Heating-PresentClimate-SK__20062019__28062019__v1.csv
         United Kingdom : EDF__HourlyCoef-Heating-PresentClimate-UK__20062019__28062019__v1.csv
-        Britain : EDF__HourlyCoef-Heating-PresentClimate-UK__20062019__28062019__v1.csv
     ElecVehicle:
         Austria : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
         Non-EU-Balkans : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
@@ -86,7 +84,6 @@ ZV:
         Sweden : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
         Slovakia : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
         United Kingdom : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
-        Britain : EDF__HourlyCoef-ElecVehicle__20062019__28062019__v1.csv
     nonthermo: 
         Austria : EDF__HourlyCoef-non-thermo-PresentClimate-AT__20062019__28062019__v1.csv
         Non-EU-Balkans : EDF__HourlyCoef-non-thermo-PresentClimate-HR__20062019__28062019__v1.csv
@@ -115,7 +112,34 @@ ZV:
         Sweden : EDF__HourlyCoef-non-thermo-PresentClimate-NO__20062019__28062019__v1.csv
         Slovakia : EDF__HourlyCoef-non-thermo-PresentClimate-SK__20062019__28062019__v1.csv
         United Kingdom : EDF__HourlyCoef-non-thermo-PresentClimate-UK__20062019__28062019__v1.csv
-        Britain : EDF__HourlyCoef-non-thermo-PresentClimate-UK__20062019__28062019__v1.csv
+    Total: 
+        Austria : Profile-EasternEurope.csv
+        Non-EU-Balkans : Profile-Balkans.csv
+        Croatia : Profile-Balkans.csv
+        Greece : Profile-Balkans.csv
+        Romania : Profile-Balkans.csv
+        Slovenia : Profile-Balkans.csv
+        Turkey : Profile-Balkans.csv
+        Bulgaria : Profile-Balkans.csv
+        Belgium : Profile-Benelux.csv
+        Luxembourg : Profile-Benelux.csv
+        Switzerland : Profile-Switzerland.csv
+        Czech Republic : Profile-EasternEurope.csv
+        Germany : Profile-Germany.csv
+        Spain : Profile-Iberia.csv
+        France : Profile-France.csv
+        Hungary : Profile-EasternEurope.csv
+        Ireland : Profile-Britain.csv
+        Italy : Profile-Italy.csv
+        The Netherlands : Profile-Benelux.csv
+        Poland : Profile-EasternEurope.csv
+        Portugal : Profile-Iberia.csv
+        Denmark : Profile-Denmark.csv
+        Norway : Profile-Norway.csv
+        Finland : Profile-Finland.csv
+        Sweden : Profile-Sweden.csv
+        Slovakia : Profile-EasternEurope.csv
+        United Kingdom : Profile-Britain.csv
 SS:
     Inflows:
         Austria: EDF__Inflow-HourlyCoefficient-PresentClimate-AT__18092019__18092019__v1.csv

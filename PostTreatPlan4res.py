@@ -17,49 +17,7 @@ import sys
 
 OE_SUBANNUAL_FORMAT = lambda x: x.strftime("%m-%d %H:%M%z").replace("+0100", "+01:00") 
 
-# define latex functions
-############################
 
-# include list of packages
-def packages(*packages):
-	p= ""
-	for i in packages:
-		p= p+"\\usepackage{"+i+"}\n"
-	return p
-
-# include list of ticklibraries
-def tikzlibraries(*tikzlibrary):
-	p=""
-	for i in tikzlibrary:
-		p= p+"\\usetikzlibrary{"+i+"}\n"	
-	return p
-
-# define list of colors
-def definecolors(*color):
-	p=""
-	for i in color:
-		p= p+"\\definecolor"+i+"\n"	
-	return p
-
-# include an image
-def figure(fig,caption,figlabel):
-	p="\\begin{figure}[H]\n\\centering\n\\includegraphics[width=\\textwidth,keepaspectratio]{"+fig+"}\n\\caption{"+caption+"}\n\\label{fig:"+figlabel+"}\n\\end{figure}\n"
-	return p
-
-# include a table
-def tablelatex(df,label,column_format=None,header=True,index=True):
-	p="\\begin{center}"
-	p=p+"\\small"
-	p=p+df.to_latex(header=header,index=index,label=label,caption=label,column_format=column_format)
-	p=p+"\\end{center}"
-	# the following is necessary if booktabs is not in the latex distribution used
-	p=p.replace("\\toprule","\\hline")
-	p=p.replace("\\midrule","\\hline")
-	p=p.replace("\\bottomrule","\\hline")
-	p=p.replace(">","$\\Rightarrow$ ")
-	p=p+"\n"
-	return p
-############################################################################
 
 # definition of seasons - this is used to aggregate variables per seasons
 spring = range(80, 172)
@@ -76,22 +34,90 @@ def season(x):
 		return 'Winter'
 
 nbargs=len(sys.argv)
-if nbargs>0: 
-	settings_file=sys.argv[1]
+if nbargs>1: 
+	settings_posttreat=sys.argv[1]
+	if nbargs>2:
+		settings_format=sys.argv[2]
+		if nbargs>3:
+			settings_create=sys.argv[3]
+		else:
+			settings_create="settingsCreateInputPlan4res.yml"
+	else:
+		settings_format="settings_format.yml"
 else:
-	settings_file="settings_format.yml"
+	settings_posttreat="settingsPostTreatPlan4res.yml"
+
 # read config file
 cfg={}
-
 # open the configuration files 
-with open("settingsPostTreatPlan4res.yml","r") as myyaml:
+with open(settings_posttreat,"r") as myyaml:
     cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
-with open("settingsCreateInputPlan4res.yml","r") as mysettings:
+with open(settings_create,"r") as mysettings:
     cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
-with open(settings_file,"r") as mysettings:
+with open(settings_format,"r") as mysettings:
     cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
+
+cfg['dir']=cfg['path']+cfg['Resultsdir']
+cfg['inputpath']=cfg['path']
+if cfg['USEPLAN4RESROOT']:
+	path = os.environ.get("PLAN4RESROOT")
+	cfg['dir']=path+cfg['dir']
+	cfg['inputpath']=path+cfg['inputpath']
+cfg['dayfirst']=cfg['Calendar']['dayfirst']
+cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
+
+
+# define latex functions
+############################
+isLatex=cfg['PostTreat']['Volume']['latex']+cfg['PostTreat']['Flows']['latex']\
+	+cfg['PostTreat']['Power']['latex']+cfg['PostTreat']['Demand']['latex']\
+	+cfg['PostTreat']['MarginalCost']['latex']+cfg['PostTreat']['MarginalCostFlows']['latex']\
+	+cfg['PostTreat']['InstalledCapacity']['latex']+cfg['PostTreat']['SpecificPeriods']['latex']
+
+if isLatex:
+	# include list of packages
+	def packages(*packages):
+		p= ""
+		for i in packages:
+			p= p+"\\usepackage{"+i+"}\n"
+		return p
+
+	# include list of ticklibraries
+	def tikzlibraries(*tikzlibrary):
+		p=""
+		for i in tikzlibrary:
+			p= p+"\\usetikzlibrary{"+i+"}\n"	
+		return p
+
+	# define list of colors
+	def definecolors(*color):
+		p=""
+		for i in color:
+			p= p+"\\definecolor"+i+"\n"	
+		return p
+
+	# include an image
+	def figure(fig,caption,figlabel):
+		p="\\begin{figure}[H]\n\\centering\n\\includegraphics[width=\\textwidth,keepaspectratio]{"+fig+"}\n\\caption{"+caption+"}\n\\label{fig:"+figlabel+"}\n\\end{figure}\n"
+		return p
+
+	# include a table
+	def tablelatex(df,label,column_format=None,header=True,index=True):
+		p="\\begin{center}"
+		p=p+"\\small"
+		p=p+df.to_latex(header=header,index=index,label=label,caption=label,column_format=column_format)
+		p=p+"\\end{center}"
+		# the following is necessary if booktabs is not in the latex distribution used
+		p=p.replace("\\toprule","\\hline")
+		p=p.replace("\\midrule","\\hline")
+		p=p.replace("\\bottomrule","\\hline")
+		p=p.replace(">","$\\Rightarrow$ ")
+		p=p+"\n"
+		return p
+	############################################################################
+
 print('treating dataset ',cfg['dir'])
 
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
@@ -134,6 +160,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if 'SpecificPeriods' in cfg['PostTreat']: 
 		cfg['dirOUTScenario']=[cfg['dirSto']+'Scenario'+str(i)+'/' for i in cfg['PostTreat']['SpecificPeriods']['scenarios']]
 	cfg['dirIMG']=cfg['dirSto']+'IMG/'
+	cfg['dirIMGLatex']=cfg['dirIMG'].replace("/","\\")
 	if not os.path.isdir(cfg['dirOUT']): os.mkdir(cfg['dirOUT'])
 	if not os.path.isdir(cfg['dirIAMC']): os.mkdir(cfg['dirIAMC'])
 	if not os.path.isdir(cfg['dirIMG']): os.mkdir(cfg['dirIMG'])
@@ -154,33 +181,34 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	for elem in cfg['pumping']: cfg['pump'].append(elem+'_PUMP')
 
 	# preamble of latex file
-	startlatex = "\\documentclass[10pt]{report}\n"
-	startlatex = startlatex+packages('float','amsfonts','amssymb','amsmath','makeidx','amsgen','epsf','fancyhdr','acro','etoolbox')
-	startlatex=startlatex+"\\usepackage[hidelinks]{hyperref}\n"
-	startlatex = startlatex+packages('subfigure','lastpage','ltablex','graphicx','color','url')
-	startlatex=startlatex+"\\usepackage[table]{xcolor}\n"
-	startlatex = startlatex+packages('multirow','enumitem','cite','tikz')
-	startlatex=startlatex+"\\usepackage[latin1]{inputenc}\n"
-	startlatex=startlatex+"\\usepackage[official]{eurosym}\n"
-	startlatex=startlatex+"\\setlength{\\hoffset}{0pt}\n"
-	startlatex=startlatex+"\\setlength{\\oddsidemargin}{0pt}\n\\setlength{\\evensidemargin}{9pt}\n"
-	startlatex=startlatex+"\\setlength{\\marginparwidth}{54pt}\n"
-	startlatex=startlatex+"\\setlength{\\textwidth}{481pt}\n"
-	startlatex=startlatex+"\\setlength{\\voffset}{-18pt}\n"
-	startlatex=startlatex+"\\setlength{\\marginparsep}{7pt}\n"
-	startlatex=startlatex+"\\setlength{\\topmargin}{0pt}\n"
-	startlatex=startlatex+"\\setlength{\\headheight}{13pt}\n"
-	startlatex=startlatex+"\\setlength{\\headsep}{10pt}\n"
-	startlatex=startlatex+"\\setlength{\\footskip}{27pt}\n"
-	startlatex=startlatex+"\\setlength{\\textheight}{708pt}\n"
-	startlatex = startlatex+"\\begin{document}\n"
-	startlatex=startlatex+"\\title{"+cfg['titlereport']+"}\n\\maketitle\n"
-	startlatex=startlatex+"\\newpage\n\\listoffigures\n\\newpage\n\\listoftables\n\\newpage\n\\tableofcontents\n\\newpage\n"
-	endlatex = "\\end{document}"
-	bodylatex_IC=""
-	bodylatex_Sto=""
-	bodylatex_Det=""
-	writelatex=False
+	if isLatex:
+		startlatex = "\\documentclass[10pt]{report}\n"
+		startlatex = startlatex+packages('float','amsfonts','amssymb','amsmath','makeidx','amsgen','epsf','fancyhdr','acro','etoolbox')
+		startlatex=startlatex+"\\usepackage[hidelinks]{hyperref}\n"
+		startlatex = startlatex+packages('subfigure','lastpage','ltablex','graphicx','color','url')
+		startlatex=startlatex+"\\usepackage[table]{xcolor}\n"
+		startlatex = startlatex+packages('multirow','enumitem','cite','tikz')
+		startlatex=startlatex+"\\usepackage[latin1]{inputenc}\n"
+		startlatex=startlatex+"\\usepackage[official]{eurosym}\n"
+		startlatex=startlatex+"\\setlength{\\hoffset}{0pt}\n"
+		startlatex=startlatex+"\\setlength{\\oddsidemargin}{0pt}\n\\setlength{\\evensidemargin}{9pt}\n"
+		startlatex=startlatex+"\\setlength{\\marginparwidth}{54pt}\n"
+		startlatex=startlatex+"\\setlength{\\textwidth}{481pt}\n"
+		startlatex=startlatex+"\\setlength{\\voffset}{-18pt}\n"
+		startlatex=startlatex+"\\setlength{\\marginparsep}{7pt}\n"
+		startlatex=startlatex+"\\setlength{\\topmargin}{0pt}\n"
+		startlatex=startlatex+"\\setlength{\\headheight}{13pt}\n"
+		startlatex=startlatex+"\\setlength{\\headsep}{10pt}\n"
+		startlatex=startlatex+"\\setlength{\\footskip}{27pt}\n"
+		startlatex=startlatex+"\\setlength{\\textheight}{708pt}\n"
+		startlatex = startlatex+"\\begin{document}\n"
+		startlatex=startlatex+"\\title{"+cfg['titlereport']+"}\n\\maketitle\n"
+		startlatex=startlatex+"\\newpage\n\\listoffigures\n\\newpage\n\\listoftables\n\\newpage\n\\tableofcontents\n\\newpage\n"
+		endlatex = "\\end{document}"
+		bodylatex_IC=""
+		bodylatex_Sto=""
+		bodylatex_Det=""
+		writelatex=False
 
 	# treat lists of regions
 	#################################################
@@ -191,15 +219,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		listscen=[]
 		for elem in listFiles:
 			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")))
+		listscen=list(range(len(listscen)))
 		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+str(listscen[0])+'.csv',index_col=0)
 		list_regions=df.columns.to_list()
 	else:
-		partition=cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']['Partition']
+		partition=cfg['CouplingConstraints']['ActivePowerDemand']['Partition']
 		df=pd.read_csv(cfg['inputpath']+cfg['treat']['SS'])
 		list_regions=df[partition].tolist()
-		listscen=[elem for elem in range(len(cfg['Parameters']['Scenarios']))]
-		
-	print('scenarios in dataset: ',listscen)
+		listscen=[elem for elem in range(len(cfg['ParametersFormat']['Scenarios']))]
+	print('scenarios in dataset: ',cfg['ParametersFormat']['Scenarios'])	
 	
 	#create shortened names of regions, used in the latex report (for graphics to be readable)
 	cfg['regions_short']=[]
@@ -248,16 +276,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 	# treat dates
 	number_timesteps=len(df.index)
-	BeginDataset=pd.Timestamp(cfg['BeginDataset'])
-	TimeStepHours=cfg['DatasetTimestep']['Duration']
-	if cfg['DatasetTimestep']['Unit']=='days': TimeStepHours=TimeStepHours*24
-	elif cfg['DatasetTimestep']['Unit']=='weeks': TimeStepHours=TimeStepHours*168
-	elif cfg['DatasetTimestep']['Unit']!='hours': 
+	BeginDataset=pd.Timestamp(pd.to_datetime(cfg['BeginDataset'],dayfirst=cfg['dayfirst']))
+	TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
+	if cfg['Calendar']['TimeStep']['Unit']=='days': TimeStepHours=TimeStepHours*24
+	elif cfg['Calendar']['TimeStep']['Unit']=='weeks': TimeStepHours=TimeStepHours*168
+	elif cfg['Calendar']['TimeStep']['Unit']!='hours': 
 		print('only hours, days, weeks possible as timestep unit')
 		exit()
 	EndDataset=BeginDataset+number_timesteps*pd.Timedelta(str(TimeStepHours)+' hours')-pd.Timedelta('1 hours')
-	BeginTreat=pd.Timestamp(cfg['BeginTreatData'])
-	EndTreat=pd.Timestamp(cfg['EndTreatData'])
+	BeginTreat=pd.Timestamp(pd.to_datetime(cfg['BeginTreatData'],dayfirst=cfg['dayfirst']))
+	EndTreat=pd.Timestamp(pd.to_datetime(cfg['EndTreatData'],dayfirst=cfg['dayfirst']))
 	
 	if BeginTreat>EndDataset:
 		print('Treatment start date is after end of available data')
@@ -279,24 +307,25 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	print('PostTreating between ',BeginTreat,' and ',EndTreat)
 
 	# compute date ranges
-	cfg['Tp4r'] = pd.date_range(start=pd.to_datetime(cfg['p4r_start']),end=pd.to_datetime(cfg['p4r_end']), freq=str(TimeStepHours)+'h')	
-	cfg['PlotDates'] = pd.date_range(start=pd.to_datetime(cfg['plot_start']),end=pd.to_datetime(cfg['plot_end']), freq=str(TimeStepHours)+'h')
-	NbTimeStepsToRemoveBefore=len(pd.date_range(start=pd.to_datetime(cfg['p4r_start']),end=pd.to_datetime(cfg['plot_start']), freq=str(TimeStepHours)+'h'))-1
-	NbTimeStepsToRemoveAfter=len(pd.date_range(start=pd.to_datetime(cfg['plot_end']),end=pd.to_datetime(cfg['p4r_end']), freq=str(TimeStepHours)+'h'))-1
+	cfg['Tp4r'] = pd.date_range(start=pd.to_datetime(cfg['p4r_start'],dayfirst=cfg['dayfirst']),end=pd.to_datetime(cfg['p4r_end'],dayfirst=cfg['dayfirst']), freq=str(TimeStepHours)+'h')	
+	cfg['PlotDates'] = pd.date_range(start=pd.to_datetime(cfg['plot_start'],dayfirst=cfg['dayfirst']),end=pd.to_datetime(cfg['plot_end'],dayfirst=cfg['dayfirst']), freq=str(TimeStepHours)+'h')
+	NbTimeStepsToRemoveBefore=len(pd.date_range(start=pd.to_datetime(cfg['p4r_start'],dayfirst=cfg['dayfirst']),end=pd.to_datetime(cfg['plot_start'],dayfirst=cfg['dayfirst']), freq=str(TimeStepHours)+'h'))-1
+	NbTimeStepsToRemoveAfter=len(pd.date_range(start=pd.to_datetime(cfg['plot_end'],dayfirst=cfg['dayfirst']),end=pd.to_datetime(cfg['p4r_end'],dayfirst=cfg['dayfirst']), freq=str(TimeStepHours)+'h'))-1
 	
 	# date ranges for graph outputs
 	datestart=cfg['plot_start']
 	dateend=cfg['plot_end']
-	start=pd.to_datetime(datestart)
-	end=pd.to_datetime(dateend)
+	start=pd.to_datetime(datestart,dayfirst=cfg['dayfirst'])
+	end=pd.to_datetime(dateend,dayfirst=cfg['dayfirst'])
 	TimeIndex=pd.date_range(start=start,end=end, freq=str(TimeStepHours)+'h')	
 	MonthIndex=pd.to_datetime(TimeIndex,format ='%Y-%m-%d %H%M%s+01:00').strftime('%Y-%m')
 	NbTimeSteps=len(TimeIndex)	
 	
 	ScenarioIndex=[]
-	for i in range(listscen[0],listscen[0]+len(listscen)-1): ScenarioIndex=ScenarioIndex+[i]
+	for i in range(listscen[0],listscen[0]+len(listscen)): 
+		ScenarioIndex=ScenarioIndex+[i]
 		
-	FailureCost=cfg['Parameters']['CouplingConstraints']['ActivePowerDemand']['Cost']
+	FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 
 	# treat hex color codes
 	for techno in cfg['Technos']:
@@ -519,6 +548,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 						head_width=1,head_length=0.5,color='black',linewidth=0,zorder=2)
 
 			axflows.set_title("Import/Exports (MWh)",fontsize=10)
+			axflows.tick_params(labelbottom=False,labelleft=False)
 			plt.savefig(namefigpng)
 			figflows.clf()
 			plt.close('all')
@@ -606,9 +636,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				cb_ax=fig.axes[1]
 				cb_ax.tick_params(labelsize=40)
 				axes[y][x].set_title(item,fontsize=TitleSize)
-				axes[y][x].set_xticklabels(MonthIndex)
-				axes[y][x].tick_params(axis='x',  labelsize =LabelSize)
-				axes[y][x].tick_params(axis='y',  labelsize =LabelSize)
+
 				if x<NbCols-1: x=x+1
 				else:
 					x=0
@@ -663,7 +691,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		return namefigpng		
 
 	# function for drawing stochastic graph
-	def StochasticGraphs(NbCols,NbRows,List,What,Dir,SizeCol,SizeRow,TitleSize,LabelSize,DrawMean=False,max=0,drawScale=True):
+	def StochasticGraphs(NbCols,NbRows,List,What,Dir,SizeCol,SizeRow,TitleSize,LabelSize,DrawMean=False,max=0,drawScale=True,isTimeIndex=True):
 	# draw one graphic per item in the List, organised as a table with NbCols and NbRows, ...
 	# each graphic includes all scenarios plus the mean of scenarios
 		fig, axes = plt.subplots(figsize=(SizeCol*NbCols,SizeRow*NbRows),nrows=NbRows, ncols=NbCols)
@@ -674,17 +702,45 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for item in List:
 			Data=pd.read_csv(cfg['dirSto']+Dir+'/'+What+'-'+item+'.csv',nrows=NbTimeSteps,index_col=0).fillna(0.0)
 			if 'time' in Data.columns:Data=Data.drop('time',axis=1)
-			Data=Data.set_index(TimeIndex)
 			maxData=Data.max(axis=1).max()
 			minY=Data.min(axis=1).min()
 			if maxData<max: 
 				maxY=maxData 
 			else: maxY=max
-			axes[y][x].plot(Data)
+			if isTimeIndex: Data.index=pd.to_datetime(Data.index)
+			axes[y][x].plot(Data.index.to_list(),Data)
 			axes[y][x].set_title(item,fontsize=TitleSize)
 			
-			axes[y][x].tick_params(axis='x',  labelsize =LabelSize)
-			axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%b'))
+			if isTimeIndex:
+				axes[y][x].tick_params(axis='x',  labelsize =LabelSize)
+				period=pd.to_datetime(Data.index[-1])-pd.to_datetime(Data.index[0])
+				nb_seconds=period.total_seconds()
+				nb_hours=nb_seconds/3600
+				nb_days=nb_hours/24
+				if period> pd.Timedelta('180 days'):
+					locator=mdates.MonthLocator(bymonth=range(1,13))
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+				elif period> pd.Timedelta('90 days'):
+					locator=mdates.WeekdayLocator(byweekday=1,interval=2)
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+				elif period> pd.Timedelta('30 days'):
+					locator=mdates.WeekdayLocator(byweekday=1)
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+				elif period> pd.Timedelta('14 days'):
+					locator=mdates.DayLocator(bymonthday=range(1,32))
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+				elif period> pd.Timedelta('2 days'):
+					locator=mdates.HourLocator(byhour=range(24),interval=12)
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d:%H'))
+				else:
+					locator=mdates.HourLocator(byhour=range(24))
+					axes[y][x].xaxis.set_major_locator(locator)
+					axes[y][x].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d:%H'))
 			for label in axes[y][x].get_xticklabels(which='major'):
 				label.set(rotation=30, horizontalalignment='right')
 			
@@ -701,7 +757,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				meanScen[item]=mean
 			if DrawMean: axes[y][x].plot(mean,linewidth=5,color="k")
-			axes[y][x].set_xticklabels(MonthIndex)
+			#axes[y][x].set_xticklabels(MonthIndex)
 			if x<NbCols-1: x=x+1
 			else:
 				x=0
@@ -715,17 +771,56 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		plt.close('all')
 		return namefig
 
-	def DeterministicGraph(What,Index,nbRows,SizeCol,SizeRow,LabelSize):
+	def DeterministicGraph(What,Index,nbRows,SizeCol,SizeRow,LabelSize,isTimeIndex=True):
 	# draw one graphic per item in the List, organised as a table with NbCols and NbRows, ...
 		fig, axes = plt.subplots(figsize=(SizeCol,SizeRow),nrows=1, ncols=1)
 		Data=pd.read_csv(cfg['dirOUT']+What+'.csv',nrows=nbRows,index_col=0).fillna(0.0)
-		axes.plot(Data)
-		axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-		axes.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
-		axes.set_xticklabels(MonthIndex)
-		axes.tick_params(axis='x',  labelsize =LabelSize)
-		axes.tick_params(axis='y',  labelsize =LabelSize)
-		#axes.xaxis.autofmt_xdate()
+		#axes.plot(Data)
+		print(What)
+		print(Data)
+		####################
+		if isTimeIndex:
+			Data.index=pd.to_datetime(Data.index)
+		else:
+			Data.index=Index
+		
+		axes.plot(Data.index.to_list(),Data)
+			
+		if isTimeIndex:
+			period=pd.to_datetime(Data.index[-1])-pd.to_datetime(Data.index[0])
+			nb_seconds=period.total_seconds()
+			nb_hours=nb_seconds/3600
+			nb_days=nb_hours/24
+			if period> pd.Timedelta('180 days'):
+				locator=mdates.MonthLocator(bymonth=range(1,13))
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+			elif period> pd.Timedelta('90 days'):
+				locator=mdates.WeekdayLocator(byweekday=1,interval=2)
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+			elif period> pd.Timedelta('30 days'):
+				locator=mdates.WeekdayLocator(byweekday=1)
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+			elif period> pd.Timedelta('14 days'):
+				locator=mdates.DayLocator(bymonthday=range(1,32))
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+			elif period> pd.Timedelta('2 days'):
+				locator=mdates.HourLocator(byhour=range(24),interval=12)
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d:%H'))
+			else:
+				locator=mdates.HourLocator(byhour=range(24))
+				axes.xaxis.set_major_locator(locator)
+				axes.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d:%H'))
+		for label in axes.get_xticklabels(which='major'):
+			label.set(rotation=30, horizontalalignment='right')
+				
+		##############
+		axes.tick_params(axis='x',  labelsize =LabelSize/2)
+		axes.tick_params(axis='y',  labelsize =LabelSize/2)
 		axes.legend(Data.columns,bbox_to_anchor=(0.95, 1.0),loc='upper left')
 		namefig=cfg['dirIMG']+What+'.jpeg'
 		plt.savefig(namefig)
@@ -852,7 +947,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	scen0=listscen[0]
 	nbscengroup=nbscen # number of scenarised results
 	print('Treat Stochastic results')
-	bodylatex_Sto=bodylatex_Sto+"\\chapter{Stochastic Results}\n" 
+	if isLatex: bodylatex_Sto=bodylatex_Sto+"\\chapter{Stochastic Results}\n" 
 	
 	# read VolumeOUT.csv per scenario and create 1 file per reservoir with all scenario data
 	if (cfg['PostTreat']['Volume']['read']):
@@ -1046,7 +1141,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			del df
 		
 		meanTime=pd.DataFrame(columns=cfg['regionsANA'],index=listscen)
-		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
+		#meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
+		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=TimeIndex)
 		meanScenMonotone=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		SlackCmar=pd.DataFrame(columns=listscen)
 		i=0
@@ -1054,12 +1150,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			reg=cfg['regionsANA'][index]
 			print('writing file for ',reg)
 			MargCosts[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv')
-			
-			meanScenReg=MargCosts[index].mean(axis=1).reset_index()
+			#meanScenReg=MargCosts[index].mean(axis=1).reset_index()
+			meanScenReg=MargCosts[index].mean(axis=1)			
 			meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
-			meanScen[reg]=meanScenReg[0]
+			meanScen[reg]=MargCosts[index].mean(axis=1)
 			meanTime[reg]=meanTimeReg
-			del meanTimeReg, meanScenReg
 			SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
 			List=[]
 			for col in MargCosts[index].columns:
@@ -1068,7 +1163,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				List.append(data)
 			SortedSlack=pd.DataFrame(data=List).transpose()
 			SortedSlack.columns=MargCosts[index].columns
-			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv',index=False)
+			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv')
 			del data, SortedSlack, List
 						
 			# compute mean
@@ -1082,6 +1177,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			del SlackCmarReg
 			
 		SlackCmar.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
+		meanTime.index=cfg['ParametersFormat']['Scenarios']
 		meanTime.to_csv(cfg['dirOUT'] +'meanTimeCmar.csv',index=True)
 		meanScen.to_csv(cfg['dirOUT'] +'meanScenCmar.csv',index=True)
 		SlackCmardf=pd.DataFrame(index=list_regions,data=SlackCmar)
@@ -1548,7 +1644,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		print('Create graphs for demand')
 		namefigpng1=StochasticGraphs(cfg['Graphs']['Demand']['nbcols'],cfg['Graphs']['Demand']['nblines'],\
 				cfg['regionsANA'],'Demand',cfg['PostTreat']['Demand']['Dir'],cfg['Graphs']['Demand']['SizeCol'],\
-				cfg['Graphs']['Demand']['SizeRow'],cfg['Graphs']['Demand']['TitleSize'],cfg['Graphs']['Demand']['LabelSize'],False,0,False)
+				cfg['Graphs']['Demand']['SizeRow'],cfg['Graphs']['Demand']['TitleSize'],cfg['Graphs']['Demand']['LabelSize'],True,0,False)
 		del namefigpng1
 	
 	# create demand chapter in latex report
@@ -1569,14 +1665,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		namefigpng=StochasticGraphs(cfg['Graphs']['MarginalCost']['nbcols'],cfg['Graphs']['MarginalCost']['nblines'],\
 				cfg['regionsANA'],'MarginalCostActivePowerDemand',cfg['PostTreat']['MarginalCost']['Dir'], \
 				cfg['Graphs']['MarginalCost']['SizeCol'],cfg['Graphs']['MarginalCost']['SizeRow'], \
-				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],max=maxCmarSto)
+				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],max=maxCmarSto,DrawMean=True)
 		namefigpng=StochasticGraphs(cfg['Graphs']['MarginalCost']['nbcols'],cfg['Graphs']['MarginalCost']['nblines'],\
 				cfg['regionsANA'],'HistCmar',cfg['PostTreat']['MarginalCost']['Dir'],\
 				cfg['Graphs']['MarginalCost']['SizeCol'],cfg['Graphs']['MarginalCost']['SizeRow'], \
-				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],DrawMean=True,max=maxCmarSto)
+				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],DrawMean=False,max=maxCmarSto,isTimeIndex=False)
 		namefigpng=DeterministicGraph('meanScenCmar',TimeIndex,NbTimeSteps,10,5,16)
-		namefigpng=DeterministicGraph('MonotoneCmar',TimeIndex,NbTimeSteps,10,5,16)
-		namefigpng=DeterministicGraph('meanTimeCmar',ScenarioIndex,nbscen,10,5,16)
+		namefigpng=DeterministicGraph('MonotoneCmar',list(range(NbTimeSteps)),NbTimeSteps,10,5,16,isTimeIndex=False)
+		print(ScenarioIndex)
+		namefigpng=DeterministicGraph('meanTimeCmar',cfg['ParametersFormat']['Scenarios'],nbscen,10,5,16,isTimeIndex=False)
 		del namefigpng
 	
 	# create marginal costs chapter un latex report
@@ -1599,7 +1696,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		namefigpng=StochasticGraphs(cfg['Graphs']['Volume']['nbcols'],cfg['Graphs']['Volume']['nblines'],\
 			cfg['ReservoirRegions'],'Volume-Reservoir',cfg['PostTreat']['Volume']['Dir'],\
 				cfg['Graphs']['Volume']['SizeCol'],cfg['Graphs']['Volume']['SizeRow'], \
-				cfg['Graphs']['Volume']['TitleSize'], cfg['Graphs']['Volume']['LabelSize'])
+				cfg['Graphs']['Volume']['TitleSize'], cfg['Graphs']['Volume']['LabelSize'],DrawMean=True)
 		del namefigpng
 
 	# create volume chapter in latex report
@@ -1660,7 +1757,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		namefigpng=StochasticGraphs(cfg['Graphs']['Demand']['nbcols'],cfg['Graphs']['Demand']['nblines'],\
 			cfg['regionsANA'],'Slack','OUT',\
 			cfg['Graphs']['Demand']['SizeCol'],cfg['Graphs']['Demand']['SizeRow'], \
-			cfg['Graphs']['Demand']['TitleSize'], cfg['Graphs']['Demand']['LabelSize'],False,0,False)
+			cfg['Graphs']['Demand']['TitleSize'], cfg['Graphs']['Demand']['LabelSize'],DrawMean=True,max=0,drawScale=False)
 		del namefigpng
 		del MeanEnergy, MeanEnergyAggr
 		
@@ -2550,13 +2647,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		indexScen=indexScen+1			
 
 	# creation of the reports
-	if writelatex:
-		containerlatex=startlatex+bodylatex_IC+bodylatex_Sto+bodylatex_Det+endlatex
-		filelatex=cfg['dirOUT']+cfg['namereport']+'.tex'
-		if os.path.exists(filelatex): os.remove(filelatex)
-		myfile=open(filelatex,"x")
-		myfile.write(containerlatex)
-		myfile.close()
+	if isLatex:
+		if writelatex:
+			containerlatex=startlatex+bodylatex_IC+bodylatex_Sto+bodylatex_Det+endlatex
+			filelatex=cfg['dirOUT']+cfg['namereport']+'.tex'
+			if os.path.exists(filelatex): os.remove(filelatex)
+			myfile=open(filelatex,"x")
+			myfile.write(containerlatex)
+			myfile.close()
 
 
 

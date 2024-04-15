@@ -18,24 +18,29 @@ cfg={}
 # open the configuration file using the pathway defined below
 with open("settingsCreateInputPlan4res.yml","r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
+cfg['dirTimeSeries']=cfg['timeseriespath']
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
-	cfg['outputpath']=path+cfg['outputpath']
-	cfg['dirTimeSeries']=path+cfg['dirTimeSeries']
+	cfg['outputpath']=path+cfg['path']
+	cfg['dirTimeSeries']=path+cfg['timeseriespath']
 	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
 	for datagroup in cfg['datagroups']:
 		cfg['datagroups'][datagroup]['inputdatapath']=path+cfg['datagroups'][datagroup]['inputdatapath']
 print('path: ',cfg['outputpath'])
 	
-isInertia= ( 'Inertia' in cfg['Parameters']['CouplingConstraints'] )
-isPrimary= ( 'Primary' in cfg['Parameters']['CouplingConstraints'] )
-isSecondary= ( 'Secondary' in cfg['Parameters']['CouplingConstraints'] )
-isCO2= ( 'CO2' in cfg['Parameters']['CouplingConstraints'] )
-partitionDemand = cfg['Parameters']['CouplingConstraints']['Demand']['Partition']
-if isInertia: partitionInertia=cfg['Parameters']['CouplingConstraints']['Inertia']['Partition']
-if isPrimary: partitionPrimary=cfg['Parameters']['CouplingConstraints']['Primary']['Partition']
-if isSecondary: partitionSecondary=cfg['Parameters']['CouplingConstraints']['Secondary']['Partition']
-isInvest= ('CapacityExpansion' in cfg['Parameters'])
+isInertia= ( 'InertiaDemand' in cfg['CouplingConstraints'] )
+isPrimary= ( 'PrimaryDemand' in cfg['CouplingConstraints'] )
+isSecondary= ( 'SecondaryDemand' in cfg['CouplingConstraints'] )
+isCO2=False
+if 'PollutantBudget' in cfg['CouplingConstraints']:
+	if 'CO2' in cfg['CouplingConstraints']['PollutantBudget']:
+		isCO2=True
+partitionDemand = cfg['CouplingConstraints']['ActivePowerDemand']['Partition']
+if isInertia: partitionInertia=cfg['CouplingConstraints']['InertiaDemand']['Partition']
+if isPrimary: partitionPrimary=cfg['CouplingConstraints']['PrimaryDemand']['Partition']
+if isSecondary: partitionSecondary=cfg['CouplingConstraints']['SecondaryDemand']['Partition']
+
+isInvest= ('CapacityExpansion' in cfg['ParametersCreate'])
 
 # connect to the openentrance scenario explorer (set credentials)
 if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
@@ -66,14 +71,19 @@ if 'options' in cfg:
 		cfg['options'].append('WITH_'+option_type)
 		cfg['options'].append('WITHOUT_'+option_type)
 else: cfg['options']=['None']
+cfg['treat']=cfg['csvfiles']
 
-cfg['UCScenarios']=[str(x) for x in cfg['UCScenarios']]
+cfg['StochasticScenarios']=[str(x) for x in cfg['StochasticScenarios']]
 
 # loop on scenarios, years, options => create one dataset per (scenario,year,option) triplet
 for current_scenario, current_year, current_option in product(cfg['scenarios'],cfg['years'],cfg['options']):
 	cfg['scenario']=current_scenario
 	cfg['year']=current_year
-	print('create dataset for ',current_scenario,', ',current_year, ' and ',current_option)
+	if current_option != "None":
+		print('create dataset for ',current_scenario,', ',current_year, ' and ',current_option)
+	else:
+		print('create dataset for ',current_scenario,', ',current_year)
+	
 	if len(cfg['scenarios'])==1 and len(cfg['years'])==1 and len(cfg['options'])<2:
 		outputdir=cfg['outputpath']
 		if not os.path.isdir(outputdir):os.mkdir(outputdir)
@@ -85,9 +95,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		outputdir=cfg['outputpath']+'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])
 		if not os.path.isdir(outputdir):os.mkdir(outputdir)
 		outputdir=outputdir+'/'
-	
-
-	timestepduration=cfg['TimeStep']['number']										 
 
 	# upload of relevant Scenario data from platform
 	# creation of a csv file and a pandas dataframe containing all necessary data
@@ -141,359 +148,352 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		if(cfg['datagroups'][datagroup]['regions']['global']): listGlobalReg.append(cfg['datagroups'][datagroup]['regions']['global'])
 		
-	if cfg['mode_annual']!='fulldata' or cfg['mode_subannual']!='fulldata':
-	# case where data are retrieved from openentrance datafiles (upoaded from scenario explorer) or directly on the scenario explorer	
+	# create list of lines
+	lines=[]
+	for region1 in cfg['listregionsGET']:
+		for region2 in cfg['listregionsGET']:
+			if (region1!=region2):
+				lines.append(region1+'>'+region2)
+				lines.append(region2+'>'+region1)
+	
+	# define list of regions including lines
+	listLocalReg=listLocalReg+lines  
+	for region in cfg['listregionsGET']:
+		if region not in listGlobalReg: listLocalReg.append(region)
+	listRegGet=listLocalReg+listGlobalReg
+	
+	# treat cases where disaggregation level is nuts1/2/3
+	minaggr=''
+	nuts3list= {}
+	nuts2list= {}
+	nuts1list= {}
+	for k in nuts1[0]['NUTS1']: nuts1list.update(k)
+	for k in nuts2[0]['NUTS2']: nuts2list.update(k)
+	for k in nuts3[0]['NUTS3']: nuts3list.update(k)
+	# create lists of nuts per countries
+	countryNuts3={v:[] for v in listcountries}
+	{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
+	countryNuts2={v:[] for v in listcountries}
+	{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
+	countryNuts1={v:[] for v in listcountries}
+	{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
+	
+	# extend list of regions to get with regions from datagroups
+	if 'nuts3' in listRegGet:
+		while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
+		listRegGet=listRegGet+list(nuts3.keys())
+		minaggr='nuts3'	
+	if 'nuts2' in listRegGet:
+		while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
+		listRegGet=listRegGet+list(nuts2.keys())
+		minaggr='nuts2'	
+	if 'nuts1' in listRegGet:
+		while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
+		listRegGet=listRegGet+list(nuts1.keys())
+		minaggr='nuts1'	
+	if 'countries' in listRegGet:
+		while 'countries' in listRegGet: listRegGet.remove('countries')
+		listRegGet=listRegGet+list(countries.keys())
 
-		# create list of lines
-		lines=[]
-		for region1 in cfg['listregionsGET']:
-			for region2 in cfg['listregionsGET']:
-				if (region1!=region2):
-					lines.append(region1+'>'+region2)
-					lines.append(region2+'>'+region1)
+	# create list of variables
+	for datagroup in cfg['listdatagroups']:
+	# loop on all different data sources
+		if 'scenario' in cfg['datagroups'][datagroup]: scenget=cfg['datagroups'][datagroup]['scenario']
+		else: scenget=cfg['scenario']
+		print('reading '+datagroup)
 		
-		# define list of regions including lines
-		listLocalReg=listLocalReg+lines  
-		for region in cfg['listregionsGET']:
-			if region not in listGlobalReg: listLocalReg.append(region)
-		listRegGet=listLocalReg+listGlobalReg
+		listvardatagroup=[]
+		listlocalvar=[] # list of variables which are not 'global'
+		listglobalvar=[]
+		globalreg= cfg['datagroups'][datagroup]['regions']['global']
 		
-		# treat cases where disaggregation level is nuts1/2/3
-		minaggr=''
-		nuts3list= {}
-		nuts2list= {}
-		nuts1list= {}
-		for k in nuts1[0]['NUTS1']: nuts1list.update(k)
-		for k in nuts2[0]['NUTS2']: nuts2list.update(k)
-		for k in nuts3[0]['NUTS3']: nuts3list.update(k)
-		# create lists of nuts per countries
-		countryNuts3={v:[] for v in listcountries}
-		{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
-		countryNuts2={v:[] for v in listcountries}
-		{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
-		countryNuts1={v:[] for v in listcountries}
-		{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
-		
-		# extend list of regions to get with regions from datagroups
-		if 'nuts3' in listRegGet:
-			while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
-			listRegGet=listRegGet+list(nuts3.keys())
-			minaggr='nuts3'	
-		if 'nuts2' in listRegGet:
-			while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
-			listRegGet=listRegGet+list(nuts2.keys())
-			minaggr='nuts2'	
-		if 'nuts1' in listRegGet:
-			while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
-			listRegGet=listRegGet+list(nuts1.keys())
-			minaggr='nuts1'	
-		if 'countries' in listRegGet:
-			while 'countries' in listRegGet: listRegGet.remove('countries')
-			listRegGet=listRegGet+list(countries.keys())
-
-		# create list of variables
-		for datagroup in cfg['listdatagroups']:
-		# loop on all different data sources
-			if 'scenario' in cfg['datagroups'][datagroup]: scenget=cfg['datagroups'][datagroup]['scenario']
-			else: scenget=cfg['scenario']
-			print('reading '+datagroup)
-			
-			listvardatagroup=[]
-			listlocalvar=[] # list of variables which are not 'global'
-			listglobalvar=[]
-			globalreg= cfg['datagroups'][datagroup]['regions']['global']
-			
-			# loop on category of variables : coupling or techno
-			for varcat1 in cfg['datagroups'][datagroup]['listvariables']:
-				# treat coupling variables (ie variables not depending on techno)
-				if varcat1=='coupling':
-					# loop on category of coupling variables: mean, add, flow or global
-					for varcat2 in cfg['datagroups'][datagroup]['listvariables'][varcat1].keys():
-						# loop on variables
-						for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2]:
-							listvardatagroup.append(var)
-						# specific treatment for global variables (meaning they do not depend on regions)
-							if varcat2=='global':listglobalvar.append(var)
-							else: listlocalvar.append(var)
-								
-				# treat variables depending on technos
-				elif varcat1=='techno':
-					# loop on category of techno variables: thermal, reservoir, .....
-					for varcat2 in cfg['datagroups'][datagroup]['listvariables'][varcat1].keys():
-						# loop on category of variables: add, mean, global
-						for varcat3 in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2].keys():
-							# is there only a list of variables or subgroups of variables per fuels
-							if(type(cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3])==list):
-								# loop on variables and fuels
-								for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3]:
-									for fuel in cfg['technos'][varcat2]:
+		# loop on category of variables : coupling or techno
+		for varcat1 in cfg['datagroups'][datagroup]['listvariables']:
+			# treat coupling variables (ie variables not depending on techno)
+			if varcat1=='coupling':
+				# loop on category of coupling variables: mean, add, flow or global
+				for varcat2 in cfg['datagroups'][datagroup]['listvariables'][varcat1].keys():
+					# loop on variables
+					for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2]:
+						listvardatagroup.append(var)
+					# specific treatment for global variables (meaning they do not depend on regions)
+						if varcat2=='global':listglobalvar.append(var)
+						else: listlocalvar.append(var)
+							
+			# treat variables depending on technos
+			elif varcat1=='techno':
+				# loop on category of techno variables: thermal, reservoir, .....
+				for varcat2 in cfg['datagroups'][datagroup]['listvariables'][varcat1].keys():
+					# loop on category of variables: add, mean, global
+					for varcat3 in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2].keys():
+						# is there only a list of variables or subgroups of variables per fuels
+						if(type(cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3])==list):
+							# loop on variables and fuels
+							for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3]:
+								for fuel in cfg['technos'][varcat2]:
+									newvar=var+fuel
+									listvardatagroup.append(newvar)
+									if varcat3=='global': listglobalvar.append(newvar) 
+									else: listlocalvar.append(newvar)
+						else: # there are subgroups of variables per fuels
+							for subgroup in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3].keys():
+								for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3][subgroup]['variables']:
+									for fuel in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3][subgroup]['fuels']:
 										newvar=var+fuel
 										listvardatagroup.append(newvar)
 										if varcat3=='global': listglobalvar.append(newvar) 
 										else: listlocalvar.append(newvar)
-							else: # there are subgroups of variables per fuels
-								for subgroup in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3].keys():
-									for var in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3][subgroup]['variables']:
-										for fuel in cfg['datagroups'][datagroup]['listvariables'][varcat1][varcat2][varcat3][subgroup]['fuels']:
-											newvar=var+fuel
-											listvardatagroup.append(newvar)
-											if varcat3=='global': listglobalvar.append(newvar) 
-											else: listlocalvar.append(newvar)
+		
+		if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='platform') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='platform'):
+			print('download data from platform')
 			
-			if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='platform') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='platform'):
-				print('download data from platform')
-				
-				groupdf=pyam.read_iiasa('openentrance',model=cfg['datagroups'][datagroup]['model'],
-					variable=listvardatagroup,
-					region=listRegGet,year=cfg['year'],
-					scenario=scenget)
-				
-				# remove rows for global variables / local regions or local variables / global regions
-				groupdf=groupdf.filter(region=globalreg, variable=listlocalvar, keep=False)
-				groupdf=groupdf.filter(region=listLocalReg, variable=listglobalvar, keep=False)
-				
-				# rename regions if necessary
-				if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
-				if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO2':groupdf.rename(dict_iso2,inplace=True)
+			groupdf=pyam.read_iiasa('openentrance',model=cfg['datagroups'][datagroup]['model'],
+				variable=listvardatagroup,
+				region=listRegGet,year=cfg['year'],
+				scenario=scenget)
+			
+			# remove rows for global variables / local regions or local variables / global regions
+			groupdf=groupdf.filter(region=globalreg, variable=listlocalvar, keep=False)
+			groupdf=groupdf.filter(region=listLocalReg, variable=listglobalvar, keep=False)
+			
+			# rename regions if necessary
+			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
+			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO2':groupdf.rename(dict_iso2,inplace=True)
 
+			if cfg['datagroups'][datagroup]['subannual']:
+				if not ExistsSubAnnualData:
+					ExistsSubAnnualData=True
+					SubAnnualDataFrame=groupdf
+				else:
+					SubAnnualDataFrame=SubAnnualDataFrame.append(groupdf)
+			else:
+				if not ExistsAnnualData:
+					ExistsAnnualData=True
+					AnnualDataFrame=groupdf
+				else:
+					AnnualDataFrame=AnnualDataFrame.append(groupdf)
+				
+		if not (cfg['mode_annual']=='platform' and cfg['mode_subannual']=='platform'):
+			# load data from files per data source (previously uploaded from platform)
+			print('open data files')
+		
+			if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='files') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='files'):
+				print('reading '+datagroup)
+														
+				if 'Start' in cfg['datagroups'][datagroup]['inputdata']:
+					file=cfg['datagroups'][datagroup]['inputdatapath']+cfg['datagroups'][datagroup]['inputdata']['Start']+str(cfg['variant']) +cfg['datagroups'][datagroup]['inputdata']['End']
+				else:
+					file=cfg['datagroups'][datagroup]['inputdatapath']+cfg['datagroups'][datagroup]['inputdata']
+				print('read file '+file)
+				
+				# creation of empty df for storing annual and subannual data for the current group
+				dfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
+				# filter on the listgetfegion regions
+				SubAdfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
+				
+				# read data as a IAMDataFrame
+				print('read as df')
+				if 'xlsx' in file:
+					df=pd.read_excel(file,sheet_name='data')
+				else:
+					df=pd.read_csv(file)
+				
+				if 'Subannual' in df.columns:
+					if len(df['Subannual'].unique()==1): df=df.drop(['Subannual'],axis=1)
+				dfdatagroup=pyam.IamDataFrame(data=df)
+
+				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:
+					print('renaming ISO3')
+					dfdatagroup=dfdatagroup.rename(region=dict_iso3)
+				if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['local']:
+					print('renaming ISO2')
+					dfdatagroup=dfdatagroup.rename(region=dict_iso2)
+				
+				print('change country names')
+				dfdatagroup=dfdatagroup.filter(region=listRegGet)
+				
+				print('filter countries')
+				# if there are data at lower granularity than country or cluster (only country until now), aggregate
+				firstcountry=1
+				for country in listcountries:
+					
+					# create list of nuts of the country
+					listNuts1=countryNuts1[country]
+					listNuts2=countryNuts2[country]
+					listNuts3=countryNuts3[country]
+					listNuts=listNuts1+listNuts2+listNuts3
+					NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
+					# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
+					
+					if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
+						print('aggregating nuts')
+						dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
+
+				dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
+				dfdatagroup=dfdatagroup.filter(scenario=scenget)
+				dfdatagroup=dfdatagroup.filter(year=cfg['year'])
+				dfdatagroup=dfdatagroup.filter(variable=listvardatagroup)
+				# remove local variables on global region and global variables on local regions
+				dfdatagroup=dfdatagroup.filter(region=globalreg, variable=listlocalvar, keep=False)
+				dfdatagroup=dfdatagroup.filter(region=listLocalReg, variable=listglobalvar, keep=False)
+				if cfg['datagroups'][datagroup]['subannual']: SubAdfdatagroup=dfdatagroup
+				
 				if cfg['datagroups'][datagroup]['subannual']:
 					if not ExistsSubAnnualData:
 						ExistsSubAnnualData=True
-						SubAnnualDataFrame=groupdf
+						SubAnnualDataFrame=SubAdfdatagroup
 					else:
-						SubAnnualDataFrame=SubAnnualDataFrame.append(groupdf)
+						SubAnnualDataFrame=SubAnnualDataFrame.append(SubAdfdatagroup)
 				else:
 					if not ExistsAnnualData:
 						ExistsAnnualData=True
-						AnnualDataFrame=groupdf
+						AnnualDataFrame=dfdatagroup
 					else:
-						AnnualDataFrame=AnnualDataFrame.append(groupdf)
-					
-			if not (cfg['mode_annual']=='platform' and cfg['mode_subannual']=='platform'):
-				# load data from files per data source (previously uploaded from platform)
-				print('open data files')
-			
-				if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='files') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='files'):
-					print('reading '+datagroup)
-															
-					if 'Start' in cfg['datagroups'][datagroup]['inputdata']:
-						file=cfg['datagroups'][datagroup]['inputdatapath']+cfg['datagroups'][datagroup]['inputdata']['Start']+str(cfg['variant']) +cfg['datagroups'][datagroup]['inputdata']['End']
-					else:
-						file=cfg['datagroups'][datagroup]['inputdatapath']+cfg['datagroups'][datagroup]['inputdata']
-					print('read file '+file)
-					
-					# creation of empty df for storing annual and subannual data for the current group
-					dfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
-					# filter on the listgetfegion regions
-					SubAdfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
-					
-					# read data as a IAMDataFrame
-					print('read as df')
-					if 'xlsx' in file:
-						df=pd.read_excel(file,sheet_name='data')
-					else:
-						df=pd.read_csv(file)
-					
-					if 'Subannual' in df.columns:
-						if len(df['Subannual'].unique()==1): df=df.drop(['Subannual'],axis=1)
-					dfdatagroup=pyam.IamDataFrame(data=df)
+						AnnualDataFrame=AnnualDataFrame.append(dfdatagroup)
+	
+	#conversion of units to plan4res usual units (MWh, MW, €/MWh, €/MW/yr, €/MW)
+	if(ExistsAnnualData): #check if there exist annual data
+		print('converting units')
+		for var_unit in cfg['ParametersCreate']['conversions']:
+			if 'factor' in cfg['ParametersCreate']['conversions'][var_unit]:
+				AnnualDataFrame=AnnualDataFrame.convert_unit(var_unit, to=cfg['ParametersCreate']['conversions'][var_unit]['to'], factor=float(cfg['ParametersCreate']['conversions'][var_unit]['factor'])) 
+			else:
+				AnnualDataFrame=AnnualDataFrame.convert_unit(var_unit, to=cfg['ParametersCreate']['conversions'][var_unit]['to']) 
 
-					if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:
-						print('renaming ISO3')
-						dfdatagroup=dfdatagroup.rename(region=dict_iso3)
-					if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['local']:
-						print('renaming ISO2')
-						dfdatagroup=dfdatagroup.rename(region=dict_iso2)
-					
-					print('change country names')
-					dfdatagroup=dfdatagroup.filter(region=listRegGet)
-					
-					print('filter countries')
-					# if there are data at lower granularity than country or cluster (only country until now), aggregate
-					firstcountry=1
-					for country in listcountries:
-						
-						# create list of nuts of the country
-						listNuts1=countryNuts1[country]
-						listNuts2=countryNuts2[country]
-						listNuts3=countryNuts3[country]
-						listNuts=listNuts1+listNuts2+listNuts3
-						NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
-						# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
-						
-						if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
-							print('aggregating nuts')
-							dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
+		# validate the format of the data (prevents errors)
+		AnnualDataFrame.validate(exclude_on_fail=True)
+	
+	if(ExistsSubAnnualData): # check if there exist subannual data
+		for var_unit in cfg['ParametersCreate']['conversions']:
+			if 'factor' in cfg['ParametersCreate']['conversions'][var_unit]:
+				SubAnnualDataFrame=SubAnnualDataFrame.convert_unit(var_unit, to=cfg['ParametersCreate']['conversions'][var_unit]['to'], factor=cfg['ParametersCreate']['conversions'][var_unit]['factor']) 
+			else:
+				SubAnnualDataFrame=SubAnnualDataFrame.convert_unit(var_unit, to=cfg['ParametersCreate']['conversions'][var_unit]['to']) 
 
-					dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
-					dfdatagroup=dfdatagroup.filter(scenario=scenget)
-					dfdatagroup=dfdatagroup.filter(year=cfg['year'])
-					dfdatagroup=dfdatagroup.filter(variable=listvardatagroup)
-					# remove local variables on global region and global variables on local regions
-					dfdatagroup=dfdatagroup.filter(region=globalreg, variable=listlocalvar, keep=False)
-					dfdatagroup=dfdatagroup.filter(region=listLocalReg, variable=listglobalvar, keep=False)
-					if cfg['datagroups'][datagroup]['subannual']: SubAdfdatagroup=dfdatagroup
-					
-					if cfg['datagroups'][datagroup]['subannual']:
-						if not ExistsSubAnnualData:
-							ExistsSubAnnualData=True
-							SubAnnualDataFrame=SubAdfdatagroup
-						else:
-							SubAnnualDataFrame=SubAnnualDataFrame.append(SubAdfdatagroup)
-					else:
-						if not ExistsAnnualData:
-							ExistsAnnualData=True
-							AnnualDataFrame=dfdatagroup
-						else:
-							AnnualDataFrame=AnnualDataFrame.append(dfdatagroup)
+		SubAnnualDataFrame.validate(exclude_on_fail=True)
+		SubAnnualDataFrame.to_csv('mySubAdf.csv')
 		
-		#conversion of units to plan4res usual units (MWh, MW, €/MWh, €/MW/yr, €/MW)
-		if(ExistsAnnualData): #check if there exist annual data
-			print('converting units')
-			for var_unit in cfg['Parameters']['conversions']:
-				if 'factor' in cfg['Parameters']['conversions'][var_unit]:
-					AnnualDataFrame=AnnualDataFrame.convert_unit(var_unit, to=cfg['Parameters']['conversions'][var_unit]['to'], factor=float(cfg['Parameters']['conversions'][var_unit]['factor'])) 
-				else:
-					AnnualDataFrame=AnnualDataFrame.convert_unit(var_unit, to=cfg['Parameters']['conversions'][var_unit]['to']) 
-
-			# validate the format of the data (prevents errors)
-			AnnualDataFrame.validate(exclude_on_fail=True)
-		
-		if(ExistsSubAnnualData): # check if there exist subannual data
-			for var_unit in cfg['Parameters']['conversions']:
-				if 'factor' in cfg['Parameters']['conversions'][var_unit]:
-					SubAnnualDataFrame=SubAnnualDataFrame.convert_unit(var_unit, to=cfg['Parameters']['conversions'][var_unit]['to'], factor=cfg['Parameters']['conversions'][var_unit]['factor']) 
-				else:
-					SubAnnualDataFrame=SubAnnualDataFrame.convert_unit(var_unit, to=cfg['Parameters']['conversions'][var_unit]['to']) 
-
-			SubAnnualDataFrame.validate(exclude_on_fail=True)
-			SubAnnualDataFrame.to_csv('mySubAdf.csv')
-			
-		#regional aggregations 
-		print('computing regional aggregations')
-		
-		# some variables are added (all energy, capacity), others are averageded, and finally for flow variable specific aggregations are done
-		listvaradd=[]
-		listvarmean=[]
-		for datagroup in cfg['listdatagroups']:
-			if 'coupling' in cfg['datagroups'][datagroup]['listvariables'].keys():
-				for typeagr in cfg['datagroups'][datagroup]['listvariables']['coupling'].keys():
-					for var in cfg['datagroups'][datagroup]['listvariables']['coupling'][typeagr]:
-						variable=var
-						if typeagr=='add': 
-							if variable not in listvaradd: 
-								listvaradd.append(variable)
-						elif typeagr=='mean': 
-							if variable not in listvarmean: 
-								listvarmean.append(variable)
-			if 'techno' in cfg['datagroups'][datagroup]['listvariables'].keys():
-				for technogroup in cfg['datagroups'][datagroup]['listvariables']['techno'].keys():
-					for typeagr in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup].keys():
-						if type(cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr])==list:
-							for var in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr]:
-								for techno in cfg['technos'][technogroup]:
-									newvar=var+techno
+	#regional aggregations 
+	print('computing regional aggregations')
+	
+	# some variables are added (all energy, capacity), others are averageded, and finally for flow variable specific aggregations are done
+	listvaradd=[]
+	listvarmean=[]
+	for datagroup in cfg['listdatagroups']:
+		if 'coupling' in cfg['datagroups'][datagroup]['listvariables'].keys():
+			for typeagr in cfg['datagroups'][datagroup]['listvariables']['coupling'].keys():
+				for var in cfg['datagroups'][datagroup]['listvariables']['coupling'][typeagr]:
+					variable=var
+					if typeagr=='add': 
+						if variable not in listvaradd: 
+							listvaradd.append(variable)
+					elif typeagr=='mean': 
+						if variable not in listvarmean: 
+							listvarmean.append(variable)
+		if 'techno' in cfg['datagroups'][datagroup]['listvariables'].keys():
+			for technogroup in cfg['datagroups'][datagroup]['listvariables']['techno'].keys():
+				for typeagr in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup].keys():
+					if type(cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr])==list:
+						for var in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr]:
+							for techno in cfg['technos'][technogroup]:
+								newvar=var+techno
+								if typeagr=='add': 
+									if newvar not in listvaradd: 
+										listvaradd.append(newvar)
+								elif typeagr=='mean': 
+									if newvar not in listvarmean: 
+										listvarmean.append(newvar)
+					else:
+						for groupvar in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr].keys():
+							for fuel in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr][groupvar]['fuels']:
+								for var in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr][groupvar]['variables']:
+									newvar=var+fuel
 									if typeagr=='add': 
 										if newvar not in listvaradd: 
 											listvaradd.append(newvar)
 									elif typeagr=='mean': 
 										if newvar not in listvarmean: 
 											listvarmean.append(newvar)
-						else:
-							for groupvar in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr].keys():
-								for fuel in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr][groupvar]['fuels']:
-									for var in cfg['datagroups'][datagroup]['listvariables']['techno'][technogroup][typeagr][groupvar]['variables']:
-										newvar=var+fuel
-										if typeagr=='add': 
-											if newvar not in listvaradd: 
-												listvaradd.append(newvar)
-										elif typeagr=='mean': 
-											if newvar not in listvarmean: 
-												listvarmean.append(newvar)
 
-		if(cfg['aggregateregions']):
-			for reg in cfg['aggregateregions'].keys():
-				print('aggregating ' +reg)
-				# creation of aggregated timeseries
-				listTypes={'ZV': cfg['ActivePowerDemand'],'RES':cfg['technos']['res']+cfg['technos']['runofriver'],'SS':['Inflows']}
-				for typeData in listTypes:
-					for typeSerie in listTypes[typeData]:
-						sumValTS=0.0
-						firstSerie=True
-						isSeries=False
-						for region in cfg['aggregateregions'][reg]:
-							if region in timeseriesdict[typeData][typeSerie].keys():
-								isSeries=True
-								timeserie=pd.read_csv(cfg['dirTimeSeries']+timeseriesdict[typeData][typeSerie][region],index_col=0,skiprows=1)
-								if len(timeserie.columns)>1:
-									for col in timeserie.columns:
-										if 'Unnamed' in col: timeserie.drop([col],axis=1)
-									timeserie=timeserie[ cfg['UCScenarios'] ]
-								else:
-									timeserie.columns=['DET']
-								if typeData=='ZV':
-									varTS=vardict['Input']['Var'+typeData][typeSerie]
-								elif typeData=='SS':
-									varTS=vardict['Input']['Var'+typeData][typeSerie]+'Reservoir'
-								else:
-									varTS=vardict['Input']['Var'+typeData]['MaxPower']+typeSerie
-								if varTS in AnnualDataFrame.variable:
-									valTS_IAMdf=AnnualDataFrame.filter(variable=varTS,region=region,year=current_year).as_pandas()['value'].unique()
-									if len(valTS_IAMdf)>0: valTS=valTS_IAMdf[0]
-									else: valTS=0.0
-								else:
-									# the only variables which may not be in the data are the different parts of the ActiveDemand:
-									if varTS in [timeseriesdict['ZV'][part] for part in cfg['ActivePowerDemand']]:
-										# compute valTS as Total-sum of parts which are present
-										valTS=AnnualDataFrame[ (AnnualDataFrame['Variable']==timeseriesdict['ZV']['Total']) & (df['Region']==region) ][str(current_year)].unique()[0]
-										for part in cfg['ActivePowerDemand']:
-											if vardict['Input']['Var'+typeData][part] in AnnualDataFrame['Variable'].unique():
-												valTS=valTS-AnnualDataFrame[ (AnnualDataFrame['Variable']==timeseriesdict['ZV'][part]) & (df['Region']==region) ][str(current_year)].unique()[0]
-								if valTS==0.0: valTS=cfg['Parameters']['zerocapacity'] 
-								if firstSerie: 
-									newSerie=valTS*timeserie
-									firstSerie=False
-									sumValTS=valTS
-								else:
-									newSerie=newSerie+valTS*timeserie
-									sumValTS=sumValTS+valTS
-						if isSeries:
-							if sumValTS>0: newSerie=(1/sumValTS)*newSerie
-							else: newSerie=0.0*newSerie
-							nameNewSerie='AggregatedTimeSerie_'+typeSerie+'_'+reg+'.csv'
-							newSerie.to_csv(cfg['dirTimeSeries']+nameNewSerie)
-							timeseriesdict[typeData][typeSerie][reg]=nameNewSerie
-			
-				# aggregation of variables
-				for variable in listvaradd:
-					if ExistsAnnualData: 
-						if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
-					if ExistsSubAnnualData: 
-						if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
-				for variable in listvarmean:
-					if ExistsAnnualData: 
-						if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
-					if ExistsSubAnnualData: 
-						if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
-		#remove aggregated subregions
-		listregion=listGlobalReg
-		for partition in cfg['partition']:
-			for region in cfg['partition'][partition]:
-				if region not in listregion: listregion.append(region)
-
-		if ExistsAnnualData: 
-			AnnualDataFrame=AnnualDataFrame.filter(region=(listregion+lines))
-			AnnualDataFrame.to_csv(outputdir+'IAMC_annual_data.csv')
-			bigdata=AnnualDataFrame
-		if ExistsSubAnnualData: 
-			SubAnnualDataFrame=SubAnnualDataFrame.filter(region=(listregion+lines))
-			SubAnnualDataFrame.to_csv(outputdir+'IAMC_subannual_data.csv')
-			bigdata_SubAnnual=SubAnnualDataFrame
+	if(cfg['aggregateregions']):
+		for reg in cfg['aggregateregions'].keys():
+			print('aggregating ' +reg)
+			# creation of aggregated timeseries
+			listTypes={'ZV': cfg['CouplingConstraints']['ActivePowerDemand']['SumOf'],'RES':cfg['technos']['res']+cfg['technos']['runofriver'],'SS':['Inflows']}
+			for typeData in listTypes:
+				for typeSerie in listTypes[typeData]:
+					sumValTS=0.0
+					firstSerie=True
+					isSeries=False
+					for region in cfg['aggregateregions'][reg]:
+						if region in timeseriesdict[typeData][typeSerie].keys():
+							isSeries=True
+							timeserie=pd.read_csv(cfg['dirTimeSeries']+timeseriesdict[typeData][typeSerie][region],index_col=0)
+							if len(timeserie.columns)>1:
+								for col in timeserie.columns:
+									if 'Unnamed' in col: timeserie.drop([col],axis=1)
+								timeserie=timeserie[ cfg['StochasticScenarios'] ]
+							else:
+								timeserie.columns=['DET']
+							if typeData=='ZV':
+								varTS=vardict['Input']['Var'+typeData][typeSerie]
+							elif typeData=='SS':
+								varTS=vardict['Input']['Var'+typeData][typeSerie]+'Reservoir'
+							else:
+								varTS=vardict['Input']['Var'+typeData]['MaxPower']+typeSerie
+							if varTS in AnnualDataFrame.variable:
+								valTS_IAMdf=AnnualDataFrame.filter(variable=varTS,region=region,year=current_year).as_pandas()['value'].unique()
+								if len(valTS_IAMdf)>0: valTS=valTS_IAMdf[0]
+								else: valTS=0.0
+							else:
+								# the only variables which may not be in the data are the different parts of the ActiveDemand:
+								if varTS in [timeseriesdict['ZV'][part] for part in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']]:
+									# compute valTS as Total-sum of parts which are present
+									valTS=AnnualDataFrame[ (AnnualDataFrame['Variable']==timeseriesdict['ZV']['Total']) & (df['Region']==region) ][str(current_year)].unique()[0]
+									for part in cfg['CouplingConstraints']['ActivePowerDemand']:
+										if vardict['Input']['Var'+typeData][part] in AnnualDataFrame['Variable'].unique():
+											valTS=valTS-AnnualDataFrame[ (AnnualDataFrame['Variable']==timeseriesdict['ZV'][part]) & (df['Region']==region) ][str(current_year)].unique()[0]
+							if valTS==0.0: valTS=cfg['ParametersCreate']['zerocapacity'] 
+							if firstSerie: 
+								newSerie=valTS*timeserie
+								firstSerie=False
+								sumValTS=valTS
+							else:
+								newSerie=newSerie+valTS*timeserie
+								sumValTS=sumValTS+valTS
+					if isSeries:
+						if sumValTS>0: newSerie=(1/sumValTS)*newSerie
+						else: newSerie=0.0*newSerie
+						nameNewSerie='AggregatedTimeSerie_'+typeSerie+'_'+reg+'.csv'
+						newSerie.to_csv(cfg['dirTimeSeries']+nameNewSerie)
+						timeseriesdict[typeData][typeSerie][reg]=nameNewSerie
 		
+			# aggregation of variables
+			for variable in listvaradd:
+				if ExistsAnnualData: 
+					if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
+				if ExistsSubAnnualData: 
+					if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
+			for variable in listvarmean:
+				if ExistsAnnualData: 
+					if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
+				if ExistsSubAnnualData: 
+					if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
+	#remove aggregated subregions
+	listregion=listGlobalReg
+	for partition in cfg['partition']:
+		for region in cfg['partition'][partition]:
+			if region not in listregion: listregion.append(region)
 
-	if cfg['mode_annual']=='fulldata': bigdata=pyam.IamDataFrame(data=outputdir+'IAMC_annual_data.csv')
-	if cfg['mode_subannual']=='fulldata':bigdata_SubAnnual=pyam.IamDataFrame(data=outputdir+'IAMC_subannual_data.csv')
-			
+	if ExistsAnnualData: 
+		AnnualDataFrame=AnnualDataFrame.filter(region=(listregion+lines))
+		AnnualDataFrame.to_csv(outputdir+'IAMC_annual_data.csv')
+		bigdata=AnnualDataFrame
+	if ExistsSubAnnualData: 
+		SubAnnualDataFrame=SubAnnualDataFrame.filter(region=(listregion+lines))
+		SubAnnualDataFrame.to_csv(outputdir+'IAMC_subannual_data.csv')
+		bigdata_SubAnnual=SubAnnualDataFrame
+				
 	# creation of plan4res dataset
 	################################"
 
@@ -507,7 +507,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 	# create file ZP_ZonePartition
 	#############################################################
-	if cfg['treat']['ZP']:
+	if cfg['csvfiles']['ZP_ZonePartition']:
 		print('Treating ZonePartition')
 		#dictzone = dict(zip(paramZone['Name'], paramZone['Partition']))
 		nbreg=len(cfg['partition'][ partitionDemand  ])
@@ -516,14 +516,14 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		ZP = pd.DataFrame(columns=list(cfg['partition'].keys()),index=range(nbreg))
 		ZP[ partitionDemand ]=pd.Series(cfg['partition'][ partitionDemand ],name=partition,index=range(nbreg))
 		for partition in list(cfg['partition'].keys()):
-			if not partition == cfg['Parameters']['CouplingConstraints']['Demand']['Partition']:
+			if not partition == cfg['CouplingConstraints']['ActivePowerDemand']['Partition']:
 				if len(cfg['partition'][partition])==nbreg: ZP[partition]=pd.Series(cfg['partition'][partition],name=partition,index=range(nbreg))
 				else: ZP[partition]=pd.Series(cfg['partition'][partition][0] ,name=partition,index=range(nbreg))
-		ZP.to_csv(outputdir+cfg['treat']['ZP'], index=False)
+		ZP.to_csv(outputdir+cfg['csvfiles']['ZP_ZonePartition'], index=False)
 
 	# create file IN_Interconnections
 	###############################################################
-	if cfg['treat']['IN']:
+	if cfg['csvfiles']['IN_Interconnections']:
 		IN = pd.DataFrame()
 		bigdata.to_csv('bigdatatest.csv')
 		print('Treating Interconnections')
@@ -611,27 +611,25 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN.drop(LinesToDelete)
 
 		IN['Name']=IN.index
-		IN['MaxPowerFlow']=IN['MaxPowerFlow']*timestepduration
-		IN['MinPowerFlow']=IN['MinPowerFlow']*timestepduration
 		
 		
 		listcols=['Name','StartLine','EndLine','MaxPowerFlow','MinPowerFlow']
 		if 'Impedance' in IN.columns: listcols.append('Impedance')
-		if isInvest and 'interconnections' in cfg['Parameters']['CapacityExpansion']:
+		if isInvest and 'interconnections' in cfg['ParametersCreate']['CapacityExpansion']:
 			IN['MaxAddedCapacity']=0
 			IN['MaxRetCapacity']=0
-			if 'Share' in cfg['Parameters']['CapacityExpansion']['interconnections']:
+			if 'Share' in cfg['ParametersCreate']['CapacityExpansion']['interconnections']:
 				# all lines can be invested
-				IN['MaxAddedCapacity']=IN['MaxPowerFlow']*cfg['Parameters']['CapacityExpansion']['interconnections']['Share']['MaxAdd']
-				IN['MaxRetCapacity']=IN['MaxPowerFlow']*cfg['Parameters']['CapacityExpansion']['interconnections']['Share']['MaxRet']
+				IN['MaxAddedCapacity']=IN['MaxPowerFlow']*cfg['ParametersCreate']['CapacityExpansion']['interconnections']['Share']['MaxAdd']
+				IN['MaxRetCapacity']=IN['MaxPowerFlow']*cfg['ParametersCreate']['CapacityExpansion']['interconnections']['Share']['MaxRet']
 			else:
-				for line in cfg['Parameters']['CapacityExpansion']['interconnections']:
+				for line in cfg['ParametersCreate']['CapacityExpansion']['interconnections']:
 					if line != 'Share' and line !='InvestmentCost':
-						IN.loc[line]['MaxAddedCapacity']=IN.loc[line]['MaxPowerFlow']*cfg['Parameters']['CapacityExpansion']['interconnections'][line]['MaxAdd']
-						IN.loc[line]['MaxRetCapacity']=IN.loc[line]['MaxPowerFlow']*cfg['Parameters']['CapacityExpansion']['interconnections'][line]['MaxRet']
+						IN.loc[line]['MaxAddedCapacity']=IN.loc[line]['MaxPowerFlow']*cfg['ParametersCreate']['CapacityExpansion']['interconnections'][line]['MaxAdd']
+						IN.loc[line]['MaxRetCapacity']=IN.loc[line]['MaxPowerFlow']*cfg['ParametersCreate']['CapacityExpansion']['interconnections'][line]['MaxRet']
 			if 'InvestmentCost' not in IN.columns:
-				if 'InvestmentCost' in cfg['Parameters']['CapacityExpansion']['interconnections']:
-					IN['InvestmentCost']=cfg['Parameters']['CapacityExpansion']['interconnections']['InvestmentCost']
+				if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['interconnections']:
+					IN['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['interconnections']['InvestmentCost']
 				else:
 					IN['InvestmentCost']=0
 			listcols.append('MaxAddedCapacity')
@@ -650,13 +648,17 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if (regend not in listregions):
 				LinesToDelete.append(line)
 		IN=IN.drop(LinesToDelete)
-		IN.to_csv(outputdir+cfg['treat']['IN'], index=False)
+		IN.to_csv(outputdir+cfg['csvfiles']['IN_Interconnections'], index=False)
 		
 	# create file ZV_ZoneValues
 	###############################################################
 	numserie=0
-	if cfg['treat']['ZV']:
+	if cfg['csvfiles']['ZV_ZoneValues']:
 		print('Treating ZoneValues')
+		
+		ListTypesZV=[]
+		for coupling_constraint in cfg['CouplingConstraints']:
+			ListTypesZV=ListTypesZV+cfg['CouplingConstraints'][coupling_constraint]['SumOf']
 		listvar=[]
 		for var in vardict['Input']['VarZV'].keys(): listvar.append(vardict['Input']['VarZV'][var])
 		datapartition=bigdata.filter(variable=listvar,region=listregions).as_pandas(meta_cols=False)
@@ -676,15 +678,30 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		# include slack unit costs (slack means non served)
 		datainertia=datapartition[ datapartition.Type == 'Inertia' ]
 		Inertia=datainertia['value'].mean()
-		MaxDemand=cfg['Parameters']['CouplingConstraints']['Demand']['Max']
-		CostDemand=cfg['Parameters']['CouplingConstraints']['Demand']['Cost']
-		MaxPrimary=cfg['Parameters']['CouplingConstraints']['Primary']['Max']
-		CostPrimary=cfg['Parameters']['CouplingConstraints']['Primary']['Cost']
-		MaxSecondary=cfg['Parameters']['CouplingConstraints']['Secondary']['Max']
-		CostSecondary=cfg['Parameters']['CouplingConstraints']['Secondary']['Cost']
-		MaxInertia=cfg['Parameters']['CouplingConstraints']['Inertia']['Max']
-		CostInertia=cfg['Parameters']['CouplingConstraints']['Inertia']['Cost']
-		newdata=pd.DataFrame({'Type':['Inertia','MaxInertia','CostInertia'],'Unit':['MWs/MWA','MWs/MWA','EUR/MWs/MWA'],\
+		MaxDemand=cfg['CouplingConstraints']['ActivePowerDemand']['MaxPower']
+		CostDemand=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
+		if 'PrimaryDemand' in cfg['CouplingConstraints']:
+			MaxPrimary=cfg['CouplingConstraints']['PrimaryDemand']['MaxPower']
+			CostPrimary=cfg['CouplingConstraints']['PrimaryDemand']['Cost']
+		else:
+			MaxPrimary=0.0
+			CostPrimary=0.0
+		if 'SecondaryDemand' in cfg['CouplingConstraints']:
+			MaxSecondary=cfg['CouplingConstraints']['SecondaryDemand']['MaxPower']
+			CostSecondary=cfg['CouplingConstraints']['SecondaryDemand']['Cost']
+		else:
+			MaxSecondary=0.0
+			CostSecondary=0.0
+		if 'InertiaDemand' in cfg['CouplingConstraints']:
+			MaxInertia=cfg['CouplingConstraints']['InertiaDemand']['MaxPower']
+			CostInertia=cfg['CouplingConstraints']['InertiaDemand']['Cost']
+			isInertia=True
+		else:
+			MaxInertia=0.0
+			CostInertia=0.0
+			isInertia=False
+		if isInertia:
+			newdata=pd.DataFrame({'Type':['Inertia','MaxInertia','CostInertia'],'Unit':['MWs/MWA','MWs/MWA','EUR/MWs/MWA'],\
 				'Zone':[cfg['partition'][partitionInertia], cfg['partition'][partitionInertia], cfg['partition'][partitionInertia]],\
 				'model':['Parameter','Parameter','Parameter'],\
 				'scenario':[cfg['listdatagroups'][0],cfg['listdatagroups'][0],cfg['listdatagroups'][0]],\
@@ -768,15 +785,17 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 		# include timeseries names from TimeSeries dictionnary and compute scaling coefficient
 		print('include time series and compute scaling coefficients')
+		datapartition.to_csv('datapartition.csv')
 		for row in datapartition.index:
 			mytype=datapartition.loc[row,'Type']
-			if mytype in timeseriesdict['ZV'].keys():
-				filetimeserie=timeseriesdict['ZV'][datapartition.loc[row,'Type']][datapartition.loc[row,'Zone']]
-				datapartition.loc[row, 'Profile_Timeserie']=filetimeserie
+			if mytype in ListTypesZV:
+				if mytype in timeseriesdict['ZV'].keys():
+					filetimeserie=timeseriesdict['ZV'][datapartition.loc[row,'Type']][datapartition.loc[row,'Zone']]
+					datapartition.loc[row, 'Profile_Timeserie']=filetimeserie
 
 		columnsZV=['Type','Zone','value','Profile_Timeserie']
 		datapartition=datapartition[columnsZV]
-		datapartition.to_csv(outputdir+cfg['treat']['ZV'], index=False)
+		datapartition.to_csv(outputdir+cfg['csvfiles']['ZV_ZoneValues'], index=False)
 
 	# treat global variables
 	globalvars=pd.Series(str)
@@ -804,13 +823,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	# create file TU_ThermalUnits
 	###############################################################
 
-	if cfg['treat']['TU']:
+	if cfg['csvfiles']['TU_ThermalUnits']:
 		print('Treating ThermalUnits')
 		listvar=[]
 		listvarout=['Zone','Name','NumberUnit','MaxPower','VariableCost']
 		isCO2=False
-		isDynamic=cfg['Parameters']['DynamicConstraints']
-		isPrice=(cfg['Parameters']['thermal']['variablecost']=='Price')
+		isDynamic=cfg['ParametersCreate']['DynamicConstraints']
+		isPrice=(cfg['ParametersCreate']['thermal']['variablecost']=='Price')
 		isMaintenance=False
 		
 		for variable in list(vardict['Input']['VarTU'].keys()):
@@ -827,10 +846,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			for variable in vardict['Input']['VarTU']:
 				isFuel=False
 				TreatVar=True
-				if variable=='Price' and 'thermal' in cfg['Parameters'] and cfg['Parameters']['thermal']['variablecost']=='Price':
+				if variable=='Price' and 'thermal' in cfg['ParametersCreate'] and cfg['ParametersCreate']['thermal']['variablecost']=='Price':
 					# case where VariableCost is computed as Efficency*Price of fuel
-					if oetechno in cfg['Parameters']['thermal']['fuel']:
-						fuel=cfg['Parameters']['thermal']['fuel'][oetechno]
+					if oetechno in cfg['ParametersCreate']['thermal']['fuel']:
+						fuel=cfg['ParametersCreate']['thermal']['fuel'][oetechno]
 						varname=vardict['Input']['VarTU'][variable]+fuel
 						isFuel=True
 					else: 
@@ -863,23 +882,23 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					TU[variable]=0.0
 			TU=TU.fillna(value=0.0)
 			# replace low capacities with 0
-			TU.loc[ TU['Capacity'] < cfg['Parameters']['zerocapacity'], 'Capacity' ]=0
+			TU.loc[ TU['Capacity'] < cfg['ParametersCreate']['zerocapacity'], 'Capacity' ]=0
 			
 			# case with investment optimisation
-			if isInvest and ('thermal' in cfg['Parameters']['CapacityExpansion']):
+			if isInvest and ('thermal' in cfg['ParametersCreate']['CapacityExpansion']):
 				if 'InvestmentCost' not in TU.columns:
-					if oetechno in cfg['Parameters']['CapacityExpansion']['thermal']:
-						if 'InvestmentCost' in cfg['Parameters']['CapacityExpansion']['thermal'][oetechno]:
-							TU['InvestmentCost']=cfg['Parameters']['CapacityExpansion']['thermal'][oetechno]['InvestmentCost']
+					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
+						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
+							TU['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['InvestmentCost']
 						else:
 							TU['InvestmentCost']=0
 					else:
 						TU['InvestmentCost']=0
-				if oetechno in cfg['Parameters']['CapacityExpansion']['thermal']:
+				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
 					#replace 0 capacity with investment minimal capacity
-					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=cfg['Parameters']['zerocapacity']
-					TU['MaxAddedCapacity']=cfg['Parameters']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
-					TU['MaxRetCapacity']=cfg['Parameters']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
+					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=cfg['ParametersCreate']['zerocapacity']
+					TU['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
+					TU['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
 				else:
 					TU['MaxAddedCapacity']=0
 					TU['MaxRetCapacity']=0
@@ -888,20 +907,20 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			# Delete row with 0 capacity
 			TU=TU.drop(RowsToDelete)
 						
-			if 'thermal' in cfg['Parameters']:
-				if 'NbUnitsPerTechno' in cfg['Parameters']['thermal']:
-					if cfg['Parameters']['thermal']['NbUnitsPerTechno']==1:
+			if 'thermal' in cfg['ParametersCreate']:
+				if 'NbUnitsPerTechno' in cfg['ParametersCreate']['thermal']:
+					if cfg['ParametersCreate']['thermal']['NbUnitsPerTechno']==1:
 						TU['MaxPower']=TU['Capacity']
 					else: isMaxPower=True
 			
-			if not cfg['Parameters']['DynamicConstraints']:
+			if not cfg['ParametersCreate']['DynamicConstraints']:
 				TU['MinPower']=0.0			
 					
 			if len(TU.index)>0:				
 				TU['NumberUnits']=1
-				if 'thermal' in cfg['Parameters']:
-					if 'NbUnitsPerTechno' in cfg['Parameters']['thermal']:
-						if not cfg['Parameters']['thermal']['NbUnitsPerTechno']==1:
+				if 'thermal' in cfg['ParametersCreate']:
+					if 'NbUnitsPerTechno' in cfg['ParametersCreate']['thermal']:
+						if not cfg['ParametersCreate']['thermal']['NbUnitsPerTechno']==1:
 							TU['NumberUnits']=np.ceil(TU['Capacity']/TU['MaxPower'])
 				
 				if 'CO2Rate' in TU.columns: 
@@ -914,15 +933,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					TU['CO2']=0.0
 					
 				# Case where Variable Cost is computed out of Efficiency and Price
-				if isPrice and oetechno in cfg['Parameters']['thermal']['fuel']: 
+				if isPrice and oetechno in cfg['ParametersCreate']['thermal']['fuel']: 
 					if 'Efficiency' in TU.columns and 'Price' in TU.columns:
 						TU['VariableCost']=TU['Efficiency']*TU['Price']
 					elif 'Price' in TU.columns:
 						TU['VariableCost']=TU['Price']
 
-				# MaxPower=MaxPower*timestep in case of duration > 1h
-				TU['MaxPower']=TU['MaxPower']*timestepduration
-				TU['MinPower']=TU['MinPower']*timestepduration
 				if v==0:	
 					BigTU=TU
 					v=1
@@ -953,7 +969,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		if 'InitUpDownTime' in listTU: listcols.append(['InitUpDownTime'])
 		if 'Pauxiliary' in listTU: listcols.append(['Pauxiliary'])
 		if 'QuadTerm' in listTU: listcols.append(['QuadTerm'])
-		if isInvest and 'thermal' in cfg['Parameters']['CapacityExpansion']:
+		if isInvest and 'thermal' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'InvestmentCost' in BigTU.columns: listcols.append('InvestmentCost')
 			if 'MaxAddedCapacity' in BigTU.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigTU.columns: listcols.append('MaxRetCapacity')
@@ -962,13 +978,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		BigTU=BigTU[ BigTU['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigTU=BigTU[BigTU.NumberUnits >0]
-		BigTU.to_csv(outputdir+cfg['treat']['TU'], index=False)
+		BigTU.to_csv(outputdir+cfg['csvfiles']['TU_ThermalUnits'], index=False)
 
 	# treat seasonal storage
 	# filling sheet SS_SeasonalStorage and STS_ShortTermStorage
 	############################################################
 	AddedCapa=pd.DataFrame()
-	if cfg['treat']['SS']:
+	if cfg['csvfiles']['SS_SeasonalStorage']:
 		print('Treating SeasonalStorage')
 		v=0
 		for oetechno in	cfg['technos']['reservoir']:
@@ -997,7 +1013,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			SS=SS.fillna(value=0.0)
 			
 			# replace low capacities with 0
-			SS.loc[ SS['MaxPower'] < cfg['Parameters']['zerocapacity'], 'MaxPower' ]=0
+			SS.loc[ SS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
 			RowsToDelete = SS[ SS['MaxPower'] == 0 ].index
 			# Delete these row indexes from dataFrame
 			SS=SS.drop(RowsToDelete)
@@ -1015,21 +1031,21 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			for row in SS.index:
 				# treatment initial volume
 				if row in cfg['aggregateregions']:
-					if (row in cfg['aggregateregions'] and SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['Parameters']['reservoir']['minpowerMWh']):
+					if (row in cfg['aggregateregions'] and SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['ParametersCreate']['reservoir']['minpowerMWh']):
 						Rate=0
 						N=0
 						for reg in cfg['aggregateregions'][row]:
-							if reg in cfg['Parameters']['InitialFillingrate']:
-								Rate=Rate+cfg['Parameters']['InitialFillingrate'][reg]
+							if reg in cfg['ParametersCreate']['InitialFillingrate']:
+								Rate=Rate+cfg['ParametersCreate']['InitialFillingrate'][reg]
 								N=N+1
 						if N>0:
 							Rate=Rate/N
 						SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*Rate
-				elif (SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['Parameters']['reservoir']['minpowerMWh']):
-					SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['Parameters']['InitialFillingrate'][row]
+				elif (SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['ParametersCreate']['reservoir']['minpowerMWh']):
+					SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['ParametersCreate']['InitialFillingrate'][row]
 					
 				# treatment volume when no max storage is provided or MaxPower<minpowerMWh or no inflows
-				if SS.loc[row,'MaxVolume']==0 or SS.loc[row,'MaxPower']<cfg['Parameters']['reservoir']['minpowerMWh'] or SS.loc[row,'Inflows']==0:
+				if SS.loc[row,'MaxVolume']==0 or SS.loc[row,'MaxPower']<cfg['ParametersCreate']['reservoir']['minpowerMWh'] or SS.loc[row,'Inflows']==0:
 					# this storage is moved to Additionnal Pumped Storage
 					SS.loc[row,'AddPumpedStorage']=SS.loc[row,'MaxPower']
 					SS.loc[row,'AddPumpedStorageVolume']=SS.loc[row,'MaxVolume']
@@ -1045,14 +1061,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			SS['MinPower']=0
 			SS['TurbineEfficiency']=1.0
 			SS['PumpingEfficiency']=0.0
-			SS['MaxPower']=SS['MaxPower']*timestepduration
-			SS['Inflows']=SS['Inflows']*timestepduration			
 			# create df for addedcapacity
 			AddedCapa=SS[SS.AddPumpedStorage >0]
 			
 			# remove rows where MaxVolume=0 or where MaxPower < minPowerMWh
 			SS = SS.drop(SS[SS.MaxVolume == 0].index)
-			SS = SS.drop(SS[SS.MaxPower < cfg['Parameters']['reservoir']['minpowerMWh']].index)
+			SS = SS.drop(SS[SS.MaxPower < cfg['ParametersCreate']['reservoir']['minpowerMWh']].index)
 			
 			if v==0:
 				BigSS=SS
@@ -1072,12 +1086,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigSS=BigSS[ listcols ]
 		
 		BigSS=BigSS[ BigSS['Zone'].isin(cfg['partition'][partitionDemand]) ]
-		BigSS.to_csv(outputdir+cfg['treat']['SS'], index=False)
+		BigSS.to_csv(outputdir+cfg['csvfiles']['SS_SeasonalStorage'], index=False)
 
 	# filling sheet STS_ShortTermStorage
 	###############################################################	
 
-	if cfg['treat']['STS']:	
+	if cfg['csvfiles']['STS_ShortTermStorage']:	
 		print('Treating Short Term Storage')
 		v=0
 		STS=pd.DataFrame({'region':listregions})
@@ -1113,11 +1127,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			STS=STS.fillna(value=0.0)
 			
 			# replace low capacities with 0
-			STS.loc[ STS['MaxPower'] < cfg['Parameters']['zerocapacity'], 'MaxPower' ]=0
+			STS.loc[ STS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
 	
 			# case with investment: replace 0 capacity with investment minimal capacity
-			if cfg['Parameters']['invest'] and oetechno in cfg['technosinvest']['hydrostorage']:
-				STS.loc[ STS['MaxPower'] == 0, 'MaxPower' ]=cfg['Parameters']['zerocapacity']
+			if cfg['ParametersCreate']['invest'] and oetechno in cfg['technosinvest']['hydrostorage']:
+				STS.loc[ STS['MaxPower'] == 0, 'MaxPower' ]=cfg['ParametersCreate']['zerocapacity']
 			
 			# compute max storage or max power if not in data
 			isMaxPower=False
@@ -1129,21 +1143,20 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# case where Maximum Power is not in the data
 			if isMaxVolume and not isMaxPower: 
-				STS['MaxPower']=STS['MaxVolume']/cfg['Parameters']['Volume2CapacityRatio']['hydrostorage'][oetechno]
+				STS['MaxPower']=STS['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio']['hydrostorage'][oetechno]
 				
 			# case where Maximum Storage is not in the data
 			if isMaxPower and not isMaxVolume: 
-				STS['MaxVolume']=STS['MaxPower']*cfg['Parameters']['Volume2CapacityRatio']['hydrostorage'][oetechno]
+				STS['MaxVolume']=STS['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio']['hydrostorage'][oetechno]
 			
 			# treat additionnal pumped storage from SS
 			STS['AddPumpedStorage']=0
 			STS['AddPumpedStorageVolume']=0
-			STS['MaxPower']=STS['MaxPower']*timestepduration
 			STS['MinPower']=-1*STS['MaxPower']
 			for row in STS.index:
 				if row in AddedCapa.index:
 					print('Adding additionnal capacity: '+str(AddedCapa.loc[row,'AddPumpedStorage'])+' for Pumped Storage in region '+row)
-					STS.loc[row,'MaxPower']=STS.loc[row,'MaxPower']+AddedCapa.loc[row,'AddPumpedStorage']*timestepduration
+					STS.loc[row,'MaxPower']=STS.loc[row,'MaxPower']+AddedCapa.loc[row,'AddPumpedStorage']
 					STS.loc[row,'MaxVolume']=STS.loc[row,'MaxVolume']+AddedCapa.loc[row,'AddPumpedStorageVolume']
 					STS.loc[row,'AddPumpedStorage']=AddedCapa.loc[row,'AddPumpedStorage']
 					STS.loc[row,'AddPumpedStorageVolume']=AddedCapa.loc[row,'AddPumpedStorageVolume']
@@ -1163,7 +1176,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			STS['MinPowerCoef']=1.0
 			STS['MaxPowerCoef']=1.0
 			if 'PumpingEfficiency' not in STS.columns:
-				STS['PumpingEfficiency']=cfg['Parameters']['PumpingEfficiency']['hydrostorage']['Pumped Storage']
+				STS['PumpingEfficiency']=cfg['PumpingEfficiency']['hydrostorage']['Pumped Storage']
 
 			if v==0:
 				BigSTS=STS
@@ -1177,7 +1190,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		# treat batteries
 		isVarBattery=pd.Series()
 		for oetechno in	cfg['technos']['battery']:
-			print('traitement ',oetechno)
+			print('treat ',oetechno)
 			BAT=pd.DataFrame({'region':listregions})
 			BAT=BAT.set_index('region')
 			for variable in vardict['Input']['VarSTS|Battery']:
@@ -1212,37 +1225,40 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'MaxPower' not in BAT.columns and 'MaxVolume' not in BAT.columns: print('no data')
 			
 			# replace low capacities with 0
-			if isMaxPower: BAT.loc[ BAT['MaxPower'] < cfg['Parameters']['zerocapacity'], 'MaxPower' ]=0
-			if isMaxVolume: BAT.loc[ BAT['MaxVolume'] < cfg['Parameters']['zerocapacity']*cfg['Parameters']['Volume2CapacityRatio']['battery'][oetechno], 'MaxVolume' ]=0
-	
+			if isMaxPower: BAT.loc[ BAT['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
+			if isMaxVolume: BAT.loc[ BAT['MaxVolume'] < cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio']['battery'][oetechno], 'MaxVolume' ]=0
+
+			# case where Maximum Discharge/Charge is not in the data
+			if not isMaxPower: 
+				BAT['MaxPower']=BAT['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio']['battery'][oetechno]
+			# case where Maximum Storage is not in the data
+			if not isMaxVolume:
+				BAT['MaxVolume']=BAT['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio']['battery'][oetechno]
+
 			# case with investment
-			if isInvest and 'battery' in cfg['Parameters']['CapacityExpansion']:
+			if isInvest and 'battery' in cfg['ParametersCreate']['CapacityExpansion']:
 				if not isVarBattery['InvestmentCost']:
-					if oetechno in cfg['Parameters']['CapacityExpansion']['battery']:
-						if 'InvestmentCost' in cfg['Parameters']['CapacityExpansion']['battery'][oetechno]:
-							BAT['InvestmentCost']=cfg['Parameters']['CapacityExpansion']['battery'][oetechno]['InvestmentCost']
+					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['battery']:
+						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]:
+							BAT['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['InvestmentCost']
 						else:
 							BAT['InvestmentCost']=0
 					else:
 						BAT['InvestmentCost']=0
-				if oetechno in cfg['Parameters']['CapacityExpansion']['battery']:
+				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['battery']:
 					# replace 0 capacity with investment minimal capacity
-					if isMaxPower: BAT.loc[ BAT['MaxPower'] == 0, 'MaxPower' ]=cfg['Parameters']['zerocapacity']
-					if isMaxVolume: BAT.loc[ BAT['MaxVolume'] == 0, 'MaxVolume' ]=cfg['Parameters']['zerocapacity']*cfg['Parameters']['Volume2CapacityRatio']['battery'][oetechno]
-					BAT['MaxAddedCapacity']=cfg['Parameters']['CapacityExpansion']['battery'][oetechno]['MaxAdd']
-					BAT['MaxRetCapacity']=cfg['Parameters']['CapacityExpansion']['battery'][oetechno]['MaxRet']
+					BAT.loc[ BAT['MaxPower'] == 0, 'MaxPower' ]=cfg['ParametersCreate']['zerocapacity']
+					BAT.loc[ BAT['MaxVolume'] == 0, 'MaxVolume' ]=cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio']['battery'][oetechno]
+					BAT['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['MaxAdd']
+					BAT['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['MaxRet']
 				else:
 					BAT['MaxAddedCapacity']=0
 					BAT['MaxRetCapacity']=0
-			print(BAT)
 			RowsToDelete=[]
-			if isMaxPower: RowsToDelete = BAT[ BAT['MaxPower'] == 0 ].index
-			if isMaxVolume: RowsToDelete = BAT[ BAT['MaxVolume'] == 0 ].index
-			print(RowsToDelete)
+			RowsToDelete = BAT[ BAT['MaxPower'] == 0 ].index
+			#if isMaxVolume: RowsToDelete = BAT[ BAT['MaxVolume'] == 0 ].index
 			# Delete row with 0 capacity
-			print(RowsToDelete)
 			BAT=BAT.drop(RowsToDelete)
-			print(BAT)
 			
 			BAT['Name']=oetechno
 			BAT['Zone']=BAT.index
@@ -1250,22 +1266,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			BAT['Inflows']=0	
 			BAT['TurbineEfficiency']=1.0
 			
-			# case where Maximum Discharge/Charge is not in the data
-			if not isMaxPower: 
-				BAT['MaxPower']=BAT['MaxVolume']/cfg['Parameters']['Volume2CapacityRatio']['battery'][oetechno]
-				
+							
 			# case where Maximum Charge is not in the data
 			if 'MinPower' not in BAT.columns or ('MinPower'  in BAT.columns and (BAT==0).all()['MinPower']): 
 				BAT['MinPower']=-1*BAT['MaxPower']
 			else:
 				BAT['MinPower']=-1*BAT['MinPower']
 				
-			# case where Maximum Storage is not in the data
-			if not isMaxVolume:
-				BAT['MaxVolume']=BAT['MaxPower']*cfg['Parameters']['Volume2CapacityRatio']['battery'][oetechno]
-				
-			BAT['MaxPower']=BAT['MaxPower']*timestepduration
-			BAT['MinPower']=BAT['MinPower']*timestepduration			
 			BAT['MinVolume']=0
 			BAT['InitialVolume']=0			
 			BAT['Zone']=BAT.index
@@ -1276,8 +1283,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			BAT['MaxPowerCoef']=1.0
 			
 			if 'PumpingEfficiency' not in BAT.columns:
-				BAT['PumpingEfficiency']=cfg['Parameters']['PumpingEfficiency']['battery'][oetechno]
-			print(BAT)
+				BAT['PumpingEfficiency']=cfg['PumpingEfficiency']['battery'][oetechno]
 			if v==0:
 				BigSTS=BAT
 				v=1
@@ -1294,7 +1300,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			print('treat demand response load shifting')
 			DRTimeSeries=pd.DataFrame()
 			
-			ParticipationRate=pd.read_csv(cfg['Parameters']['DemandResponseLoadShifting']['participationRateData'])
+			ParticipationRate=pd.read_csv(cfg['ParametersCreate']['DemandResponseLoadShifting']['participationRateData'])
 			ParticipationRate=ParticipationRate.groupby('countryname').mean()
 				
 			MaxDispatchName=vardict['Input']['VarSTS|DemandResponseLoadShifting']['MaxDispatch']
@@ -1307,12 +1313,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				DRLS=DRLS.set_index('region')
 				EMminusE=pd.Series(index={'region':cfg['partition'][partitionDemand]})
 				
-				tshift=int(cfg['Parameters']['DemandResponseLoadShifting']['tshift'][appliance])
+				tshift=int(cfg['ParametersCreate']['DemandResponseLoadShifting']['tshift'][appliance])
 				NumberBalancing=int(len(TimeIndex)/tshift)
 				
 				# loop on regions
 				for reg in cfg['partition'][partitionDemand]:
-					if cfg['Parameters']['DemandResponseLoadShifting']['participationRate']:
+					if cfg['ParametersCreate']['DemandResponseLoadShifting']['participationRate']:
 						if reg in cfg['aggregateregions']:
 							N=0.0
 							PartRate=0.0
@@ -1358,10 +1364,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							MaxReduction=pd.concat([MaxReduction,MaxReductionDataFirstDay['value']])
 					
 					MaxDispatch=np.maximum(MaxDispatch, 0)
-					MaxDispatch=MaxDispatch*(1/cfg['Parameters']['DemandResponseCoefficient'])
+					MaxDispatch=MaxDispatch*(1/cfg['ParametersCreate']['DemandResponseCoefficient'])
 					NameSerie='DR__'+appliance+'__'+reg
 					DRTimeSeries[NameSerie+'__MaxPower']=MaxReduction*PartRate
-					DRTimeSeries[NameSerie+'__MinPower']=-MaxDispatch*PartRate  #-cfg['Parameters']['DemandResponseCoefficient']
+					DRTimeSeries[NameSerie+'__MinPower']=-MaxDispatch*PartRate  #-cfg['ParametersCreate']['DemandResponseCoefficient']
 					DRTimeSeries[NameSerie+'__MaxDispatch']=MaxDispatch*PartRate
 					DRTimeSeries[NameSerie+'__MinVolume']=0
 					
@@ -1379,7 +1385,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				DRLS['MinPowerCoef']=1.0
 				DRLS['MaxPowerCoef']=1.0
 				DRLS['MinVolume']='DR__'+appliance+'__'+DRLS.index+'__MinVolume'
-				DRLS['MaxVolume']=EMminusE*cfg['Parameters']['DemandResponseCoefficient']
+				DRLS['MaxVolume']=EMminusE*cfg['ParametersCreate']['DemandResponseCoefficient']
 				DRLS['VolumeLevelTarget']=EMminusE		
 				DRLS['InitialVolume']=EMminusE		
 				DRLS['Zone']=DRLS.index
@@ -1402,7 +1408,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		if isPrimary and 'MaxPrimaryPower' in listSTS: listcols.append('MaxPrimaryPower')
 		if isSecondary and 'MaxSecondaryPower' in listSTS: listcols.append('MaxSecondaryPower')
 		if 'VolumeLevelTarget' in listSTS: listcols.append('VolumeLevelTarget')
-		if isInvest and 'battery' in cfg['Parameters']['CapacityExpansion']:
+		if isInvest and 'battery' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'MaxAddedCapacity' in BigSTS.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigSTS.columns: listcols.append('MaxRetCapacity')
 			if 'InvestmentCost' in BigSTS.columns: listcols.append('InvestmentCost')
@@ -1411,10 +1417,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		BigSTS=BigSTS[ BigSTS['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigSTS=BigSTS.fillna(0)
-		BigSTS.to_csv(outputdir+cfg['treat']['STS'], index=False)
+		BigSTS.to_csv(outputdir+cfg['csvfiles']['STS_ShortTermStorage'], index=False)
 		
 	# treating res
-	if cfg['treat']['RES']:
+	if cfg['csvfiles']['RES_RenewableUnits']:
 		v=0
 		print('Treating Renewable units')
 		isVarRes=pd.Series()
@@ -1448,23 +1454,23 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			RES=RES.fillna(value=0.0)
 			
 			# replace low capacities with 0
-			RES.loc[ RES['MaxPower'] < cfg['Parameters']['zerocapacity'], 'MaxPower' ]=0
+			RES.loc[ RES['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
 			
 			# case with investment
-			if isInvest and 'res' in cfg['Parameters']['CapacityExpansion']:
+			if isInvest and 'res' in cfg['ParametersCreate']['CapacityExpansion']:
 				if not isVarRes['InvestmentCost']:
-					if oetechno in cfg['Parameters']['CapacityExpansion']['res']:
-						if 'InvestmentCost' in cfg['Parameters']['CapacityExpansion']['res'][oetechno]:
-							RES['InvestmentCost']=cfg['Parameters']['CapacityExpansion']['res'][oetechno]['InvestmentCost']
+					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['res']:
+						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]:
+							RES['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['InvestmentCost']
 						else:
 							RES['InvestmentCost']=0
 					else:
 						RES['InvestmentCost']=0
-				if oetechno in cfg['Parameters']['CapacityExpansion']['res']:
+				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['res']:
 					# replace 0 capacity with investment minimal capacity
-					RES.loc[ RES['MaxPower'] == 0, 'MaxPower' ]=cfg['Parameters']['zerocapacity']
-					RES['MaxAddedCapacity']=cfg['Parameters']['CapacityExpansion']['res'][oetechno]['MaxAdd']
-					RES['MaxRetCapacity']=cfg['Parameters']['CapacityExpansion']['res'][oetechno]['MaxRet']
+					RES.loc[ RES['MaxPower'] == 0, 'MaxPower' ]=cfg['ParametersCreate']['zerocapacity']
+					RES['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['MaxAdd']
+					RES['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['MaxRet']
 				else:
 					RES['MaxAddedCapacity']=0
 					RES['MaxRetCapacity']=0
@@ -1483,7 +1489,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# case of RoR: use energy instead of Capacity
 			RES['Capacity']=RES['MaxPower']
-			if oetechno in cfg['Parameters']['MultFactor'].keys():
+			if oetechno in cfg['ParametersCreate']['MultFactor'].keys():
 				RES['MaxPower']=RES['Energy']
 				# The sum on 1 year of MaxPower*Profile should be equal to energy
 				# Capacity*8760*r=energy				
@@ -1498,12 +1504,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					RES.loc[row, 'MaxPowerProfile']=filetimeserie
 					# compute energy scaling coefficient in inflows
 					# timeserie=pd.read_csv(cfg['dirTimeSeries']+filetimeserie,header=1,index_col=0)
-					# energy=timeserie[cfg['UCScenarios']].sum(axis=0)
+					# energy=timeserie[cfg['StochasticScenarios']].sum(axis=0)
 					# Energy=energy.mean()
 					# RES.loc[row, 'Energy_Timeserie']=Energy
 					
-			if oetechno in cfg['technos']['runofriver']:
-				RES['MaxPower']=RES['MaxPower']*timestepduration
 			if v==0:
 				BigRES=RES
 				v=1
@@ -1514,7 +1518,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		listcols= ['Name','Zone','NumberUnits','MaxPower','MinPower','MaxPowerProfile','Energy','Kappa','Capacity']
 		if (isPrimary or isSecondary) and 'Gamma' in listRES: listcols.append('Gamma')
 		if isInertia and 'Inertia' in listRES: listcols.append('Inertia')
-		if isInvest and 'res' in cfg['Parameters']['CapacityExpansion']:
+		if isInvest and 'res' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'MaxAddedCapacity' in BigRES.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigRES.columns: listcols.append('MaxRetCapacity')
 			if 'InvestmentCost' in BigRES.columns: listcols.append('InvestmentCost')
@@ -1522,5 +1526,5 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigRES=BigRES[ listcols ]
 		BigRES=BigRES[ BigRES['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigRES=BigRES.fillna(0)
-		BigRES.to_csv(outputdir+cfg['treat']['RES'], index=False)
+		BigRES.to_csv(outputdir+cfg['csvfiles']['RES_RenewableUnits'], index=False)
 
