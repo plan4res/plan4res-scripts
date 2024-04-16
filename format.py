@@ -18,13 +18,13 @@ else:
 	settings_format="settings_format.yml"
 # read config file
 cfg1={}
-with open(settings_format,"r") as mysettings:
+with open(path+cfg['configDir']+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
 # it is possible to also pass the createplan4res config file which makes some data optional in settings format
 if nbargs>1:
 	settings_create=sys.argv[2]
 	cfg2={}
-	with open(settings_create,"r") as mysettings:
+	with open(path+cfg['configDir']+settings_create,"r") as mysettings:
 		cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
 	cfg = {**cfg1, **cfg2}
 else:
