@@ -14,10 +14,15 @@ from calendar import monthrange
 from itertools import product
 
 path = os.environ.get("PLAN4RESROOT")
+nbargs=len(sys.argv)
+if nbargs>1: 
+	settings_create=sys.argv[1]
+else:
+	settings_create="settingsCreateInputPlan4res.yml"
 
 cfg={}
 # open the configuration file using the pathway defined below
-with open("settingsCreateInputPlan4res.yml","r") as mysettings:
+with open(path+settings_create,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 cfg['dirTimeSeries']=cfg['timeseriespath']
 if cfg['USEPLAN4RESROOT']:
