@@ -54,9 +54,9 @@ cfg={}
 # open the configuration files 
 with open(path+settings_posttreat,"r") as myyaml:
     cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
-with open(path+cfg['configDir']+settings_create,"r") as mysettings:
+with open(path+settings_create,"r") as mysettings:
     cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
-with open(path+cfg['configDir']+settings_format,"r") as mysettings:
+with open(path+settings_format,"r") as mysettings:
     cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
