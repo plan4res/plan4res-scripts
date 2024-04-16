@@ -32,6 +32,8 @@ def season(x):
 		return 'Autumn'
 	else :
 		return 'Winter'
+path = os.environ.get("PLAN4RESROOT")
+print('path=',path)
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -50,7 +52,7 @@ else:
 # read config file
 cfg={}
 # open the configuration files 
-with open(path+cfg['configDir']+settings_posttreat,"r") as myyaml:
+with open(path+settings_posttreat,"r") as myyaml:
     cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
 with open(path+cfg['configDir']+settings_create,"r") as mysettings:
     cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
