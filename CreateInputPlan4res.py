@@ -56,13 +56,13 @@ if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open("VariablesDictionnary.yml","r") as myvardict:
+with open(path+cfg['configDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 # create the dictionnary of time series, containing the names of the timeseries to be included in 
 # the dataset
 timeseriesdict={}
-with open("DictTimeSeries.yml","r") as mytimeseries:
+with open(path+cfg['configDir']+"DictTimeSeries.yml","r") as mytimeseries:
 	timeseriesdict=yaml.safe_load(mytimeseries)
 
 # if only one scenario/year is defined in config file set the list of scenarios / years to 1 element
