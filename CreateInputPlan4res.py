@@ -12,6 +12,7 @@ from math import ceil
 from datetime import timedelta
 from calendar import monthrange
 from itertools import product
+import sys
 
 path = os.environ.get("PLAN4RESROOT")
 nbargs=len(sys.argv)
