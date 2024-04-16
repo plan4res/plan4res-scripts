@@ -23,7 +23,7 @@ else:
 
 cfg={}
 # open the configuration file using the pathway defined below
-with open(path+settings_create,"r") as mysettings:
+with open(path+cfg['configDir']+settings_create,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 cfg['dirTimeSeries']=cfg['timeseriespath']
 if cfg['USEPLAN4RESROOT']:
