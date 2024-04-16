@@ -27,7 +27,7 @@ with open(path+settings_format,"r") as mysettings:
 if nbargs>1:
 	settings_create=sys.argv[2]
 	cfg2={}
-	with open(path+cfg['configDir']+settings_create,"r") as mysettings:
+	with open(path+settings_create,"r") as mysettings:
 		cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
 	cfg = {**cfg1, **cfg2}
 else:
