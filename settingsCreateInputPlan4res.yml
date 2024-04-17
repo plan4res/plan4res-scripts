@@ -13,6 +13,8 @@ USEPLAN4RESROOT: True
 path: '/data/local/InputPlan4res/'
 # path where to find the stochastic time series csv files
 timeseriespath: '/data/local/TimeSeries/'
+# path where config files are
+configDir: '/scripts/python/plan4res-scripts/'
 # path where openentrance nomenclature is cloned
 nomenclatureDir: '/scripts/python/openentrance/definitions/'
 csvfiles: # list of csv files to create in the plan4res excel file (comment line if not treated)

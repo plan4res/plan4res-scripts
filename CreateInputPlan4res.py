@@ -12,15 +12,21 @@ from math import ceil
 from datetime import timedelta
 from calendar import monthrange
 from itertools import product
+import sys
 
+path = os.environ.get("PLAN4RESROOT")
+nbargs=len(sys.argv)
+if nbargs>1: 
+	settings_create=sys.argv[1]
+else:
+	settings_create="settingsCreateInputPlan4res.yml"
 
 cfg={}
 # open the configuration file using the pathway defined below
-with open("settingsCreateInputPlan4res.yml","r") as mysettings:
+with open(path+settings_create,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 cfg['dirTimeSeries']=cfg['timeseriespath']
 if cfg['USEPLAN4RESROOT']:
-	path = os.environ.get("PLAN4RESROOT")
 	cfg['outputpath']=path+cfg['path']
 	cfg['dirTimeSeries']=path+cfg['timeseriespath']
 	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
@@ -50,13 +56,13 @@ if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open("VariablesDictionnary.yml","r") as myvardict:
+with open(path+cfg['configDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 # create the dictionnary of time series, containing the names of the timeseries to be included in 
 # the dataset
 timeseriesdict={}
-with open("DictTimeSeries.yml","r") as mytimeseries:
+with open(path+cfg['configDir']+"DictTimeSeries.yml","r") as mytimeseries:
 	timeseriesdict=yaml.safe_load(mytimeseries)
 
 # if only one scenario/year is defined in config file set the list of scenarios / years to 1 element

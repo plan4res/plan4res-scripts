@@ -32,6 +32,8 @@ def season(x):
 		return 'Autumn'
 	else :
 		return 'Winter'
+path = os.environ.get("PLAN4RESROOT")
+print('path=',path)
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -50,11 +52,11 @@ else:
 # read config file
 cfg={}
 # open the configuration files 
-with open(settings_posttreat,"r") as myyaml:
+with open(path+settings_posttreat,"r") as myyaml:
     cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
-with open(settings_create,"r") as mysettings:
+with open(path+settings_create,"r") as mysettings:
     cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
-with open(settings_format,"r") as mysettings:
+with open(path+settings_format,"r") as mysettings:
     cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
@@ -123,7 +125,7 @@ print('treating dataset ',cfg['dir'])
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open("VariablesDictionnary.yml","r") as myvardict:
+with open(path+cfg['configDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 #if (cfg['PostTreat']['Power']['draw'] or cfg['PostTreat']['Flows']['draw'] or 'SpecificPeriods' in cfg['PostTreat'] or cfg['InstalledCapacity']['draw']):
