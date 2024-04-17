@@ -377,7 +377,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				SubAnnualDataFrame=SubAnnualDataFrame.convert_unit(var_unit, to=cfg['ParametersCreate']['conversions'][var_unit]['to']) 
 
 		SubAnnualDataFrame.validate(exclude_on_fail=True)
-		SubAnnualDataFrame.to_csv('mySubAdf.csv')
 		
 	#regional aggregations 
 	print('computing regional aggregations')
@@ -531,7 +530,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	###############################################################
 	if cfg['csvfiles']['IN_Interconnections']:
 		IN = pd.DataFrame()
-		bigdata.to_csv('bigdatatest.csv')
 		print('Treating Interconnections')
 		for variable in vardict['Input']['VarIN']:
 			varname=vardict['Input']['VarIN'][variable]
@@ -791,7 +789,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 		# include timeseries names from TimeSeries dictionnary and compute scaling coefficient
 		print('include time series and compute scaling coefficients')
-		datapartition.to_csv('datapartition.csv')
 		for row in datapartition.index:
 			mytype=datapartition.loc[row,'Type']
 			if mytype in ListTypesZV:

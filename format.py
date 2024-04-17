@@ -549,7 +549,6 @@ def read_deterministic_timeseries(IsDT):
 		DeterministicTS.index=pd.to_datetime(DeterministicTS.index)
 		DeterministicTS['One']=1.0
 		DeterministicTS['Zero']=0.0
-		DeterministicTS.to_csv('detTS.csv')
 		DeterministicTS=ExtendAndResample('DET',DeterministicTS)
 	return DeterministicTS
 	

@@ -53,10 +53,10 @@ Calendar:
     EndDataset: '31/12/2031  23:00:00'
     SSVTimeStep:  # duration of a timeset for the SDDP = duration of a unit commitment problem
         Unit: hours
-        Duration: 336
+        Duration: 168
     TimeStep:  # duration of timesteps 
         Unit: hours
-        Duration: 48
+        Duration: 24
 
 # IncludeScenarisedData: True => the scenarised data are included in the blocks, 
 # IncludeScenarisedData: False => the scenarised data are  filled with 0

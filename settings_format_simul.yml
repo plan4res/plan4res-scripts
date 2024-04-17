@@ -53,7 +53,7 @@ Calendar:
     EndDataset: '31/12/2031  23:00:00'
     SSVTimeStep:  # duration of a timeset for the SDDP = duration of a unit commitment problem
         Unit: hours
-        Duration: 336
+        Duration: 168
     TimeStep:  # duration of timesteps 
         Unit: hours
         Duration: 1
