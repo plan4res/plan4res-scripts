@@ -61,6 +61,12 @@ with open(path+settings_format,"r") as mysettings:
 
 cfg = {**cfg1, **cfg2, **cfg3}
 
+# replace name of current dataset by name given as input
+if nbargs>4:
+	namedataset=sys.argv[4]
+	cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+
+
 cfg['dir']=cfg['path']+cfg['Resultsdir']
 cfg['inputpath']=cfg['path']
 if cfg['USEPLAN4RESROOT']:

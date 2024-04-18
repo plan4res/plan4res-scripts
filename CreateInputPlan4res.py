@@ -25,6 +25,12 @@ cfg={}
 # open the configuration file using the pathway defined below
 with open(path+settings_create,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
+	
+# replace name of current dataset by name given as input
+if nbargs>2:
+	namedataset=sys.argv[2]
+	cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+
 cfg['dirTimeSeries']=cfg['timeseriespath']
 if cfg['USEPLAN4RESROOT']:
 	cfg['outputpath']=path+cfg['path']
@@ -32,6 +38,8 @@ if cfg['USEPLAN4RESROOT']:
 	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
 	for datagroup in cfg['datagroups']:
 		cfg['datagroups'][datagroup]['inputdatapath']=path+cfg['datagroups'][datagroup]['inputdatapath']
+
+if not os.path.isdir(cfg['outputpath']):os.mkdir(cfg['outputpath'])
 print('path: ',cfg['outputpath'])
 	
 isInertia= ( 'InertiaDemand' in cfg['CouplingConstraints'] )
@@ -116,12 +124,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listGlobalReg=[]
 
 	# define list of aggregated regions
-	with open(cfg['nomenclatureDir']+"region/nuts3.yaml","r",encoding='UTF-8') as nutsreg:
-		nuts3=yaml.safe_load(nutsreg)
-	with open(cfg['nomenclatureDir']+"region/nuts2.yaml","r",encoding='UTF-8') as nutsreg:
-		nuts2=yaml.safe_load(nutsreg)
-	with open(cfg['nomenclatureDir']+"region/nuts1.yaml","r",encoding='UTF-8') as nutsreg:
-		nuts1=yaml.safe_load(nutsreg)
+	if cfg['ParametersCreate']['ExistsNuts']:
+		with open(cfg['nomenclatureDir']+"region/nuts3.yaml","r",encoding='UTF-8') as nutsreg:
+			nuts3=yaml.safe_load(nutsreg)
+		with open(cfg['nomenclatureDir']+"region/nuts2.yaml","r",encoding='UTF-8') as nutsreg:
+			nuts2=yaml.safe_load(nutsreg)
+		with open(cfg['nomenclatureDir']+"region/nuts1.yaml","r",encoding='UTF-8') as nutsreg:
+			nuts1=yaml.safe_load(nutsreg)
 	with open(cfg['nomenclatureDir']+"region/countries.yaml","r",encoding='UTF-8') as nutsreg:
 		countries=yaml.safe_load(nutsreg)
 	with open(cfg['nomenclatureDir']+"region/ehighway.yaml","r",encoding='UTF-8') as nutsreg:
@@ -169,34 +178,35 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listRegGet=listLocalReg+listGlobalReg
 	
 	# treat cases where disaggregation level is nuts1/2/3
-	minaggr=''
-	nuts3list= {}
-	nuts2list= {}
-	nuts1list= {}
-	for k in nuts1[0]['NUTS1']: nuts1list.update(k)
-	for k in nuts2[0]['NUTS2']: nuts2list.update(k)
-	for k in nuts3[0]['NUTS3']: nuts3list.update(k)
-	# create lists of nuts per countries
-	countryNuts3={v:[] for v in listcountries}
-	{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
-	countryNuts2={v:[] for v in listcountries}
-	{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
-	countryNuts1={v:[] for v in listcountries}
-	{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
-	
-	# extend list of regions to get with regions from datagroups
-	if 'nuts3' in listRegGet:
-		while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
-		listRegGet=listRegGet+list(nuts3.keys())
-		minaggr='nuts3'	
-	if 'nuts2' in listRegGet:
-		while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
-		listRegGet=listRegGet+list(nuts2.keys())
-		minaggr='nuts2'	
-	if 'nuts1' in listRegGet:
-		while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
-		listRegGet=listRegGet+list(nuts1.keys())
-		minaggr='nuts1'	
+	if cfg['ParametersCreate']['ExistsNuts']:
+		minaggr=''
+		nuts3list= {}
+		nuts2list= {}
+		nuts1list= {}
+		for k in nuts1[0]['NUTS1']: nuts1list.update(k)
+		for k in nuts2[0]['NUTS2']: nuts2list.update(k)
+		for k in nuts3[0]['NUTS3']: nuts3list.update(k)
+		# create lists of nuts per countries
+		countryNuts3={v:[] for v in listcountries}
+		{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
+		countryNuts2={v:[] for v in listcountries}
+		{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
+		countryNuts1={v:[] for v in listcountries}
+		{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
+		
+		# extend list of regions to get with regions from datagroups
+		if 'nuts3' in listRegGet:
+			while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
+			listRegGet=listRegGet+list(nuts3.keys())
+			minaggr='nuts3'	
+		if 'nuts2' in listRegGet:
+			while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
+			listRegGet=listRegGet+list(nuts2.keys())
+			minaggr='nuts2'	
+		if 'nuts1' in listRegGet:
+			while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
+			listRegGet=listRegGet+list(nuts1.keys())
+			minaggr='nuts1'	
 	if 'countries' in listRegGet:
 		while 'countries' in listRegGet: listRegGet.remove('countries')
 		listRegGet=listRegGet+list(countries.keys())
@@ -321,19 +331,20 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				print('filter countries')
 				# if there are data at lower granularity than country or cluster (only country until now), aggregate
 				firstcountry=1
-				for country in listcountries:
-					
-					# create list of nuts of the country
-					listNuts1=countryNuts1[country]
-					listNuts2=countryNuts2[country]
-					listNuts3=countryNuts3[country]
-					listNuts=listNuts1+listNuts2+listNuts3
-					NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
-					# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
-					
-					if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
-						print('aggregating nuts')
-						dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
+				if cfg['ParametersCreate']['ExistsNuts']:
+					for country in listcountries:
+						
+						# create list of nuts of the country
+						listNuts1=countryNuts1[country]
+						listNuts2=countryNuts2[country]
+						listNuts3=countryNuts3[country]
+						listNuts=listNuts1+listNuts2+listNuts3
+						NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
+						# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
+						
+						if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
+							print('aggregating nuts')
+							dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
 
 				dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
 				dfdatagroup=dfdatagroup.filter(scenario=scenget)

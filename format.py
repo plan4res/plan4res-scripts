@@ -15,7 +15,7 @@ path = os.environ.get("PLAN4RESROOT")
 print('path=',path)
 
 nbargs=len(sys.argv)
-if nbargs>0: 
+if nbargs>1: 
 	settings_format=sys.argv[1]
 else:
 	settings_format="settings_format.yml"
@@ -24,7 +24,7 @@ cfg1={}
 with open(path+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
 # it is possible to also pass the createplan4res config file which makes some data optional in settings format
-if nbargs>1:
+if nbargs>2:
 	settings_create=sys.argv[2]
 	cfg2={}
 	with open(path+settings_create,"r") as mysettings:
@@ -32,6 +32,12 @@ if nbargs>1:
 	cfg = {**cfg1, **cfg2}
 else:
 	cfg=cfg1
+	
+# replace name of current dataset by name given as input
+if nbargs>3:
+	namedataset=sys.argv[3]
+	cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+
 cfg['inputpath']=cfg['path']
 cfg['outputpath']=cfg['path']+cfg['outputDir']
 
