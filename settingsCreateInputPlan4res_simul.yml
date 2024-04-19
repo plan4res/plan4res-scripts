@@ -33,8 +33,6 @@ csvfiles: # list of csv files to create in the plan4res excel file (comment line
 # list of regions to get from data sources 
 listregionsGET: ['Austria' , 'Belgium' , 'Bulgaria' , 'Croatia' , 'Czech Republic' , 'Denmark' , 'Estonia' , 'Finland' , 'France' , 'Germany' ,'Greece' , 'Hungary' , 'Ireland' , 'Italy' , 'Latvia' , 'Lithuania' , 'Luxembourg' , 'Non-EU-Balkans' , 'North Macedonia', 'Norway' , 'Poland' , 'Portugal' , 'Romania' , 'Slovakia' , 'Slovenia' , 'Spain' , 'Sweden' , 'Switzerland' , 'The Netherlands' , 'Turkey' ,'United Kingdom']
 aggregateregions: # how to aggregate regions in plan4res dataset
-      #'North': ['Norway','Sweden','Finland','Denmark','Estonia', 'Latvia', 'Lithuania']
-      #'East': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia','Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia','Turkey' ]
       'Iberia': ['Spain','Portugal']
       #'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
       #'Baltics': ['Estonia', 'Latvia', 'Lithuania']
@@ -44,8 +42,7 @@ aggregateregions: # how to aggregate regions in plan4res dataset
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
-    #Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
-    Countries: ['Iberia','France']
+    Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
     Continent: ['Continent']
 
 technos: # list of technologies and link to modelling in plan4res
