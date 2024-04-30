@@ -6,10 +6,7 @@ EndTreatData: '30/06/2031 23:00'
 
 # directories
 # dir: for reading results of plan4res : 
-Resultsdir: 'results_invest/' # repository where all results are in subdirectories mydirectory/variant/  or mydirectory/variant-option/
-
-# defines how results files are names (eg Demand$i.csv or Demand_Scen$i_OUT.csv for the demand at scenario $i_OUT
-ScenarioIdentifier: _Scen$i_OUT
+Resultsdir: 'results_invest/' 
 
 # variables for defining which treatments  will be done
 map: yes   # if True: maps will be created ; only possible if geopandas is available
