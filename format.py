@@ -147,8 +147,8 @@ UnitUC=cfg['Calendar']['TimeStep']['Unit']
 if UnitUC=='days': UCTimeStep=UCTimeStep*24
 if UnitUC=='weeks': UCTimeStep=UCTimeStep*168
 
-# get scenarios
-ListScenarios=cfg['ParametersFormat']['Scenarios']
+# get scenarios and convert list to string
+ListScenarios=[str(elem) for elem in cfg['ParametersFormat']['Scenarios'] ]
 ScenarisedData=cfg['ParametersFormat']['ScenarisedData']
 
 # other parameters
@@ -462,7 +462,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	Extension=TS[ TS.index>= dates['UCBeginExtendedData'] ]
 	Extension=Extension[ Extension.index<= dates['UCEndExtendedData'] ]
 	
-	# good
 	# resample
 	newfreq=str(UCTimeStep)+'h'
 	TS_freq=pd.infer_freq(TS.index)
@@ -507,16 +506,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	else:
 		Extension.index=Extension.index+pd.Timedelta(TS.index[-1]-TS.index[0])+pd.Timedelta(str(Hours_freq)+' hours')
 	TS=pd.concat([TS,Extension])
-	
-	
-	TS=TS[ TS.index>= dates['UCBegin'] ]
-	TS=TS[ TS.index<= dates['UCEnd'] ]
-	
-	# case where there is only one value in TS_freq
-	if len(TS.index)==1:
-		TS2=TS[ TS.index>= dates['UCBegin'] ]
-		TS2.index=TS2.index+pd.Timedelta(str(Hours_freq)+' hours')
-		TS=pd.concat([TS,TS2])
 
 	# case where timeserie is given at frequency bigger than hour
 	# resample to hour frequecy before resampling to the required frequency
@@ -538,6 +527,15 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	else:
 		TS=TS.resample(newfreq).sum()
 
+	# keep only period of dataset
+	TS=TS[ TS.index>= dates['UCBegin'] ]
+	TS=TS[ TS.index<= dates['UCEnd'] ]
+	
+	# case where there is only one value in TS_freq
+	if len(TS.index)==1:
+		TS2=TS[ TS.index>= dates['UCBegin'] ]
+		TS2.index=TS2.index+pd.Timedelta(str(Hours_freq)+' hours')
+		TS=pd.concat([TS,TS2])
 	return TS
 
 def read_deterministic_timeseries(IsDT):
@@ -589,7 +587,6 @@ def create_demand_scenarios():
 					if isDeterministic: 
 						for col in ListScenarios: DemandScenarios.loc[node][col]=valTS*TS[TS.columns.tolist()[0]]
 					else: DemandScenarios[node]=valTS*TS
-					
 					firstPart=False
 				else:
 					if isDeterministic:
@@ -606,6 +603,7 @@ def create_demand_scenarios():
 				else:
 					for col in ListScenarios: DemandScenarios.loc[node][col]=DemandScenarios.loc[node][col]+DTS
 				
+		
 	return DemandScenarios
 	
 def create_inflows_scenarios():
@@ -2070,6 +2068,8 @@ def createSDDPBlock(filename,id):
 	Block.createDimension("TimeHorizon",TimeHorizonSSV)
 	Block.createDimension("NumberScenarios",len(ListScenarios))
 	SubScenarioSize = ThermalMaxPowerSize * Nb_TPP + (SSVTimeStep/UCTimeStep) * (Nb_APD + Nb_SS + Nb_RGP)
+	print('SSVTimeStep', SSVTimeStep,' UCTimeStep',UCTimeStep,' Nb_APD',Nb_APD,' Nb_SS',Nb_SS,' Nb_RGP',Nb_RGP)
+	print(' SubScenarioSize',SubScenarioSize)
 	ScenarioSize=NumberSSVTimeSteps*SubScenarioSize
 	Block.createDimension("SubScenarioSize",SubScenarioSize)
 	Block.createDimension("ScenarioSize",ScenarioSize)
@@ -2125,6 +2125,7 @@ def createSDDPBlock(filename,id):
 				ScenarioData.loc[t]=np.concatenate([ RESScenarios.loc[res][scenario][ (RESScenarios.loc[res][scenario].index >=datesSSV.loc[t]['start'] ) & (RESScenarios.loc[res][scenario].index <=datesSSV.loc[t]['end'] ) ] for res in RESScenarios.index ]  )
 			
 		datascenario=np.concatenate([ScenarioData.loc[t] for t in range(NumberSSVTimeSteps)   ])
+
 		Scenarios[indexScenario,:]=datascenario
 		indexScenario=indexScenario+1
 	
