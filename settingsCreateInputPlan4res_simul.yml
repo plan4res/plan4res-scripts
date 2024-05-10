@@ -92,7 +92,7 @@ ParametersCreate:
     zerocapacity: 1.0  # capacity in MW under which it is considered to be 0
     DynamicConstraints: no  # if 'no' the dataset will not include dynamic constraints: MinPower is set to 0, StartUpCost, MinUp and Down duration are not used
     reservoir:
-        coordinated: False # True if you wish to optimise all reservoirs in a coordinated way, False elsewhere
+        coordinated: True # True if you wish to optimise all reservoirs in a coordinated way, False elsewhere
         minpowerMWh: 1  # if the volume of the reservoir is lower, converted to short term storage
     InitialFillingrate:  # initial filling rates of reservoirs per countries
         Mordor : 0.5

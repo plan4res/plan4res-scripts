@@ -241,11 +241,11 @@ technosAggr:
         color: firebrick
         colors: Reds
     Battery: 
-        technos: ['Compressed Air','Lithium-Ion']
+        technos: ['Compressed Air','Lithium-Ion','Redox Flow']
         color: magenta
         colors: Purples
     Battery_PUMP: 
-        technos: ['Compressed Air_PUMP','Lithium-Ion_PUMP']
+        technos: ['Compressed Air_PUMP','Lithium-Ion_PUMP','Redox Flow_PUMP']
         color: magenta
         colors: Purples
     Oil:
