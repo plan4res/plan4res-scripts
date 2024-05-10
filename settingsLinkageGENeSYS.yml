@@ -1,0 +1,280 @@
+##############################################################################
+# inputs for creating the GENeSYS-MOD IAMC data out of julia outputs
+##############################################################################
+
+# if used in a plan4res container
+USEPLAN4RESROOT: True
+
+genesys_datafiles: 
+    input: 'inputdata_LOTR_joh_v01_04-03-2024.xlsx'
+    input_sheets: ['Sets','Par_TradeLossFactor','Par_EmissionActivityRatio','Par_EmissionContentPerFuel','Par_TechnologyToStorage','Par_TechnologyFromStorage','Par_TradeCapacityGrowthCosts','Par_InputActivityRatio','Par_OperationalLife','Par_OperationalLifeStorage']
+    capacity: 'output_capacity_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    exogenous_costs: 'output_exogenous_costs_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    production: 'output_production_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    annual_production: 'output_annual_production_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    technology_costs: 'output_technology_costs_detailed_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    exogenous_technology_costs: 'output_exogenous_costs_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    trade_capacity: 'output_trade_capacity_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    other: 'output_other_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+defaultvalues:
+    Model: GENeSYS-MOD.jl
+    Scenario: Gondor_globalLimit_364
+global_region: World
+# mappings for genesys-mod are
+mappings:
+    technos: capacity_technologies.csv
+    storages: storages.csv
+    storages_ratios: storages_e2p_ratios.csv 
+    finalenergy_sector: final_energy_sector.csv
+    finalenergy_fuel: final_energy_fuel.csv
+    emissions: emissions_technologies.csv
+global_region: World
+variables: 
+    Final Energy|:
+        source: annual_production
+        unit: 'PJ'
+        rules:
+            select:
+                Fuel:
+                    values: [Power]
+            selectAndMap:
+                column: Technology 
+                mappings: [finalenergy_sector]
+                rule: sum
+            apply_abs:
+            complete_variable_name: '|Electricity'
+    #Final Energy|Electricity|Other (excl. Heat, Cooling, Transport):
+    Final Energy|Electricity|Other (excl. Heat, Transport):
+        source: annual_production
+        unit: 'PJ'
+        rules:
+            select:
+                Technology:
+                    values: [Demand]
+                Fuel:
+                    values: [Power]
+            addvariablecol:
+            apply_abs:
+            group:
+                rule: sum
+    Final Energy|Electricity|Heat:
+        source: internal
+        unit: 'PJ'
+        rules:
+            compute:
+                ruleaggr: sum
+                from: ['Final Energy|Industry|Electricity','Final Energy|Residential and Commercial|Electricity']
+    Final Energy|Electricity|Transportation:
+        source: internal
+        unit: 'PJ'
+        rules:
+            compute: 
+                from: ['Final Energy|Transportation|Electricity']
+                ruleaggr: sum
+    Final Energy|Electricity:
+        source: internal
+        unit: 'PJ'
+        rules:
+            compute: 
+                from: ['Final Energy|Electricity|Other (excl. Heat, Cooling, Transport)','Final Energy|Electricity|Transportation','Final Energy|Electricity|Heat']
+                ruleaggr: sum                                  
+    Network|Electricity|Maximum Flow:
+        source: trade_capacity
+        unit: GW
+        rules:
+            select:
+                Type:
+                    values: ['Power Transmissions Capacity']
+            create_interco:
+            addvariablecol:
+    Network|Electricity|Expansion Cost:
+        source: trade_capacity
+        unit: MEUR/GW
+        rules:
+            select:
+                Type:
+                    values: ['Transmission Expansion Costs in MEUR/GW']
+            create_interco:
+            addvariablecol:
+    Network|Electricity|Loss Factor:
+        source: input
+        sheets: [Par_TradeLossFactor]
+        unit: ''
+        rules:
+            global: True
+            select:
+                Fuel:
+                    values: ['Power']
+            addvariablecol:
+    Capacity|:
+        source: capacity
+        unit: 'GW'
+        rules:
+            select:
+                Type:
+                    values: ['TotalCapacity']
+                Sector:
+                    values: ['Power','Storages']
+            selectAndMap:
+                column: Technology 
+                mappings: [technos]
+                rule: sum
+            concatvariablename:
+    Secondary Energy|:
+        source: annual_production
+        unit: 'PJ'
+        rules:
+            select:
+                Fuel:
+                    values: ['Power']
+            selectAndMap:
+                column: Technology
+                mappings: [technos]
+                rule: sum
+            concatvariablename:                   
+    Variable Cost (incl. Fuel Cost)|:
+        source: technology_costs
+        unit: MEUR/PJ
+        rules:
+            select:
+                Type:
+                    values: ['Variable Costs [incl. Fuel Costs]']
+            selectAndMap:
+                column: Technology
+                mappings: [technos]
+                rule: mean
+            concatvariablename:
+    Fixed Cost|:
+        sources: [technology_costs,exogenous_technology_costs]
+        unit: MEUR/GW
+        rules:
+            select:
+                Type:
+                    values: ['Fixed Costs']
+            selectAndMap:
+                column: Technology
+                mappings: [technos,storages]
+                rule: mean
+            concatvariablename:
+    Capital Cost|:
+        sources: [technology_costs,exogenous_technology_costs]
+        unit: MEUR/GW
+        rules: 
+            select:
+                Type:
+                    values: ['Capital Costs']
+            selectAndMap:
+                column: Technology
+                mappings: [technos,storages]
+                rule: mean
+            concatvariablename:
+    Price|Carbon:
+        source: technology_costs
+        unit: EUR_2020/t CO2
+        rules: 
+            select:
+                Type:
+                    values: ['Carbon Price']
+                Technology:
+                    values: ['Carbon']
+            addvariablecol::
+    Lifetime|:
+        source: input
+        unit: years
+        sheets: [Par_OperationalLife,Par_OperationalLifeStorage]
+        rules:
+            selectAndMap:
+                column: Technology
+                mappings: [technos,storages]
+                rule: mean
+            concatvariablename:
+            global: True
+            group:
+                rule: mean
+            addyear:
+    Emission Rate|CO2|:
+        source: input
+        unit: Mt CO2/PJ
+        sheets: [Par_EmissionActivityRatio]
+        rules:
+            select:
+                Mode_of_operation:
+                    values: [1]
+            selectFromMapping:
+                column: Technology
+                mappings: [emissions]
+            map:
+                column: Technology
+                rule: mean
+                mapping: technos
+            global: True
+            concatvariablename:            
+            combineWithOtherSources: 
+                mapAndAddCols:
+                    source: input
+                    sheet: Par_InputActivityRatio
+                    select:
+                        Mode_of_operation:
+                            values: [1]
+                    column: Technology
+                    mappings: 
+                        Fuel: Fuel
+                        InputActivityRatio: Value
+                    product_cols:
+                        Value: InputActivityRatio
+                changeValue:
+                    source: input
+                    sheet: Par_EmissionContentPerFuel
+                    column: Fuel
+                    value: Value
+                    map: Fuel
+                    rule: mult 
+                group:
+                    rule: mean
+    Maximum Storage|:
+        source: internal
+        unit: GWh
+        rules:
+            compute:
+                mapping: storages_ratios
+                from: [Capacity|]
+                rulemap: mult
+    Charging Efficiency|:
+        source: input
+        unit: ''
+        sheets: [Par_TechnologyToStorage]
+        rules:
+            selectAndMap:
+                column: Technology
+                mappings: [storages]
+                rule: mean
+            global: True
+            concatvariablename:
+    Discharging Efficiency|: 
+        source: input
+        unit: ''
+        sheets: [Par_TechnologyFromStorage]
+        rules: 
+            selectAndMap:
+                column: Technology
+                mappings: [storages]
+                rule: mean
+            global: True
+            concatvariablename:
+# path where openentrance nomenclature is cloned
+nomenclatureDir: '/scripts/python/openentrance/definitions/'
+
+# path where config files are
+configDir: 'python/plan4res-scripts/'
+
+# optionnal data for using CreateInputPlan4res.py without LaunchCREATE
+# path where to output the IAMC file
+#path: '/data/local/OM4A-Training/'
+#configDir: '/data/settings/'
+#genesys_inputpath: '/data/genesys_input/'
+#genesys_resultspath: '/data/genesys_results/'
+#timeseriespath: '/data/TimeSeries/'
+#mappingspath: '/data/settings/mappings_genesys/'
+#outputfile: IAMC_Middleeast_Gondor.csv
+
+
