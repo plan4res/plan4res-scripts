@@ -290,7 +290,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 										else: listlocalvar.append(newvar)
 		
 		
-		print(listvardatagroup)
 		
 		if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='platform') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='platform'):
 			print('download data from platform')
@@ -1221,7 +1220,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			for variable in vardict['Input']['VarSTS|Hydro']:
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
-				print(variable,varname)
 				if len(vardf.index)>0: 
 					isVarHydroStorage[variable]=True
 				else:
@@ -1681,8 +1679,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				BigRES=pd.concat([BigRES,RES])
 		
 		listRES=BigRES.columns.tolist()
-		listcols= ['Name','Zone','NumberUnits','MaxPower','MinPower','MaxPowerProfile','Energy','Kappa','Capacity']
-		if (isPrimary or isSecondary) and 'Gamma' in listRES: listcols.append('Gamma')
+		listcols= ['Name','Zone','NumberUnits','MaxPower','MinPower','MaxPowerProfile','Energy','Capacity']
+		if (isPrimary or isSecondary) and 'Gamma' in listRES and isInvest: listcols.append('Gamma')
 		if isInertia and 'Inertia' in listRES: listcols.append('Inertia')
 		if isInvest and 'res' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'MaxAddedCapacity' in BigRES.columns: listcols.append('MaxAddedCapacity')

@@ -2419,7 +2419,7 @@ def createInvestmentBlock(filename):
 		TUNotInvested=pd.DataFrame(TUDisagr[ (TUDisagr['MaxRetCapacity']==0) & (TUDisagr['MaxAddedCapacity']==0) ])
 		TUInvested['UpperBound']=TUInvested.apply(lambda x: (x.MaxPower+x.MaxAddedCapacity)/x.MaxPower if x.MaxAddedCapacity>0 else 1,axis=1)
 		TUInvested['LowerBound']=TUInvested.apply(lambda x: max(x.MaxPower-x.MaxRetCapacity,0)/x.MaxPower if x.MaxRetCapacity>0 else 1,axis=1)
-		TUInvested['Cost']=TUInvested.apply(lambda x: (x.InvestmentCost+x.FixedCost)*x.MaxPower,axis=1)
+		TUInvested['Cost']=TUInvested.apply(lambda x: (x.InvestmentCost)*x.MaxPower,axis=1)
 		TUInvested['AssetType']=0
 		TUInvested=TUInvested.reset_index()
 		TUNotInvested=TUNotInvested.reset_index()
