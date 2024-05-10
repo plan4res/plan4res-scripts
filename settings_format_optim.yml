@@ -2,6 +2,8 @@
 #
 #########################################
 outputDir: 'nc4_optim/'
+inputDir: 'csv_simul/'
+
 
 # the variable FormatMode defines what the formatting tool will do
 # FormatMode= SingleUC : generates ONE UCBlock for the first period (first SSVTimestep) of the dataset
@@ -53,7 +55,7 @@ Calendar:
     EndDataset: '31/12/2031  23:00:00'
     SSVTimeStep:  # duration of a timeset for the SDDP = duration of a unit commitment problem
         Unit: hours
-        Duration: 168
+        Duration: 672
     TimeStep:  # duration of timesteps 
         Unit: hours
         Duration: 24
@@ -69,6 +71,7 @@ ParametersFormat:
     NumberHoursInYear: 8760
     InertiaMultFactor: 1.2 # mult factor for computing inertia contributions
     Scenarios: [1982,1983,1984,1985,1986] # list of scenarios to include in the instance (names of scenarios)
+    #Scenarios: [1982] # list of scenarios to include in the instance (names of scenarios)
 
     # ScenarisedData contains the list of scenarised data, among 'ActivePowerDemand','Hydro:Inflows','Renewable:MaxPowerProfile' and 'Thermal:MaxPowerProfile'
     ScenarisedData: 

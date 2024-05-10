@@ -10,12 +10,6 @@ years: [2030]
 # if data are located within the plan4res container, use plan4res path
 USEPLAN4RESROOT: True
 
-# path where to output the plan4res format csv data
-path: '/data/local/Wim/'
-# path where to find the stochastic time series csv files
-timeseriespath: '/data/local/TimeSeries/'
-# path where config files are
-configDir: '/scripts/python/plan4res-scripts/'
 # path where openentrance nomenclature is cloned
 nomenclatureDir: '/scripts/python/openentrance/definitions/'
 csvfiles: # list of csv files to create in the plan4res excel file (comment line if not treated)
@@ -26,40 +20,28 @@ csvfiles: # list of csv files to create in the plan4res excel file (comment line
     SS_SeasonalStorage: 'SS_SeasonalStorage.csv' # optionnal, containsescription of seasonal storages
     STS_ShortTermStorage: 'STS_ShortTermStorage.csv' # optionnal, contains description of short term storages
     RES_RenewableUnits: 'RES_RenewableUnits.csv' # optionnal, contains description of renewable units
-    #SYN_SynchCond: 'SYN.csv' # optionnal, contains description of synchronous condensers
 
 # Regions
 #######################################
 
 # list of regions to get from data sources 
-#listregionsGET: ['Austria' , 'Belgium' , 'Bulgaria' , 'Croatia' , 'Czech Republic' , 'Denmark' , 'Estonia' , 'Finland' , 'France' , 'Germany' ,'Greece' , 'Hungary' , 'Ireland' , 'Italy' , 'Latvia' , 'Lithuania' , 'Luxembourg' , 'Non-EU-Balkans' , 'North Macedonia', 'Norway' , 'Poland' , 'Portugal' , 'Romania' , 'Slovakia' , 'Slovenia' , 'Spain' , 'Sweden' , 'Switzerland' , 'The Netherlands' , 'Turkey' ,'United Kingdom']
 listregionsGET: ['DolAmroth','Gondor','Harad','Mordor','Rohan','World']
 aggregateregions: # how to aggregate regions in plan4res dataset
-      #'Iberia': ['Spain','Portugal']
-      #'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
-      #'Baltics': ['Estonia', 'Latvia', 'Lithuania']
-      #'Balkans': ['Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia']   #for CS1
-      #'EasternEurope': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia' ]
-      #'Britain': ['Ireland' ,'United Kingdom']   
-      #'BigFrance': ['Belgium' , 'France' , 'Germany' , 'Italy' , 'Luxembourg' ,  'Switzerland' , 'The Netherlands' ]
+      #'AggReg1': ['DolAmroth','Gondor']
+      #'AggReg2': ['Harad','Mordor']
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
-    #Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
-    #Countries: ['Spain','Portugal','BigFrance']
     Countries: ['DolAmroth','Gondor','Harad','Mordor','Rohan']
     Continent: ['World']
 
 technos: # list of technologies and link to modelling in plan4res
 # thermal= modelled as ThermalUnit (TU), reservoir= modelled as HydroUnit (SS), 
 # hydrostorage/battery=modelled as ShortTermStorage (STS), res/runofriver=modelled as IntermittentUnit (RES)
-    #thermal: ['Biomass|w/ CCS','Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS','Geothermal','Hydrogen|OCGT','Nuclear','Oil|w/o CCS']
     thermal: ['Biomass|w/ CCS','Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS','Geothermal','Hydrogen|OCGT','Nuclear','Oil|w/o CCS']
-    reservoir: ['Reservoir']
-    hydrostorage: ['Pumped Storage']
-    #battery: ['Compressed Air','Battery|Lithium-Ion','Battery|Redox-Flow']
-    battery: []
-    #res: ['Solar|PV', 'Wind|Onshore', 'Wind|Offshore']
+    reservoir: ['Hydro|Reservoir']
+    hydrostorage: ['Hydro|Pumped Storage']
+    battery: ['Compressed Air','Battery|Lithium-Ion','Battery|Redox Flow']
     res: ['Solar|PV|Rooftop|Commercial','Solar|PV|Rooftop|Residential','Solar|PV|Utility', 'Wind|Onshore', 'Wind|Offshore']
     runofriver: ['Hydro|Run of River']
 
@@ -77,7 +59,7 @@ CouplingConstraints: # MaxPower and variable cost to use for creating slack unit
         Partition: 'Countries'
         MaxPower : 1500000
         Cost : 10000
-        #SumOf: ['ElecHeating','ElecVehicle','AirCondition','nonthermo']
+        #SumOf: ['ElecHeating','ElecVehicle','OtherExclHeatTransp']
         SumOf: ['Total']
     # PrimaryDemand : # optional - primary reserve constraint
         # Partition: 'Countries'
@@ -104,18 +86,33 @@ CouplingConstraints: # MaxPower and variable cost to use for creating slack unit
 # General parameters for dataset creation
 #############################################################
 
-# these are used when data are not available
-PumpingEfficiency:
-    battery:
-        Compressed Air: 0.7
-        Lithium-Ion: 0.7
-    hydrostorage:
-        Pumped Storage: 0.8
-    reservoir:
-        Reservoir: 0.8
-
 # list of parameters for treating the data
 ParametersCreate:
+    invest: no # yes: create a dataset for the Capacity Expansion model
+    zerocapacity: 1.0  # capacity in MW under which it is considered to be 0
+    DynamicConstraints: no  # if 'no' the dataset will not include dynamic constraints: MinPower is set to 0, StartUpCost, MinUp and Down duration are not used
+    reservoir:
+        coordinated: False # True if you wish to optimise all reservoirs in a coordinated way, False elsewhere
+        minpowerMWh: 1  # if the volume of the reservoir is lower, converted to short term storage
+    InitialFillingrate:  # initial filling rates of reservoirs per countries
+        Mordor : 0.5
+        DolAmroth : 0.6
+        Gondor : 0.7
+        Harad : 0.5
+        Rohan : 0.8
+    # these are used when data are not available
+    PumpingEfficiency:
+        Compressed Air: 0.7
+        Battery|Lithium-Ion: 0.7
+        Battery|Redox Flow: 0.7
+        Hydro|Pumped Storage: 0.8
+        Hydro|Reservoir: 0.8
+    Volume2CapacityRatio :  # used to compute the MaxPower or MaxVolume of storage units
+        Compressed Air: 100
+        Battery|Lithium-Ion: 4
+        Battery|Redox Flow: 4
+        Hydro|Pumped Storage: 100
+        Hydro|Reservoir: 2000
     CapacityExpansion: # define capacity expansion dataset - list of technos which can be invested
         thermal: 
             Biomass|w/ CCS: 
@@ -136,12 +133,20 @@ ParametersCreate:
             Nuclear:  
                 MaxAdd: 1000
                 MaxRet: 0
+        hydrostorage:
+            Hydro|Pumped Storage:
+                MaxAdd: 1000
+                MaxRet: 0
         battery:
             Compressed Air:  
                 MaxAdd: 1000
                 MaxRet: 0
                 InvestmentCost: 5000
-            Lithium-Ion:  
+            Battery|Lithium-Ion:  
+                MaxAdd: 1000
+                MaxRet: 0
+                InvestmentCost: 100
+            Battery|Redox Flow:  
                 MaxAdd: 1000
                 MaxRet: 0
                 InvestmentCost: 100
@@ -163,6 +168,8 @@ ParametersCreate:
             InvestmentCost: 100
     conversiondollar2010euro2020: 0.978  # should be the same value than the one used below
     conversions:
+        'Mt CO2/PJ':
+            to: 't CO2/MWh'
         'EJ/yr': 
             to: 'MWh/yr'
         'PJ':
@@ -197,69 +204,16 @@ ParametersCreate:
             factor: 0.978
         'Mt CO2/yr':
             to: 't CO2/yr'
-    zerocapacity: 1.0  # capacity in MW under which it is considered to be 0
-    DynamicConstraints: no  # if 'no' the dataset will not include dynamic constraints: MinPower is set to 0, StartUpCost, MinUp and Down duration are not used
-    invest: no # yes: create a dataset for the Capacity Expansion model
     MultFactor:  # list of technos where MaxPower is computed as energy/(mean load profile*8760)
         Hydro|Run of River : 8760
-    Volume2CapacityRatio :  # used to compute the MaxPower or MaxVolume of storage units
-        battery: 
-            Compressed Air: 100
-            Lithium-Ion: 4
-        hydrostorage:
-            Pumped Storage: 100
-    reservoir:
-        minpowerMWh: 1000  # if the volume of the reservoir is lower, converted to short term storage
     thermal:
         NbUnitsPerTechno: 1 # if >1, the data must include unit max power for the technology and the number of units is computed as Capacity/MaxPower
         variablecost: 'Cost'  # if 'Price' the variable cost is computed as Price*Efficiency
         fuel:  # in the case of 'Price', gives the name of the correspondent fuel for which the price should be used
             Gas|Hydrogen|OCGT|w/o CHP: Gas|Hydrogen
             Gas|Hydrogen|CCGT|w/o CHP: Gas|Hydrogen
-    
-    InitialFillingrate:  # initial filling rates of reservoirs per countries
-        Austria : 0.37
-        Czech Republic : 0.37
-        Bulgaria : 0.37
-        Slovenia : 0.37
-        Slovakia : 0.37
-        Poland : 0.37
-        Belgium : 0.40
-        Finland : 0.42
-        France : 0.40
-        Luxembourg: 0.40
-        Germany : 0.40
-        Italy : 0.41
-        Montenegro : 0.37
-        Norway : 0.53
-        Portugal : 0.46
-        Romania : 0.37
-        Serbia : 0.37
-        Spain : 0.1
-        Sweden : 0.54
-        Switzerland : 0.19
-        United Kingdom : 0.40
-        The Netherlands : 0.40
-        Ireland : 0.40
+    debug: False
     ExistsNuts: False
-    DemandResponseCoefficient: 1.000001 
-    DemandResponseLoadShifting:  # parameters used for modelling residential load control (openentrance CS1)
-        tshift:  # size (in hours) of windows on which load shifting is possible
-            Electric Vehicle: 4
-            Dryer: 6
-            Washing Machine: 6
-            Dish Washer: 6
-            Storage Heater: 12
-            Water Heater: 12
-            Refrigeration: 2
-            Air Conditioning: 2
-            Heat Pump: 3
-            Circulation Pump: 2
-        participationRate: yes  # if no, participation rate is 100%, if yes, use data from below file
-        participationRateData: 'path of the csv file containing data'
-
-
- 
 
 # the datagroup section lists the different 'sources' to get the data
 # for each source:
@@ -283,8 +237,7 @@ listdatagroups: ['genesys_jl']
 
 datagroups:
     genesys_jl:  # here the group with data from Open Entrance Scenario
-        inputdatapath: '/data/local/GENeSYS-MOD/IAMC/'  
-        inputdata: 'IAMC_Middleeast_Gondor.xlsx' 
+        #inputdata: 'IAMC_Middleeast_Gondor.xlsx' 
         model: 'GENeSYS-MOD.jl'
         regions:
             global: 'World'  # region to be used for global data
@@ -293,99 +246,31 @@ datagroups:
         listvariables:
             coupling: 
                 #mean: ['Price|Carbon']
-                flow: ['Network|Electricity|Maximum Flow']
-                add: ['Final Energy|Electricity','Final Energy|Electricity|Heat', 'Final Energy|Electricity|Transportation']
+                flow: ['Network|Electricity|Maximum Flow','Network|Electricity|Expansion Cost','Network|Electricity|Loss Factor']
+                add: ['Final Energy|Electricity','Final Energy|Electricity|Heat','Final Energy|Electricity|Transportation','Final Energy|Electricity|Other (excl. Heat, Transport)']
             techno:
                 thermal:
                     add: ['Capacity|Electricity|','Secondary Energy|Electricity|']
-                    mean: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capital Cost|Electricity|']
+                    mean: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capital Cost|Electricity|','Fixed Cost|Electricity|']
+                    global: ['Emission Rate|CO2|Electricity|','Lifetime|Electricity|']
                 reservoir:
-                    add: ['Capacity|Electricity|Hydro|','Secondary Energy|Electricity|Hydro|']
-                hydrostorage:
-                    add: ['Capacity|Electricity|Hydro|','Maximum Storage|Electricity|Energy Storage System|Hydro|']
-                    mean: ['Charging Efficiency|Electricity|Hydro|','Discharging Efficiency|Electricity|Hydro|']
-                battery:
-                    add: ['Maximum Storage|Electricity|']
-                    mean: ['Charging Efficiency|Electricity|','Discharging Efficiency|Electricity|Hydro|','Capital Cost|Electricity|']
-                res:
-                    add: ['Secondary Energy|Electricity|','Capacity|Electricity|']
-                    mean: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capital Cost|Electricity|']
-                runofriver:
-                    add: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capacity|Electricity|','Secondary Energy|Electricity|']
-    genesys1:  # here the group with data from Open Entrance Scenario
-        inputdatapath: '/data/local/GENeSYS-MOD/'  
-        inputdata: 'openENTRANCE_GENeSYS-MOD_pathways.xlsx' 
-        model: 'GENeSYS-MOD 3.1'
-        regions:
-            global: 'Europe (incl. Turkey)'  # region to be used for global data
-            local: []   # additional regions to include compared to general list
-        subannual: no
-        listvariables:
-            coupling: 
-                mean: ['Price|Carbon']
-                add: ['Final Energy|Electricity','Final Energy|Electricity|Heat', 'Final Energy|Electricity|Transportation']
-            techno:
-                thermal:
                     add: ['Capacity|Electricity|','Secondary Energy|Electricity|']
-                    mean: ['Variable Cost|Electricity|','Fixed Cost|Electricity|','Capital Cost|Electricity|']
-                reservoir:
-                    add: ['Capacity|Electricity|Hydro|']
                 hydrostorage:
-                    add: ['Capacity|Electricity|Hydro|','Maximum Storage|Electricity|Energy Storage System|Hydro|']
+                    add: ['Capacity|Electricity|','Maximum Storage|Electricity|']
+                    mean: ['Capital Cost|Electricity|','Fixed Cost|Electricity|']
+                    global: ['Charging Efficiency|Electricity|','Discharging Efficiency|Electricity|','Lifetime|Electricity|']
                 battery:
-                    add: ['Maximum Storage|Electricity|Energy Storage System|']
+                    add: ['Capacity|Electricity|','Maximum Storage|Electricity|']
+                    mean: ['Capital Cost|Electricity|','Fixed Cost|Electricity|']
+                    global: ['Charging Efficiency|Electricity|','Discharging Efficiency|Electricity|','Lifetime|Electricity|']
                 res:
                     add: ['Secondary Energy|Electricity|','Capacity|Electricity|']
-                    mean: ['Variable Cost|Electricity|','Fixed Cost|Electricity|','Capital Cost|Electricity|']
+                    mean: ['Capital Cost|Electricity|','Fixed Cost|Electricity|']
+                    global: ['Lifetime|Electricity|']
                 runofriver:
-                    add: ['Capacity|Electricity|']
-    genesys2:  # here the group with recomputed data out of GENeSYS-MOD xlsx outputs
-        inputdatapath: '/data/local/GENeSYS-MOD/'  
-        inputdata: 'GENeSYS-MOD-pathways_D3.2_with_transmission_244_IAMC.csv' 
-        model: 'GENeSYS-MOD 3.1'
-        regions:
-            global: 'Europe (incl. Turkey)'  # region to be used for global data
-            local: []   # additional regions to include compared to general list
-        subannual: no
-        listvariables:
-            coupling: 
-                flow: ['Network|Electricity|Maximum Flow']
-            techno:
-                reservoir:
-                    add: ['Secondary Energy|Electricity|Hydro|']
-                hydrostorage:
-                    global: ['Pumping Efficiency|Electricity|Hydro|']
-                battery:
-                    global: ['Roundtrip Efficiency|Electricity|Energy Storage System|']
-                runofriver:
-                    add: ['Secondary Energy|Electricity|']
-    ehighway:
-        inputdatapath: '/data/local/GENeSYS-MOD/'  
-        inputdata: 'eHighway2050__EDF__V2.0.csv'        
-        model: 'plan4eu-V1.1'
-        scenario: 'eHighway2050'
-        year: 2050
-        regions:
-            global: 'Europe'
-            local: []
-        subannual: no
-        listvariables: 
-            coupling: 
-                mean: ['Share|Final Energy|Electricity|Cooling']
-    entsoe:
-        inputdatapath: '/data/local/GENeSYS-MOD/'  
-        inputdata: 'ENTSOE__EDF__V2.0.csv' 
-        model: 'plan4eu-V1.1'
-        scenario: 'ENTSOETransparency'
-        year: 2050
-        regions:
-            global: 'Europe'
-            local: []
-        subannual: no
-        listvariables:
-            techno:
-                reservoir:
-                    add: ['Maximum Storage|Electricity|Hydro|']
+                    add: ['Capacity|Electricity|','Secondary Energy|Electricity|']
+                    mean: ['Capital Cost|Electricity|','Fixed Cost|Electricity|']
+                    global: ['Lifetime|Electricity|']
 
 # credentials for openentrance platform
 user: 'user'
@@ -394,3 +279,13 @@ password: 'pass'
 # mode : 'platform' or 'files' (one 1 csv file per data type)
 mode_annual: 'files'
 mode_subannual: 'files'
+
+# optionnal data for using CreateInputPlan4res.py without LaunchCREATE
+# path where to output the plan4res format csv data
+#path: '/data/local/CaseStudy/'
+# path where to find the stochastic time series csv files
+#timeseriespath: '/data/local/CaseStudy/TimeSeries/'
+# path where config files are
+#configDir: '/scripts/python/plan4res-scripts/'
+# path where python scripts and VariableDictionnary are
+#pythonDir: '/scripts/python/plan4res-scripts/'

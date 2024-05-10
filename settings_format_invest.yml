@@ -2,6 +2,8 @@
 #
 #########################################
 outputDir: 'nc4_invest/'
+inputDir: 'csv_invest/'
+
 
 # the variable FormatMode defines what the formatting tool will do
 # FormatMode= SingleUC : generates ONE UCBlock for the first period (first SSVTimestep) of the dataset

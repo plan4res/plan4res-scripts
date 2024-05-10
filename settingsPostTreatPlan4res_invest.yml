@@ -14,12 +14,14 @@ geopandas: yes # False if geopandas is not available; in that case , maps will b
 
 # Treatments to be performed
 PostTreat:
+    DrawMean: False # (optional, default True) True if you wish to draw the average in the stochastic graphs 
     Volume: 
         read: yes  # reads volume outputs and create volume files to be used by 'draw' , 'latex' and 'iamc'
         draw: yes  # create graphs
         latex: yes  # write latex chapter
         iamc: yes  # convert outputs to openentrance format
         Dir: 'Volume/'  # outputs of plan4res for Volumes are in dir/variant-option/Volume/  => files VolumeOUTi.csv
+        DrawMean: False # (optional, default True) True if you wish to draw the average in this specific stochastic graphs 
     Flows: 
         read: yes # reads flows outputs and create volume files to be used by 'draw' , 'latex' and 'iamc'
         draw: yes
