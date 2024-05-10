@@ -14,6 +14,7 @@ import os.path
 import pyam
 from itertools import product
 import sys
+from shapely import wkt
 
 OE_SUBANNUAL_FORMAT = lambda x: x.strftime("%m-%d %H:%M%z").replace("+0100", "+01:00") 
 
@@ -33,7 +34,6 @@ def season(x):
 	else :
 		return 'Winter'
 path = os.environ.get("PLAN4RESROOT")
-print('path=',path)
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -64,19 +64,30 @@ cfg = {**cfg1, **cfg2, **cfg3}
 # replace name of current dataset by name given as input
 if nbargs>4:
 	namedataset=sys.argv[4]
-	cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
-
+	if 'path' in cfg:
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+	else:
+		cfg['path']='/data/local/'+namedataset+'/'
 
 cfg['dir']=cfg['path']+cfg['Resultsdir']
-cfg['inputpath']=cfg['path']
+cfg['inputpath']=cfg['path']+cfg['inputDir']
+if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
 	cfg['dir']=path+cfg['dir']
 	cfg['inputpath']=path+cfg['inputpath']
+	cfg['path']=path+cfg['path']
 cfg['dayfirst']=cfg['Calendar']['dayfirst']
 cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
+if 'pythonDir' not in cfg: 
+	if cfg['USEPLAN4RESROOT']: 
+		cfg['pythonDir']='/scripts/python/plan4res-scripts/'
+	else:
+		print('pythonDir missing in settingsCreateInputPlan4res')
+		exit()
 
-
+print('results in:',cfg['dir'])
+print('dataset in:',cfg['inputpath'])
 # define latex functions
 ############################
 isLatex=cfg['PostTreat']['Volume']['latex']+cfg['PostTreat']['Flows']['latex']\
@@ -131,7 +142,7 @@ print('treating dataset ',cfg['dir'])
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open(path+cfg['configDir']+"VariablesDictionnary.yml","r") as myvardict:
+with open(path+cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 #if (cfg['PostTreat']['Power']['draw'] or cfg['PostTreat']['Flows']['draw'] or 'SpecificPeriods' in cfg['PostTreat'] or cfg['InstalledCapacity']['draw']):
@@ -427,16 +438,27 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			AggrInstalledCapacity[aggrtechno]=InstalledCapacity[ AggrCols ].sum(axis=1)
 	AggrInstalledCapacity.to_csv(cfg['dirOUT']+'AggrInstalledCapacity.csv')
 
+	world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+	world.to_csv('world.csv')
 	if cfg['map']:
 		####################################################################################################
 		# Create map of europe for selected regions
 		####################################################################################################
+		
 		print('create map')
 		listcountrymap=list_regions
 		if 'nameregions' in cfg.keys(): listcountrymap=cfg['nameregions']
-
-		world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-		europe = world [ world['continent'] == 'Europe' ]
+		
+		if 'private_map' in cfg:
+			print('use private map')
+			df_europe = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
+			df_europe['geometry'] = df_europe['geometry'].apply(wkt.loads)
+			europe=gpd.GeoDataFrame(df_europe, crs='epsg:4326')
+			#europe = gpd.read_file(cfg['path']+cfg['private_map'])
+			#gdf.crs = 'epsg:4326'
+		else:
+			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+			europe = world [ world['continent'] == 'Europe' ]
 		europe['Aggr']=europe['name']
 		europe['country']=europe['name']
 		europe['index']=europe['name']
@@ -477,10 +499,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 		# aggregate countries in the map
 		if cfg['aggregateregions']: myeurope = myeurope.dissolve(by='Aggr')
-		p1 = Polygon([(-20, 30), (30, 30), (30, 72), (-20, 72)])
-		bounding_box=p1.envelope
-		bounding=gpd.GeoDataFrame(gpd.GeoSeries(bounding_box), columns=['geometry'])
-		myeurope=gpd.overlay(bounding,myeurope,how='intersection')
+		#p1 = Polygon([(-20, 30), (30, 30), (30, 72), (-20, 72)])
+		#bounding_box=p1.envelope
+		#bounding=gpd.GeoDataFrame(gpd.GeoSeries(bounding_box), columns=['geometry'])
+		#myeurope=gpd.overlay(bounding,myeurope,how='intersection')
 		# plot europe avec frontieres et representative point
 		figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
 		
@@ -784,8 +806,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		fig, axes = plt.subplots(figsize=(SizeCol,SizeRow),nrows=1, ncols=1)
 		Data=pd.read_csv(cfg['dirOUT']+What+'.csv',nrows=nbRows,index_col=0).fillna(0.0)
 		#axes.plot(Data)
-		print(What)
-		print(Data)
 		####################
 		if isTimeIndex:
 			Data.index=pd.to_datetime(Data.index)
@@ -874,7 +894,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		AggrInstalledCapacity=pd.read_csv(cfg['dirOUT']+'AggrInstalledCapacity.csv',index_col=0).fillna(0.0)
 		namefigpng=StackedBar(InstalledCapacity,'InstalledCapacityBar.jpeg',TechnoColors)
 		namefigpng=StackedBar(AggrInstalledCapacity,'AggrInstalledCapacityBar.jpeg',TechnoAggrColors)
-		namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
+		if cfg['map']: namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
 
 		del InstalledCapacity
 		del AggrInstalledCapacity
@@ -954,6 +974,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	nbscen=len(listscen)
 	scen0=listscen[0]
 	nbscengroup=nbscen # number of scenarised results
+	if 'max' in cfg['PostTreat']['MarginalCost'].keys(): 
+		cfg['marginalcostlimits']={'max':cfg['PostTreat']['MarginalCost']['max'],'min':(-1)*cfg['PostTreat']['MarginalCost']['max']}
+	else:
+		cfg['marginalcostlimits']={'max':10000,'min':-10000}
 	print('Treat Stochastic results')
 	if isLatex: bodylatex_Sto=bodylatex_Sto+"\\chapter{Stochastic Results}\n" 
 	
@@ -1110,9 +1134,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					df=pd.DataFrame()
 					df['time']=TimeIndex
 					df['value']=Demand[reg+'-'+str(scen)]
-					mydf=pyam.IamDataFrame(data=df,model=cfg['model'],scenario=cfg['scenario']+'|'+str(scen),region=reg,unit='MWh/yr',variable=var) 
+					mydf=pyam.IamDataFrame(data=df,model=cfg['model'],scenario=cfg['scenario']+'|'+str(scen),region=reg,unit='MWh',variable=var) 
 					Subannualdf=mydf.swap_time_for_year(subannual=OE_SUBANNUAL_FORMAT)
-					Subannualdf=Subannualdf.convert_unit('MWh/yr', to='EJ/yr') 
 					
 					if 'regions' in cfg['PostTreat']['Demand']:
 						Subannualdf=Subannualdf.filter(region=cfg['InstalledCapacity']['regions'])
@@ -1650,9 +1673,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# create demand graphs
 	if(cfg['PostTreat']['Demand']['draw']):
 		print('Create graphs for demand')
+		drawMean=False
+		if 'DrawMean' in cfg['PostTreat']['Demand']: 
+			drawMean=cfg['PostTreat']['Demand']['DrawMean']
+		elif 'DrawMean' in cfg['PostTreat']:
+			drawMean=cfg['PostTreat']['DrawMean']
 		namefigpng1=StochasticGraphs(cfg['Graphs']['Demand']['nbcols'],cfg['Graphs']['Demand']['nblines'],\
 				cfg['regionsANA'],'Demand',cfg['PostTreat']['Demand']['Dir'],cfg['Graphs']['Demand']['SizeCol'],\
-				cfg['Graphs']['Demand']['SizeRow'],cfg['Graphs']['Demand']['TitleSize'],cfg['Graphs']['Demand']['LabelSize'],True,0,False)
+				cfg['Graphs']['Demand']['SizeRow'],cfg['Graphs']['Demand']['TitleSize'],cfg['Graphs']['Demand']['LabelSize'],drawMean,0,False)
 		del namefigpng1
 	
 	# create demand chapter in latex report
@@ -1670,17 +1698,21 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		else:
 			maxCmarSto=cfg['marginalcostlimits']['max']
 		maxCmar=cfg['marginalcostlimits']['max']
+		drawMean=False
+		if 'DrawMean' in cfg['PostTreat']['MarginalCost']: 
+			drawMean=cfg['PostTreat']['Demand']['MarginalCost']
+		elif 'DrawMean' in cfg['PostTreat']:
+			drawMean=cfg['PostTreat']['DrawMean']
 		namefigpng=StochasticGraphs(cfg['Graphs']['MarginalCost']['nbcols'],cfg['Graphs']['MarginalCost']['nblines'],\
 				cfg['regionsANA'],'MarginalCostActivePowerDemand',cfg['PostTreat']['MarginalCost']['Dir'], \
 				cfg['Graphs']['MarginalCost']['SizeCol'],cfg['Graphs']['MarginalCost']['SizeRow'], \
-				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],max=maxCmarSto,DrawMean=True)
+				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],max=maxCmarSto,DrawMean=drawMean)
 		namefigpng=StochasticGraphs(cfg['Graphs']['MarginalCost']['nbcols'],cfg['Graphs']['MarginalCost']['nblines'],\
 				cfg['regionsANA'],'HistCmar',cfg['PostTreat']['MarginalCost']['Dir'],\
 				cfg['Graphs']['MarginalCost']['SizeCol'],cfg['Graphs']['MarginalCost']['SizeRow'], \
 				cfg['Graphs']['MarginalCost']['TitleSize'], cfg['Graphs']['MarginalCost']['LabelSize'],DrawMean=False,max=maxCmarSto,isTimeIndex=False)
 		namefigpng=DeterministicGraph('meanScenCmar',TimeIndex,NbTimeSteps,10,5,16)
 		namefigpng=DeterministicGraph('MonotoneCmar',list(range(NbTimeSteps)),NbTimeSteps,10,5,16,isTimeIndex=False)
-		print(ScenarioIndex)
 		namefigpng=DeterministicGraph('meanTimeCmar',cfg['ParametersFormat']['Scenarios'],nbscen,10,5,16,isTimeIndex=False)
 		del namefigpng
 	
@@ -1701,10 +1733,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			+ figure(cfg['dirIMGLatex']+namefigpng5,'Mean on all Timesteps of Marginal Costs per Scenario (Euro/MWh)',namefigpng5) 	
 	if(cfg['PostTreat']['Volume']['draw']):
 		print('create stochastic volumes graphs')
+		drawMean=False
+		if 'DrawMean' in cfg['PostTreat']['Volume']: 
+			drawMean=cfg['PostTreat']['Volume']['DrawMean']
+		elif 'DrawMean' in cfg['PostTreat']:
+			drawMean=cfg['PostTreat']['DrawMean']
 		namefigpng=StochasticGraphs(cfg['Graphs']['Volume']['nbcols'],cfg['Graphs']['Volume']['nblines'],\
 			cfg['ReservoirRegions'],'Volume-Reservoir',cfg['PostTreat']['Volume']['Dir'],\
 				cfg['Graphs']['Volume']['SizeCol'],cfg['Graphs']['Volume']['SizeRow'], \
-				cfg['Graphs']['Volume']['TitleSize'], cfg['Graphs']['Volume']['LabelSize'],DrawMean=True)
+				cfg['Graphs']['Volume']['TitleSize'], cfg['Graphs']['Volume']['LabelSize'],DrawMean=drawMean)
 		del namefigpng
 
 	# create volume chapter in latex report
@@ -1754,7 +1791,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				listTechnos=listTechnos+cfg['technosAggr'][technoAggr]['technos']
 				
 		# plot chloromap of europe 
-		namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
+		if cfg['map']: namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
 			listTechnosAggr,MeanEnergyAggr,cfg['Graphs']['Power']['SizeCol'],\
 			cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
 			'MeanEnergyAggr')
@@ -1762,10 +1799,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			
 		# for techno in listTechnosAggr:
 		print('create stochastic graph for non served energy')
+		drawMean=False
+		if 'DrawMean' in cfg['PostTreat']['Demand']: 
+			drawMean=cfg['PostTreat']['Demand']['MarginalCost']
+		elif 'DrawMean' in cfg['PostTreat']:
+			drawMean=cfg['PostTreat']['DrawMean']
 		namefigpng=StochasticGraphs(cfg['Graphs']['Demand']['nbcols'],cfg['Graphs']['Demand']['nblines'],\
 			cfg['regionsANA'],'Slack','OUT',\
 			cfg['Graphs']['Demand']['SizeCol'],cfg['Graphs']['Demand']['SizeRow'], \
-			cfg['Graphs']['Demand']['TitleSize'], cfg['Graphs']['Demand']['LabelSize'],DrawMean=True,max=0,drawScale=False)
+			cfg['Graphs']['Demand']['TitleSize'], cfg['Graphs']['Demand']['LabelSize'],DrawMean=drawMean,max=0,drawScale=False)
 		del namefigpng
 		del MeanEnergy, MeanEnergyAggr
 		
@@ -1907,7 +1949,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if(cfg['PostTreat']['Flows']['draw']):
 		print('Create graphs for Flows')
 		MeanFlows=pd.read_csv(cfg['dirOUT'] + 'MeanImportExport.csv',index_col=0).fillna(0.0)
-		namefigpng=EuropeFlowsMap(MeanFlows,'MeanFlows.jpeg')
+		if cfg['map']: namefigpng=EuropeFlowsMap(MeanFlows,'MeanFlows.jpeg')
 		del namefigpng
 		
 	# create flows chapter in latex report
@@ -2553,7 +2595,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				
 			# draw europe with flows
 			##################################################################
-			if cfg['PostTreat']['SpecificPeriods']['draw']:
+			if cfg['PostTreat']['SpecificPeriods']['draw'] and cfg['map']:
 				# draw map
 				figflows, axflows = plt.subplots(1,1,figsize=(10,10))
 				myeurope.boundary.plot(ax=axflows,figsize=(10,10))
@@ -2613,25 +2655,26 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of Interconnection uses over the whole period (MWh)',namefigpng)
 
 		# draw chloromap of europe
-			tablebilansNRJ=tablebilansNRJ.fillna(0)
-			mytable=tablebilansNRJ
-			mytable['name']=mytable.index
-			mytable=mytable.reset_index()
-			
-			namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
-				cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
-				cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
-				'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
+			if cfg['map']:
+				tablebilansNRJ=tablebilansNRJ.fillna(0)
+				mytable=tablebilansNRJ
+				mytable['name']=mytable.index
+				mytable=mytable.reset_index()
+				
+				namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
+					cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
+					cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
+					'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
 
-			# draw chloromap for C02
-			myeurope['CO2']=tablebilansNRJ['CO2']
-			myeurope=myeurope.fillna(0)
-			figchloroeurope, axchloroeurope = plt.subplots(1,1)
-			myeurope.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
-			axchloroeurope.set_title('Emissions (t)',fontsize=10)
-			namefigpng='Scenario_ChloroMap-CO2.jpeg'
-			plt.savefig(cfg['dirIMG']+namefigpng)
-			plt.close()
+				# draw chloromap for C02
+				myeurope['CO2']=tablebilansNRJ['CO2']
+				myeurope=myeurope.fillna(0)
+				figchloroeurope, axchloroeurope = plt.subplots(1,1)
+				myeurope.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
+				axchloroeurope.set_title('Emissions (t)',fontsize=10)
+				namefigpng='Scenario_ChloroMap-CO2.jpeg'
+				plt.savefig(cfg['dirIMG']+namefigpng)
+				plt.close()
 			
 			if cfg['PostTreat']['SpecificPeriods']['latex']:		
 				writelatex=True
@@ -2645,7 +2688,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			###########################################################
 			#europe pies
 			#############################################################
-			#namefigpng=EuropePieMap(tablebilansNRJ.drop(['CO2','name','Non Served'],axis=1),'EnergyPieEurope-Scenario.jpeg',TechnoAggrColors)
+			#if cfg['map']: namefigpng=EuropePieMap(tablebilansNRJ.drop(['CO2','name','Non Served'],axis=1),'EnergyPieEurope-Scenario.jpeg',TechnoAggrColors)
 			if cfg['PostTreat']['SpecificPeriods']['latex']:
 				writelatex=True
 				namefigpng='Scenario_EnergyPieEurope.jpeg'

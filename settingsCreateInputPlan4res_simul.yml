@@ -3,14 +3,15 @@
 # also used for treating the data
 ##############################################################################
 # list of different scenarios and years (eg. from GENeSYS-MOD results) for which we want to create a dataset
-scenarios: ['Techno-Friendly 2.0']
+#scenarios: ['Techno-Friendly 2.0']
+scenarios: ['Gondor_globalLimit_364']
 years: [2030]
 
 # if data are located within the plan4res container, use plan4res path
 USEPLAN4RESROOT: True
 
 # path where to output the plan4res format csv data
-path: '/data/local/ExampleRun/'
+path: '/data/local/Wim/'
 # path where to find the stochastic time series csv files
 timeseriespath: '/data/local/TimeSeries/'
 # path where config files are
@@ -31,28 +32,35 @@ csvfiles: # list of csv files to create in the plan4res excel file (comment line
 #######################################
 
 # list of regions to get from data sources 
-listregionsGET: ['Austria' , 'Belgium' , 'Bulgaria' , 'Croatia' , 'Czech Republic' , 'Denmark' , 'Estonia' , 'Finland' , 'France' , 'Germany' ,'Greece' , 'Hungary' , 'Ireland' , 'Italy' , 'Latvia' , 'Lithuania' , 'Luxembourg' , 'Non-EU-Balkans' , 'North Macedonia', 'Norway' , 'Poland' , 'Portugal' , 'Romania' , 'Slovakia' , 'Slovenia' , 'Spain' , 'Sweden' , 'Switzerland' , 'The Netherlands' , 'Turkey' ,'United Kingdom']
+#listregionsGET: ['Austria' , 'Belgium' , 'Bulgaria' , 'Croatia' , 'Czech Republic' , 'Denmark' , 'Estonia' , 'Finland' , 'France' , 'Germany' ,'Greece' , 'Hungary' , 'Ireland' , 'Italy' , 'Latvia' , 'Lithuania' , 'Luxembourg' , 'Non-EU-Balkans' , 'North Macedonia', 'Norway' , 'Poland' , 'Portugal' , 'Romania' , 'Slovakia' , 'Slovenia' , 'Spain' , 'Sweden' , 'Switzerland' , 'The Netherlands' , 'Turkey' ,'United Kingdom']
+listregionsGET: ['DolAmroth','Gondor','Harad','Mordor','Rohan','World']
 aggregateregions: # how to aggregate regions in plan4res dataset
-      'Iberia': ['Spain','Portugal']
+      #'Iberia': ['Spain','Portugal']
       #'Benelux': ['Belgium', 'Luxembourg' , 'The Netherlands']
       #'Baltics': ['Estonia', 'Latvia', 'Lithuania']
       #'Balkans': ['Non-EU-Balkans', 'Bulgaria', 'Croatia','Greece','Romania','Slovenia','North Macedonia']   #for CS1
       #'EasternEurope': ['Austria' ,  'Czech Republic', 'Hungary' , 'Poland' , 'Slovakia' ]
       #'Britain': ['Ireland' ,'United Kingdom']   
+      #'BigFrance': ['Belgium' , 'France' , 'Germany' , 'Italy' , 'Luxembourg' ,  'Switzerland' , 'The Netherlands' ]
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
-    Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
-    Continent: ['Continent']
+    #Countries: ['France' , 'Germany' , 'Italy' ,  'Switzerland' , 'EasternEurope', 'Benelux', 'Iberia', 'Britain', 'Balkans', 'Baltics', 'Denmark', 'Finland', 'Sweden','Norway']
+    #Countries: ['Spain','Portugal','BigFrance']
+    Countries: ['DolAmroth','Gondor','Harad','Mordor','Rohan']
+    Continent: ['World']
 
 technos: # list of technologies and link to modelling in plan4res
 # thermal= modelled as ThermalUnit (TU), reservoir= modelled as HydroUnit (SS), 
 # hydrostorage/battery=modelled as ShortTermStorage (STS), res/runofriver=modelled as IntermittentUnit (RES)
+    #thermal: ['Biomass|w/ CCS','Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS','Geothermal','Hydrogen|OCGT','Nuclear','Oil|w/o CCS']
     thermal: ['Biomass|w/ CCS','Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS','Geothermal','Hydrogen|OCGT','Nuclear','Oil|w/o CCS']
     reservoir: ['Reservoir']
     hydrostorage: ['Pumped Storage']
-    battery: ['Compressed Air','Lithium-Ion']
-    res: ['Solar|PV', 'Wind|Onshore', 'Wind|Offshore']
+    #battery: ['Compressed Air','Battery|Lithium-Ion','Battery|Redox-Flow']
+    battery: []
+    #res: ['Solar|PV', 'Wind|Onshore', 'Wind|Offshore']
+    res: ['Solar|PV|Rooftop|Commercial','Solar|PV|Rooftop|Residential','Solar|PV|Utility', 'Wind|Onshore', 'Wind|Offshore']
     runofriver: ['Hydro|Run of River']
 
 # list of the names of the scenarised timeseries for scenarised data 
@@ -270,9 +278,40 @@ ParametersCreate:
 #	for each group, variables are separated into 3 categories, depending on the method to use for aggregating regions (add, global ie single value, mean)
 # a different group must be given for annual and subannual data
 
-listdatagroups: ['genesys1','genesys2','ehighway','entsoe']
+#listdatagroups: ['genesys1','genesys2','ehighway','entsoe']
+listdatagroups: ['genesys_jl']
 
 datagroups:
+    genesys_jl:  # here the group with data from Open Entrance Scenario
+        inputdatapath: '/data/local/GENeSYS-MOD/IAMC/'  
+        inputdata: 'IAMC_Middleeast_Gondor.xlsx' 
+        model: 'GENeSYS-MOD.jl'
+        regions:
+            global: 'World'  # region to be used for global data
+            local: []   # additional regions to include compared to general list
+        subannual: no
+        listvariables:
+            coupling: 
+                #mean: ['Price|Carbon']
+                flow: ['Network|Electricity|Maximum Flow']
+                add: ['Final Energy|Electricity','Final Energy|Electricity|Heat', 'Final Energy|Electricity|Transportation']
+            techno:
+                thermal:
+                    add: ['Capacity|Electricity|','Secondary Energy|Electricity|']
+                    mean: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capital Cost|Electricity|']
+                reservoir:
+                    add: ['Capacity|Electricity|Hydro|','Secondary Energy|Electricity|Hydro|']
+                hydrostorage:
+                    add: ['Capacity|Electricity|Hydro|','Maximum Storage|Electricity|Energy Storage System|Hydro|']
+                    mean: ['Charging Efficiency|Electricity|Hydro|','Discharging Efficiency|Electricity|Hydro|']
+                battery:
+                    add: ['Maximum Storage|Electricity|']
+                    mean: ['Charging Efficiency|Electricity|','Discharging Efficiency|Electricity|Hydro|','Capital Cost|Electricity|']
+                res:
+                    add: ['Secondary Energy|Electricity|','Capacity|Electricity|']
+                    mean: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capital Cost|Electricity|']
+                runofriver:
+                    add: ['Variable Cost (incl. Fuel Cost)|Electricity|','Capacity|Electricity|','Secondary Energy|Electricity|']
     genesys1:  # here the group with data from Open Entrance Scenario
         inputdatapath: '/data/local/GENeSYS-MOD/'  
         inputdata: 'openENTRANCE_GENeSYS-MOD_pathways.xlsx' 

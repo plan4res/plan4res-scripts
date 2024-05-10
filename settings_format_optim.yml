@@ -68,7 +68,7 @@ ParametersFormat:
     DownDeltaRampDownMultFactor: 100 # mult factor for computing the max ramp down of virtual downstream reservoir from ramp down of upstream reservoir
     NumberHoursInYear: 8760
     InertiaMultFactor: 1.2 # mult factor for computing inertia contributions
-    Scenarios: ['1982','1983'] # list of scenarios to include in the instance (names of scenarios)
+    Scenarios: [1982,1983,1984,1985,1986] # list of scenarios to include in the instance (names of scenarios)
 
     # ScenarisedData contains the list of scenarised data, among 'ActivePowerDemand','Hydro:Inflows','Renewable:MaxPowerProfile' and 'Thermal:MaxPowerProfile'
     ScenarisedData: 

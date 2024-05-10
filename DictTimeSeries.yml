@@ -113,6 +113,11 @@ ZV:
         Slovakia : EDF__HourlyCoef-non-thermo-PresentClimate-SK__20062019__28062019__v1.csv
         United Kingdom : EDF__HourlyCoef-non-thermo-PresentClimate-UK__20062019__28062019__v1.csv
     Total: 
+        Harad: Profile-Switzerland.csv
+        Gondor: Profile-Italy.csv
+        Mordor: Profile-France.csv
+        Rohan: Profile-Iberia.csv
+        DolAmroth: Profile-Germany.csv
         Austria : Profile-EasternEurope.csv
         Non-EU-Balkans : Profile-Balkans.csv
         Croatia : Profile-Balkans.csv
@@ -142,6 +147,11 @@ ZV:
         United Kingdom : Profile-Britain.csv
 SS:
     Inflows:
+        Harad: EDF__Inflow-HourlyCoefficient-PresentClimate-CH__18092019__18092019__v1.csv
+        Gondor: EDF__Inflow-HourlyCoefficient-PresentClimate-IT__18092019__18092019__v1.csv
+        Mordor: EDF__Inflow-HourlyCoefficient-PresentClimate-FR__18092019__18092019__v1.csv
+        Rohan: EDF__Inflow-HourlyCoefficient-PresentClimate-ES__18092019__18092019__v1.csv
+        DolAmroth: EDF__Inflow-HourlyCoefficient-PresentClimate-AT__18092019__18092019__v1.csv
         Austria: EDF__Inflow-HourlyCoefficient-PresentClimate-AT__18092019__18092019__v1.csv
         Bulgaria : EDF__Inflow-HourlyCoefficient-PresentClimate-BG__18092019__18092019__v1.csv
         Switzerland : EDF__Inflow-HourlyCoefficient-PresentClimate-CH__18092019__18092019__v1.csv
@@ -159,6 +169,24 @@ SS:
         Britain : EDF__Inflow-HourlyCoefficient-PresentClimate-FR__18092019__18092019__v1.csv
 
 RES:
+    Solar|PV|Rooftop|Commercial:
+        Harad: EDF__PV-LoadFactor-PresentClimate-CH__13082019__13082019__v1.csv
+        Gondor: EDF__PV-LoadFactor-PresentClimate-IT__13082019__13082019__v1.csv
+        Mordor: EDF__PV-LoadFactor-PresentClimate-FR_C8__13082019__13082019__v1.csv
+        Rohan: EDF__PV-LoadFactor-PresentClimate-ES__13082019__13082019__v1.csv
+        DolAmroth: EDF__PV-LoadFactor-PresentClimate-DE_C1__13082019__13082019__v1.csv
+    Solar|PV|Rooftop|Residential:
+        Harad: EDF__PV-LoadFactor-PresentClimate-CH__13082019__13082019__v1.csv
+        Gondor: EDF__PV-LoadFactor-PresentClimate-IT__13082019__13082019__v1.csv
+        Mordor: EDF__PV-LoadFactor-PresentClimate-FR_C8__13082019__13082019__v1.csv
+        Rohan: EDF__PV-LoadFactor-PresentClimate-ES__13082019__13082019__v1.csv
+        DolAmroth: EDF__PV-LoadFactor-PresentClimate-DE_C1__13082019__13082019__v1.csv
+    Solar|PV|Utility:
+        Harad: EDF__PV-LoadFactor-PresentClimate-CH__13082019__13082019__v1.csv
+        Gondor: EDF__PV-LoadFactor-PresentClimate-IT__13082019__13082019__v1.csv
+        Mordor: EDF__PV-LoadFactor-PresentClimate-FR_C8__13082019__13082019__v1.csv
+        Rohan: EDF__PV-LoadFactor-PresentClimate-ES__13082019__13082019__v1.csv
+        DolAmroth: EDF__PV-LoadFactor-PresentClimate-DE_C1__13082019__13082019__v1.csv
     Solar|PV:
         Austria: EDF__PV-LoadFactor-PresentClimate-AT__13082019__13082019__v1.csv
         Belgium: EDF__PV-LoadFactor-PresentClimate-BE__13082019__13082019__v1.csv
@@ -220,6 +248,11 @@ RES:
         Turkey : EDF__PV-LoadFactor-PresentClimate-RO__13082019__13082019__v1.csv
         United Kingdom : EDF__PV-LoadFactor-PresentClimate-UK__13082019__13082019__v1.csv       
     Wind|Onshore:
+        Harad: EDF__WindOnshore-LoadFactor-PresentClimate-CH__13082019__13082019__v1.csv
+        Gondor: EDF__WindOnshore-LoadFactor-PresentClimate-IT__13082019__13082019__v1.csv
+        Mordor: EDF__WindOnshore-LoadFactor-PresentClimate-FR__13082019__13082019__v1.csv
+        Rohan: EDF__WindOnshore-LoadFactor-PresentClimate-ES__13082019__13082019__v1.csv
+        DolAmroth: EDF__WindOnshore-LoadFactor-PresentClimate-DE__13082019__13082019__v1.csv
         Austria: EDF__WindOnshore-LoadFactor-PresentClimate-AT__13082019__13082019__v1.csv
         Belgium: EDF__WindOnshore-LoadFactor-PresentClimate-BE__13082019__13082019__v1.csv
         Bosnia and Herzegovina : EDF__WindOnshore-LoadFactor-PresentClimate-BA__13082019__13082019__v1.csv
@@ -255,6 +288,11 @@ RES:
         Turkey : EDF__WindOnshore-LoadFactor-PresentClimate-TR__13082019__13082019__v1.csv
         United Kingdom : EDF__WindOnshore-LoadFactor-PresentClimate-UK__13082019__13082019__v1.csv
     Wind|Offshore:
+        Harad: EDF__WindOffshore-LoadFactor-PresentClimate-DE__25112019__25112019__v1.csv
+        Gondor: EDF__WindOffshore-LoadFactor-PresentClimate-UK__25112019__25112019__v1.csv
+        Mordor: EDF__WindOffshore-LoadFactor-PresentClimate-UK__25112019__25112019__v1.csv
+        Rohan: EDF__WindOffshore-LoadFactor-PresentClimate-UK__25112019__25112019__v1.csv
+        DolAmroth: EDF__WindOffshore-LoadFactor-PresentClimate-DE__25112019__25112019__v1.csv
         Belgium : EDF__WindOffshore-LoadFactor-PresentClimate-BE__25112019__25112019__v1.csv
         Britain : EDF__WindOffshore-LoadFactor-PresentClimate-UK__25112019__25112019__v1.csv
         Bulgaria : EDF__WindOffshore-LoadFactor-PresentClimate-DE__25112019__25112019__v1.csv
@@ -278,6 +316,11 @@ RES:
         Turkey : EDF__WindOffshore-LoadFactor-PresentClimate-DE__25112019__25112019__v1.csv
         United Kingdom : EDF__WindOffshore-LoadFactor-PresentClimate-UK__25112019__25112019__v1.csv
     Hydro|Run of River:
+        Harad: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-CH__18092019__18092019__v1.csv
+        Gondor: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-IT__18092019__18092019__v1.csv
+        Mordor: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-FR__18092019__18092019__v1.csv
+        Rohan: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-ES__18092019__18092019__v1.csv
+        DolAmroth: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-DE__18092019__18092019__v1.csv
         Austria: EDF__RunOfRiver-HourlyCoefficient-PresentClimate-AT__18092019__18092019__v1.csv
         Belgium : EDF__RunOfRiver-HourlyCoefficient-PresentClimate-FR__18092019__18092019__v1.csv
         Britain : EDF__RunOfRiver-HourlyCoefficient-PresentClimate-FR__18092019__18092019__v1.csv

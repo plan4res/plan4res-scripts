@@ -36,10 +36,13 @@ else:
 # replace name of current dataset by name given as input
 if nbargs>3:
 	namedataset=sys.argv[3]
-	cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
-
-cfg['inputpath']=cfg['path']
+	if 'path' in cfg:
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+	else:
+		cfg['path']='/data/local/'+namedataset+'/'
+cfg['inputpath']=cfg['path']+cfg['inputDir']
 cfg['outputpath']=cfg['path']+cfg['outputDir']
+if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
 
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
@@ -328,10 +331,9 @@ if 'SS_SeasonalStorage' in sheets:
 		TotalNumberHydroUnits=SS['NumberUnits'].sum()
 		
 		if 'HydroSystem' in SS.columns:
-			NumberHydroSystems=SS['HydroSystem'].max()+1
+			NumberHydroSystems=int(SS['HydroSystem'].max()+1)
 		else:
 			NumberHydroSystems=1
-			
 		SS['NumberReservoirs']=1
 		SS['NumberArcs']=2
 		for reservoir in SS.index:
@@ -339,7 +341,6 @@ if 'SS_SeasonalStorage' in sheets:
 				SS.loc[reservoir]['NumberReservoirs']=2
 				SS.loc[reservoir]['NumberArcs']=3
 		TotalNumberReservoirs=SS['NumberReservoirs'].sum()
-				
 		HSSS=pd.Series(dtype=object)
 		for hs in range(NumberHydroSystems):
 			HSSS.loc[hs]=SS[ SS['HydroSystem']==hs ]
@@ -427,7 +428,7 @@ else:
 NumberUnits=NumberHydroSystems+NumberThermalUnits+NumberBatteryUnits+NumberIntermittentUnits+NumberSyncUnits+NumberSlackUnits
 if NumberHydroSystems>0: 
 	NumberArcs=SS['NumberArcs'].sum()
-	NumberHydroUnits=SS['NumberUnits'].sum()
+	NumberHydroUnits=int(SS['NumberUnits'].sum())
 else: 
 	NumberArcs=0
 	NumberHydroUnits=0
@@ -617,7 +618,7 @@ def create_inflows_scenarios():
 		# case without a profile
 		if nameTS=='':
 			InflowsScenarios[reservoir]=pd.DataFrame(columns=ListScenarios)
-			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['Parameters']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
+			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['ParametersFormat']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
 		elif '.csv' in nameTS:  # stochastic series
 			TS=pd.read_csv(cfg['timeseriespath']+nameTS,index_col=0)
 			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
@@ -945,13 +946,13 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 							Ramp['zero2']=0.0
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampUp[t,:]=[Ramp[t],Ramp[t],cfg['Parameters']['DownDeltaRampUpMultFactor']*Ramp[t]]
+								DeltaRampUp[t,:]=[Ramp[t],Ramp[t],cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*Ramp[t]]
 					else:
 						DeltaRampUp=HBlock.createVariable("DeltaRampUp",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
 							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,DeltaRampUpData*UCTimeStep]
 						elif NumberReservoirs==2:
-							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,DeltaRampUpData*UCTimeStep,cfg['Parameters']['DownDeltaRampUpMultFactor']*DeltaRampUpData*UCTimeStep]
+							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,DeltaRampUpData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*DeltaRampUpData*UCTimeStep]
 				if 'DeltaRampDown' in SS.columns:
 					DeltaRampDownData=HSSS.loc[hydrosystem]['DeltaRampUp'][hydrounit]
 					if type(DeltaRampDownData)==str:
@@ -967,13 +968,13 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 							Ramp['zero2']=0.0
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampDown[t,:]=[Ramp[t],Ramp[t],cfg['Parameters']['DownDeltaRampDownMultFactor']*Ramp[t]]
+								DeltaRampDown[t,:]=[Ramp[t],Ramp[t],cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*Ramp[t]]
 					else:
 						DeltaRampDown=HBlock.createVariable("DeltaRampDown",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
 							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,DeltaRampDownData*UCTimeStep]
 						elif NumberReservoirs==2:
-							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,DeltaRampDownData*UCTimeStep,cfg['Parameters']['DownDeltaRampDownMultFactor']*DeltaRampDownData*UCTimeStep]					
+							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,DeltaRampDownData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*DeltaRampDownData*UCTimeStep]					
 				
 				# create primary and secondary rho
 				if 'PrimaryRho' in SS.columns:
@@ -1041,7 +1042,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					InertiaData=HSSS.loc[hydrosystem]['Inertia'][hydrounit]
 					if type(InertiaData)==str:
 						InertiaPower=HBlock.createVariable("InertiaPower",np.double,("NumberIntervals","NumberArcs"))
-						inertia=cfg['Parameters']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
+						inertia=cfg['ParametersFormat']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 						if NumberReservoirs==1:
 							for t in range(NumberIntervals):
 								InertiaPower[t,:]=[Inertia[t],0]
@@ -1051,9 +1052,9 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					else:
 						InertiaPower=HBlock.createVariable("InertiaPower",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							InertiaPower[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData,0]
+							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,0]
 						elif NumberReservoirs==2:
-							InertiaPower[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData,cfg['Parameters']['InertiaMultFactor']*InertiaData,0]
+							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,0]
 					
 				# create initial conditions
 				InitialVolumetric=HBlock.createVariable("InitialVolumetric",np.double,("NumberReservoirs"))
@@ -1062,7 +1063,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				if NumberReservoirs==1:
 					InitialVolumetric[:]=[initialvolume]
 				elif NumberReservoirs==2:
-					InitialVolumetric[:]=[initialvolume,cfg['Parameters']['DownReservoirVolumeMultFactor']*initialvolume]
+					InitialVolumetric[:]=[initialvolume,cfg['ParametersFormat']['DownReservoirVolumeMultFactor']*initialvolume]
 				
 				InitialFlowRate=HBlock.createVariable("InitialFlowRate",np.double,("NumberArcs"))
 				if 'InitialFlowRate' in SS.columns:
@@ -1078,7 +1079,6 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				#DownHillFlow=HBlock.createVariable("DownHillFlow",np.double,("NumberArcs"))
 				
 				indexHU=indexHU+1
-
 		# add polyhedral function for water values
 		PolyhedralFunctionBlock=HSBlock.createGroup('PolyhedralFunctionBlock')
 		PolyhedralFunctionBlock.type="PolyhedralFunctionBlock"
@@ -1322,7 +1322,7 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			# create initial conditions
 			if 'InitialPower' in TU.columns:
 				InitialPowerData=TU['InitialPower'][tu]*UCTimeStep
-			else: InitialPowerData=MaxPowerData
+			else: InitialPowerData=MaxPowerData*UCTimeStep
 			InitialPower=TBlock.createVariable("InitialPower",np.double,())
 			InitialPower[:]=InitialPowerData
 			
@@ -1353,10 +1353,10 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				InertiaData=TU['Inertia'][tu]
 				if type(InertiaData)==str:
 					InertiaCommitment=TBlock.createVariable("InertiaCommitment",np.double,("NumberIntervals"))
-					InertiaCommitment[:]=np.array(cfg['Parameters']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					InertiaCommitment[:]=np.array(cfg['ParametersFormat']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					InertiaCommitment=TBlock.createVariable("InertiaCommitment",np.double,())
-					InertiaCommitment[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData]
+					InertiaCommitment[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData]
 		
 			indexUnitBlock=indexUnitBlock+1
 	return indexUnitBlock
@@ -1426,10 +1426,10 @@ def addIntermittentUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				InertiaData=RES['Inertia'][tu]
 				if type(InertiaData)==str:
 					InertiaPower=IBlock.createVariable("InertiaPower",np.double,("NumberIntervals"))
-					InertiaPower[:]=np.array(cfg['Parameters']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					InertiaPower[:]=np.array(cfg['ParametersFormat']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					InertiaPower=IBlock.createVariable("InertiaPower",np.double,())
-					InertiaPower[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData]
+					InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData]
 		
 			indexUnitBlock=indexUnitBlock+1
 	return indexUnitBlock
@@ -1462,7 +1462,7 @@ def addSynchConsUnitBlocks(Block,indexUnitBlock,start,end):
 			FixedCost=SBlock.createVariable("FixedCost",np.double,())
 			InertiaCommitment.createVariable("InertiaCommitment",np.double,())
 			MaxConso[:]=[MaxConsoData]
-			Inertia[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData]
+			Inertia[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData]
 			MaxPower[:]=[0.0]
 			MinPower[:]=[0.0]
 			FixedConsumption[:]=[MaxConsoData]
@@ -1620,10 +1620,13 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 				TurbineEfficiency=STS['TurbineEfficiency'][tu]
 				if type(TurbineEfficiency)==str:
 					ExtractingBatteryRho=TBlock.createVariable("ExtractingBatteryRho",np.double,("NumberIntervals"))
-					ExtractingBatteryRho[:]=np.array(DeterministicTimeSeries[TurbineEfficiency][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					ExtractingBatteryRho[:]=np.array(1/DeterministicTimeSeries[TurbineEfficiency][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					ExtractingBatteryRho=TBlock.createVariable("ExtractingBatteryRho",np.double,())
-					ExtractingBatteryRho[:]=[TurbineEfficiency]
+					if TurbineEfficiency!=0:
+						ExtractingBatteryRho[:]=[1/TurbineEfficiency]
+					else:
+						ExtractingBatteryRho[:]=[1]
 			else:
 				ExtractingBatteryRho=TBlock.createVariable("ExtractingBatteryRho",np.double,())
 				ExtractingBatteryRho[:]=[1]
@@ -1658,10 +1661,10 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 				InertiaData=STS['Inertia'][tu]
 				if type(InertiaData)==str:
 					InertiaPower=TBlock.createVariable("InertiaPower",np.double,("NumberIntervals"))
-					InertiaPower[:]=np.array(cfg['Parameters']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					InertiaPower[:]=np.array(cfg['ParametersFormat']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					InertiaPower=TBlock.createVariable("InertiaPower",np.double,())
-					InertiaPower[:]=[cfg['Parameters']['InertiaMultFactor']*InertiaData]
+					InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData]
 		
 			indexUnitBlock=indexUnitBlock+1
 	return indexUnitBlock
@@ -2068,8 +2071,6 @@ def createSDDPBlock(filename,id):
 	Block.createDimension("TimeHorizon",TimeHorizonSSV)
 	Block.createDimension("NumberScenarios",len(ListScenarios))
 	SubScenarioSize = ThermalMaxPowerSize * Nb_TPP + (SSVTimeStep/UCTimeStep) * (Nb_APD + Nb_SS + Nb_RGP)
-	print('SSVTimeStep', SSVTimeStep,' UCTimeStep',UCTimeStep,' Nb_APD',Nb_APD,' Nb_SS',Nb_SS,' Nb_RGP',Nb_RGP)
-	print(' SubScenarioSize',SubScenarioSize)
 	ScenarioSize=NumberSSVTimeSteps*SubScenarioSize
 	Block.createDimension("SubScenarioSize",SubScenarioSize)
 	Block.createDimension("ScenarioSize",ScenarioSize)
@@ -2133,8 +2134,8 @@ def createSDDPBlock(filename,id):
 	StateSize[:]=TotalNumberReservoirs
 	AdmissibleState=Block.createVariable("AdmissibleState",np.double,("AdmissibleStateSize"))
 	InitialState=Block.createVariable("InitialState",np.double,("InitialStateSize"))
-	AdmissibleStateData=np.zeros(shape=(SS['NumberUnits'].sum(),NumberSSVTimeSteps))
-	AdmissibleStateDownData=np.zeros(shape=(SS['NumberUnits'].sum(),NumberSSVTimeSteps))
+	AdmissibleStateData=np.zeros(shape=(int(SS['NumberUnits'].sum()),NumberSSVTimeSteps))
+	AdmissibleStateDownData=np.zeros(shape=(int(SS['NumberUnits'].sum()),NumberSSVTimeSteps))
 	indexHydroUnit=0
 	indexInitialState=0
 	for hs in HSSS.index:
@@ -2253,8 +2254,8 @@ def createSDDPBlock(filename,id):
 
 		# create abstract path of stochastic blocks
 		APSB=StochasticBlocks.createGroup("AbstractPath")
-		PathDim=TotalNumberReservoirs
-		TotalLength=3*TotalNumberReservoirs
+		#PathDim=TotalNumberReservoirs
+		#TotalLength=3*TotalNumberReservoirs
 		APSB.createDimension("PathDim",NumberDataMappings)
 		totalLength = (4 * Nb_SS) + (3 * Nb_TPP) + (3 * Nb_RGP) + 1
 		demandPathTotalLength = 0
@@ -2290,7 +2291,7 @@ def createSDDPBlock(filename,id):
 		num_previous_units=0
 		for h in range(NumberHydroSystems): # loop on hydrosystems
 			indexUnitInHS=0
-			for u in range(HSSS.loc[h]['NumberUnits'].sum()):  # loop on hydrounits of hydrosystem h
+			for u in range(int(HSSS.loc[h]['NumberUnits'].sum())):  # loop on hydrounits of hydrosystem h
 				PathGroupIndices[PathGroupIndicesIndex+1]=0
 				PathGroupIndices[PathGroupIndicesIndex+2]=h
 				PathGroupIndices[PathGroupIndicesIndex+3]=u+num_previous_units
@@ -2306,7 +2307,6 @@ def createSDDPBlock(filename,id):
 			PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+NumberThermalUnits+i
 			PathGroupIndicesIndex=PathGroupIndicesIndex+3
 		
-
 		#BendersBlocks.loc[indexSSV] = StochasticBlocks.loc[indexSSV].createGroup("Block")
 		BendersBlocks = StochasticBlocks.createGroup("Block")
 		BendersBlocks.type="BendersBlock"
@@ -2338,6 +2338,7 @@ def createSDDPBlock(filename,id):
 		
 		PathGroupIndices=AP.createVariable("PathGroupIndices",'u4',("TotalLength"))
 		PathGroupIndicesData=[]
+		
 		for h in range(NumberHydroSystems): # loop on hydrosystems
 			indexUnitInHS=0
 			for u in HSSS.loc[h].index:  # loop on hydrounits of hydrosystem h
@@ -2528,11 +2529,11 @@ def createInvestmentBlock(filename):
 		# each region has enough energy
 		indexNode=0
 		for node in Nodes:
-			Adata=np.array(TUInvested.apply(lambda x: cfg['Parameters']['NumberHoursInYear']*x['MaxPower'] if x['Zone']==node else 0,axis=1))
+			Adata=np.array(TUInvested.apply(lambda x: cfg['ParametersFormat']['NumberHoursInYear']*x['MaxPower'] if x['Zone']==node else 0,axis=1))
 			Adata=np.concatenate([Adata,np.array(RESInvested.apply(lambda x: x['Energy_Timeserie']*x['MaxPower'] if x['Zone']==node else 0,axis=1))])
 			Adata=np.concatenate([Adata,np.zeros(shape=NumberInvestedBatteryUnits+NumberInvestedLines)])
 			if len(TUNotInvested[ TUNotInvested['Zone']==node ].index)>0:
-				ThermalEnergyNotInvested=cfg['Parameters']['NumberHoursInYear']*TUNotInvested[ TUNotInvested['Zone']==node ]['MaxPower'].sum()
+				ThermalEnergyNotInvested=cfg['ParametersFormat']['NumberHoursInYear']*TUNotInvested[ TUNotInvested['Zone']==node ]['MaxPower'].sum()
 			else:
 				ThermalEnergyNotInvested=0
 			if len(RESNotInvested[ RESNotInvested['Zone']==node ].index) >0:
@@ -2630,7 +2631,6 @@ if NumberSyncUnits>0:
 	listData.append((SYN,'SYN'))
 if NumberBatteryUnits>0:
 	listData.append((STS,'STS'))
-
 if cfg['FormatMode']=='SingleUC':
 	print('create single UCBlock on the whole period =>',cfg['outputpath']+'UCBlock.nc4')
 	createUCBlock(cfg['outputpath']+'UCBlock.nc4',0,ListScenarios[0],datesSSV.loc[0]['start'],datesSSV.loc[0]['end'])
