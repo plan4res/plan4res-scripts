@@ -106,8 +106,6 @@ for var in cfg['variables']:
 	isInternal=False
 	print('treat ',var)
 	
-		
-	if 'Network' in var: print(cfg['variables'][var]['unit'])
 	if 'source' in cfg['variables'][var]:
 		if cfg['variables'][var]['source']=='internal':
 			isInternal=True
@@ -265,12 +263,7 @@ for var in cfg['variables']:
 			vardata['startVar']=var
 			vardata['Variable']=vardata['startVar'].str.cat(vardata['Variable'])
 			vardata=vardata.drop(['startVar'],axis=1)
-			if 'Fixed' in var: 
-				printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-				printdata=printdata[ printdata['Year']==2018]
-				print(printdata)
-				vardata.to_csv(cfg['outputpath']+str(6)+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
-	
+			
 		elif rulecat=='complete_variable_name':
 			completion=cfg['variables'][var]['rules'][rulecat]
 			vardata['endVar']=completion
@@ -383,10 +376,6 @@ for var in cfg['variables']:
 				else:
 					vardataout=pd.concat([vardataout,globaldata],axis=0,ignore_index=True)
 			vardata=vardataout
-	if 'Fixed' in var: 
-		printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Electricity|Coal|Hard coal|w/o CCS'  ])
-		printdata=printdata[ printdata['Year']==2018]
-		print(printdata)
 	
 	if not vardata.empty:
 		if 'Year' not in vardata.columns:
@@ -401,12 +390,7 @@ for var in cfg['variables']:
 						vardatayear['Value']=vardatayear[year]
 						vardata=pd.concat([vardata,vardatayear],axis=0)
 
-		if 'Fixed' in var: 
-			print('after year')
-			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-			printdata=printdata[ printdata['Year']==2018]
-			print(printdata)
-	
+
 		#fill scenario
 		if 'PathwayScenario' in vardata.columns:
 			vardata['Scenario']=vardata['PathwayScenario']
@@ -418,54 +402,19 @@ for var in cfg['variables']:
 				colsKeep.append(col)
 		vardata=vardata[ colsKeep ]
 		
-		if 'Fixed' in var: 
-			print('after colskeep')
-			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-			printdata=printdata[ printdata['Year']==2018]
-			print(printdata)
-			
 		#fill missing columns
 		for col in IAMCcols:
 			if col not in colsKeep:
-				if 'Fixed' in var: print('col ', col ,' not in colskeep')
 				vardata[col]=cfg['defaultvalues'][col]
-		if 'Fixed' in var: 
-			print('after colsmiss')
-			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-			printdata=printdata[ printdata['Year']==2018]
-			print(printdata)
-			print(printdata['Year'])
-			print(printdata.Year.dtype)
-			print(printdata['Year'].astype(int))
-			print('year')
-			print(vardata['Year'])
-			print('converted year')
-			print(vardata['Year'].astype(int))
-			print('vardata')
-			print(vardata)
-			vardata.to_csv(cfg['outputpath']+'beforeyear'+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
-	
+
 		vardata['Year']=vardata['Year'].astype(int)
-		if 'Fixed' in var: 
-			vardata.to_csv(cfg['outputpath']+'afteryear'+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
-	
-			print('converted vardata')
-			print(vardata)
-			print('after yearconv')
-			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-			printdata=printdata[ printdata['Year']==2018]
-			print(printdata)
-			
+		
 		if isFirst:
 			out=vardata
 			isFirst=False
 		else:
 			out=pd.concat([out,vardata],axis=0,ignore_index=True)
-		if 'Fixed' in var: 
-			'after concat'
-			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
-			printdata=printdata[ printdata['Year']==2018]
-			print(printdata)
+	
 	else: print('empty data')
 	
 	#vardata.to_csv(cfg['outputpath']+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
