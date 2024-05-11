@@ -81,7 +81,7 @@ cfg['dayfirst']=cfg['Calendar']['dayfirst']
 cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
 if 'pythonDir' not in cfg: 
 	if cfg['USEPLAN4RESROOT']: 
-		cfg['pythonDir']='/scripts/python/plan4res-scripts/'
+		cfg['pythonDir']='/scripts/python/plan4res-scripts/settings/'
 	else:
 		print('pythonDir missing in settingsCreateInputPlan4res')
 		exit()
