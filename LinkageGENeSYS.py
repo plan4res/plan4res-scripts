@@ -106,6 +106,7 @@ for var in cfg['variables']:
 	isInternal=False
 	print('treat ',var)
 	
+		
 	if 'Network' in var: print(cfg['variables'][var]['unit'])
 	if 'source' in cfg['variables'][var]:
 		if cfg['variables'][var]['source']=='internal':
@@ -113,13 +114,13 @@ for var in cfg['variables']:
 		else:
 			# get data
 			if cfg['variables'][var]['source']!='input':
-				vardata=pd.DataFrame(data.loc[cfg['variables'][var]['source']])
+				vardata=pd.DataFrame(data=data.loc[cfg['variables'][var]['source']])
 			else:
 				firstSheet=True
 				for sheet in cfg['variables'][var]['sheets']:
-					vardatasheet=pd.DataFrame(pd.DataFrame(data.loc[cfg['variables'][var]['source']+'_'+sheet]))
+					vardatasheet=pd.DataFrame(data=data.loc[cfg['variables'][var]['source']+'_'+sheet])
 					if firstSheet: 
-						vardata=pd.DataFrame(vardatasheet)
+						vardata=pd.DataFrame(data=vardatasheet)
 						firstSheet=False
 					else:
 						vardata=pd.concat([vardata,vardatasheet],axis=0)
@@ -131,15 +132,23 @@ for var in cfg['variables']:
 			firstFile=True
 			for file in cfg['variables'][var]['sources']:
 				print(' read ',file)
+				vardatafile=pd.DataFrame(data=data.loc[file])
+				if 'Unit' not in vardatafile.columns: vardatafile['Unit']=cfg['variables'][var]['unit']
+					
 				if firstFile:
-					vardata=pd.DataFrame(data.loc[file])
-	
-					if 'Unit' not in vardata.columns: vardata['Unit']=cfg['variables'][var]['unit']
+					vardata=pd.DataFrame(data=vardatafile)
 					firstFile=False
-				else:
-					vardata=pd.concat([vardata,pd.DataFrame(data.loc[file])],axis=0)
-	
+				else:					
+					vardata=pd.concat([vardata,vardatafile],axis=0)
+				
 	colsdata=[]
+	
+	if 'Region' in vardata.columns:
+		vardata=vardata[ vardata['Region'].isin(regions) ]
+	if 'Region2' in vardata.columns:
+		vardata=vardata[ vardata['Region'].isin(regions) ]
+	
+	
 	if 'Unit' not in vardata.columns:
 		vardata['Unit']=cfg['variables'][var]['unit']
 
@@ -158,34 +167,31 @@ for var in cfg['variables']:
 				else:
 					fullmapping=pd.concat([fullmapping,mappingpart],axis=0)
 			vardata=vardata[ vardata[colmap].isin(list(fullmapping.index)) ]
-	
-			# create variable name
-			dict={fullmapping.index[i]: fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}
-			#dict={k : v for k,v in fullmapping.values}
 			
+			# create variable name
+			dict={fullmapping.index[i]: fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}			
 			vardata['Variable']=vardata[colmap].map(lambda a: dict[a])
-	
+			
 			# compute variable
 			ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
 			colsKeep=[]
 			for coldata in vardata.columns:
-				#if coldata in IAMCcols+colsdata:
 				if coldata in IAMCcols:
 					colsKeep.append(coldata)
 			vardata=vardata[ colsKeep ]
-
+			
 			colsToAggr=[]			
-			#vardata=vardata.drop(columns=colmap)
 			for coldata in vardata.columns:
 				if coldata != 'Value' and coldata not in colsToAggr:
 					colsToAggr.append(coldata)
-			vardata['Unit']=vardata['Unit'].fillna(cfg['variables'][var]['unit'])
-			vardata=vardata.groupby(colsToAggr).agg(ruleagg).reset_index()
-	
+			if 'Year' in vardata.columns:
+				vardata['Year']=vardata['Year'].astype(int)
+			vardata=pd.DataFrame(data=pd.DataFrame(data=vardata).groupby(colsToAggr).agg(ruleagg).reset_index())
+
 		elif rulecat=='addyear':
 			firstYear=True
 			for year in Years:
-				vardatayear=pd.DataFrame(vardata)
+				vardatayear=pd.DataFrame(data=vardata)
 				vardatayear['Year']=year				
 				if firstYear:
 					vardataout=vardatayear
@@ -200,7 +206,7 @@ for var in cfg['variables']:
 			col=cfg['variables'][var]['rules'][rulecat]['column']
 			firstMap=True
 			for map in cfg['variables'][var]['rules'][rulecat]['mappings']:
-				vardatamap=pd.DataFrame(vardata[ vardata[col].isin(list(mappings.loc[map].index)) ])
+				vardatamap=pd.DataFrame(data=vardata[ vardata[col].isin(list(mappings.loc[map].index)) ])
 				if firstMap:
 					vardataout=vardatamap
 					firstMap=False
@@ -238,6 +244,9 @@ for var in cfg['variables']:
 			for colselect in cfg['variables'][var]['rules'][rulecat]:
 				values=cfg['variables'][var]['rules'][rulecat][colselect]['values']
 				vardata=vardata[ vardata[colselect].isin(values) ]
+			if 'Fixed' in var:
+				vardata.to_csv(cfg['outputpath']+str(2)+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
+	
 		elif rulecat=='group':
 			ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
 			colsKeep=[]
@@ -256,7 +265,12 @@ for var in cfg['variables']:
 			vardata['startVar']=var
 			vardata['Variable']=vardata['startVar'].str.cat(vardata['Variable'])
 			vardata=vardata.drop(['startVar'],axis=1)
-
+			if 'Fixed' in var: 
+				printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+				printdata=printdata[ printdata['Year']==2018]
+				print(printdata)
+				vardata.to_csv(cfg['outputpath']+str(6)+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
+	
 		elif rulecat=='complete_variable_name':
 			completion=cfg['variables'][var]['rules'][rulecat]
 			vardata['endVar']=completion
@@ -354,7 +368,7 @@ for var in cfg['variables']:
 			vardata['>']='>'
 			vardata['Region']=vardata['Region'].str.cat(vardata['>']).str.cat(vardata['Region2'])
 		elif rulecat=='global':
-			globaldata=pd.DataFrame(vardata)
+			globaldata=pd.DataFrame(data=vardata)
 			globalreg=cfg['global_region']
 			isFirstRegion=True
 			# case of interconnection variable
@@ -364,11 +378,16 @@ for var in cfg['variables']:
 			for region in regions_use:
 				globaldata['Region']=region
 				if isFirstRegion:
-					vardataout=pd.DataFrame(globaldata)
+					vardataout=pd.DataFrame(data=globaldata)
 					isFirstRegion=False
 				else:
 					vardataout=pd.concat([vardataout,globaldata],axis=0,ignore_index=True)
 			vardata=vardataout
+	if 'Fixed' in var: 
+		printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Electricity|Coal|Hard coal|w/o CCS'  ])
+		printdata=printdata[ printdata['Year']==2018]
+		print(printdata)
+	
 	if not vardata.empty:
 		if 'Year' not in vardata.columns:
 			firstYear=True
@@ -378,10 +397,16 @@ for var in cfg['variables']:
 						vardata['Value']=vardata[year]
 						firstYear=False
 					else:
-						vardatayear=pd.DataFrame(vardata)
+						vardatayear=pd.DataFrame(data=vardata)
 						vardatayear['Value']=vardatayear[year]
 						vardata=pd.concat([vardata,vardatayear],axis=0)
 
+		if 'Fixed' in var: 
+			print('after year')
+			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+			printdata=printdata[ printdata['Year']==2018]
+			print(printdata)
+	
 		#fill scenario
 		if 'PathwayScenario' in vardata.columns:
 			vardata['Scenario']=vardata['PathwayScenario']
@@ -393,19 +418,56 @@ for var in cfg['variables']:
 				colsKeep.append(col)
 		vardata=vardata[ colsKeep ]
 		
+		if 'Fixed' in var: 
+			print('after colskeep')
+			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+			printdata=printdata[ printdata['Year']==2018]
+			print(printdata)
+			
 		#fill missing columns
 		for col in IAMCcols:
 			if col not in colsKeep:
+				if 'Fixed' in var: print('col ', col ,' not in colskeep')
 				vardata[col]=cfg['defaultvalues'][col]
+		if 'Fixed' in var: 
+			print('after colsmiss')
+			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+			printdata=printdata[ printdata['Year']==2018]
+			print(printdata)
+			print(printdata['Year'])
+			print(printdata.Year.dtype)
+			print(printdata['Year'].astype(int))
+			print('year')
+			print(vardata['Year'])
+			print('converted year')
+			print(vardata['Year'].astype(int))
+			print('vardata')
+			print(vardata)
+			vardata.to_csv(cfg['outputpath']+'beforeyear'+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
+	
 		vardata['Year']=vardata['Year'].astype(int)
-
+		if 'Fixed' in var: 
+			vardata.to_csv(cfg['outputpath']+'afteryear'+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
+	
+			print('converted vardata')
+			print(vardata)
+			print('after yearconv')
+			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+			printdata=printdata[ printdata['Year']==2018]
+			print(printdata)
+			
 		if isFirst:
 			out=vardata
 			isFirst=False
 		else:
 			out=pd.concat([out,vardata],axis=0,ignore_index=True)
+		if 'Fixed' in var: 
+			'after concat'
+			printdata=pd.DataFrame(data=vardata[ vardata['Variable']=='Fixed Cost|Electricity|Coal|Hard coal|w/o CCS'  ])
+			printdata=printdata[ printdata['Year']==2018]
+			print(printdata)
 	else: print('empty data')
- 
+	
 	#vardata.to_csv(cfg['outputpath']+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
 	
 	#IAM=pyam.IamDataFrame(vardata)
