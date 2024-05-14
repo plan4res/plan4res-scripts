@@ -31,6 +31,7 @@ cfg1={}
 with open(path+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
 # it is possible to also pass the createplan4res config file which makes some data optional in settings format
+settings_create = None
 if nbargs>2:
 	settings_create=sys.argv[2]
 	cfg2={}
@@ -79,6 +80,20 @@ if format=='excel':
 	sheets=list(excelfile.keys())
 else:
 	sheets=cfg['csvfiles']
+    
+def read_input_csv(cfg, file_name_key, **kwargs):
+    file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
+    if not os.path.isfile(file):
+        logger.error('File '+file+' does not exist. Use key inputpath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+        sys.exit(2)
+    return pd.read_csv(file, **kwargs)
+    
+def read_input_timeseries(cfg, ts_name, **kwargs):
+    file = os.path.join(cfg['timeseriespath'], ts_name)
+    if not os.path.isfile(file):
+        logger.error('File '+file+' does not exist. Use key timeseriespath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+        sys.exit(2)
+    return pd.read_csv(file, **kwargs)
 
 #################################################################################################################################################
 #																																				#
@@ -135,8 +150,8 @@ endTS=pd.to_datetime(cfg['Calendar']['EndTimeSeries'],dayfirst=cfg['Calendar']['
 dates['UCEndData']=pd.Timestamp(year=endTS.year,month=endTS.month,day=endTS.day,hour=endTS.hour,minute=endTS.minute)
 endDS=pd.to_datetime(cfg['Calendar']['EndDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEnd']=pd.Timestamp(year=endDS.year,month=endDS.month,day=endDS.day,hour=endDS.hour,minute=endDS.minute)
-logger.info('dates: timeseries start: '°dates['UCBeginData']+' end: '+dates['UCEndData'])
-logger.info('       plan4res dataset start: '+dates['UCBegin'],' end: '+dates['UCEnd'])
+logger.info('dates: timeseries start: '+str(dates['UCBeginData'])+' end: '+str(dates['UCEndData']))
+logger.info('plan4res dataset start : '+str(dates['UCBegin'])+' end: '+str(dates['UCEnd']))
 
 dates['UCBeginDataYearP4R']=pd.Timestamp(year=dates['UCBegin'].year,month=dates['UCBeginData'].month,day=dates['UCBeginData'].day,hour=dates['UCBeginData'].hour,minute=dates['UCBeginData'].minute)
 DurationTimeSeries=pd.Timedelta(dates['UCEndData']-dates['UCBeginData'])
@@ -177,7 +192,7 @@ durationInstance=dates.UCEnd-dates.UCBegin+pd.Timedelta(hours=1)
 NumberUCTimeSteps=int((durationInstance.days*24+durationInstance.seconds/3600)/UCTimeStep)
 durationUCTimeStep=pd.Timedelta(str(UCTimeStep)+' hours')
 durationSSVTimeStep=pd.Timedelta(str(SSVTimeStep)+' hours')
-logger.info('Duration instance:'+durationInstance)
+logger.info('Duration instance:'+str(durationInstance))
 
 if not ((durationInstance.total_seconds()/3600)/SSVTimeStep)-int((durationInstance.total_seconds()/3600)/SSVTimeStep)==0:
 	NewNumberUCTimeSteps=int((durationInstance.total_seconds()/3600)/SSVTimeStep)*SSVTimeStep/UCTimeStep
@@ -186,7 +201,7 @@ if not ((durationInstance.total_seconds()/3600)/SSVTimeStep)-int((durationInstan
 	durationToDelete=pd.Timedelta(str(NumberUCTimeStepsToDelete*UCTimeStep)+' hours')
 	dates['UCEnd']=dates['UCEnd']-durationToDelete
 	durationInstance=dates.UCEnd-dates.UCBegin+pd.Timedelta(hours=1)
-logger.info('Number of time steps:'+NumberUCTimeSteps+' of duration:'+durationUCTimeStep)
+logger.info('Number of time steps:'+str(NumberUCTimeSteps)+' of duration:'+str(durationUCTimeStep))
 	
 TimeHorizonUC=int(SSVTimeStep/UCTimeStep)
 NumberIntervals=TimeHorizonUC
@@ -223,7 +238,7 @@ if 'ZP_ZonePartition' in sheets:
 	if format=='excel':
 		ZP=pd.read_excel(p4r_excel,sheet_name='ZP_ZonePartition',skiprows=0,index_col=None)
 	else:
-		ZP=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['ZP_ZonePartition'],skiprows=0,index_col=None)
+		ZP=read_input_csv(cfg, 'ZP_ZonePartition', skiprows=0, index_col=None)
 	
 	ZP=ZP.drop_duplicates()
 	Nodes=ZP[Coupling['Partition'].loc['ActivePowerDemand']]
@@ -263,7 +278,7 @@ if 'IN_Interconnections' in sheets:
 	if format=='excel':
 		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
 	else:
-		IN=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['IN_Interconnections'],skiprows=skip,index_col=0)
+		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
 	IN=IN.drop_duplicates()
 	NumberLines=len(IN.index)
 	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
@@ -284,7 +299,7 @@ if 'ZV_ZoneValues' in sheets:
 	if format=='excel':
 		ZV=pd.read_excel(p4r_excel,sheet_name='ZV_ZoneValues',skiprows=0,index_col=None)
 	else:
-		ZV=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['ZV_ZoneValues'],skiprows=0,index_col=None)
+		ZV=read_input_csv(cfg, 'ZV_ZoneValues',skiprows=0,index_col=None)
 	ZV=ZV.drop_duplicates()
 	ZV=ZV.set_index(['Type','Zone'])
 	if 'Profile_Timeserie' in ZV.columns:
@@ -302,7 +317,7 @@ if 'TU_ThermalUnits' in sheets:
 	if format=='excel':
 		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=None)
 	else:
-		TU=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits'],skiprows=skip,index_col=None)
+		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=None)
 	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
 	TU=TU.drop_duplicates()
 	TU=TU.set_index(['Name','Zone'])
@@ -325,7 +340,7 @@ if 'SS_SeasonalStorage' in sheets:
 	if format=='excel':
 		SS=pd.read_excel(p4r_excel,sheet_name='SS_SeasonalStorage',skiprows=skip,index_col=None)
 	else:
-		SS=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage'],skiprows=skip,index_col=None)
+		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=None)
 	if len(SS.index)>0:
 		SS=SS.drop_duplicates()
 		SS=SS.drop( SS[ SS['NumberUnits']==0 ].index )
@@ -363,7 +378,7 @@ if 'STS_ShortTermStorage' in sheets:
 	if format=='excel':
 		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
 	else:
-		STS=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage'],skiprows=skip,index_col=None)
+		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
 	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
 	STS=STS.drop_duplicates()
 	STS=STS.set_index(['Name','Zone'])
@@ -386,7 +401,7 @@ if 'RES_RenewableUnits' in sheets:
 	if format=='excel':
 		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=None)
 	else:
-		RES=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits'],skiprows=skip,index_col=None)
+		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=None)
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
 	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
@@ -440,13 +455,13 @@ else:
 	NumberHydroUnits=0
 NumberElectricalGenerators=NumberArcs+NumberThermalUnits+NumberBatteryUnits+NumberIntermittentUnits+NumberSyncUnits+NumberSlackUnits
 logger.info(str(NumberHydroSystems)+' Hydrosystems')
-logger.info(str(NumberHydroUnits)+' Hydro Units with ',NumberArcs,' generators')
+logger.info(str(NumberHydroUnits)+' Hydro Units with '+str(NumberArcs)+' generators')
 logger.info(str(NumberThermalUnits)+' Thermal Units')
 logger.info(str(NumberBatteryUnits)+' Short term Storage Units')
 logger.info(str(NumberIntermittentUnits)+' Intermittent Units')
 logger.info(str(NumberSyncUnits)+' Synchronous condensers')
 logger.info(str(NumberSlackUnits)+' Slack Units')
-logger.info(str(NumberUnits)+' units, '+NumberElectricalGenerators+' generators')
+logger.info(str(NumberUnits)+' units, '+str(NumberElectricalGenerators)+' generators')
 
 #################################################################################################################################################
 #																																				#
@@ -583,7 +598,7 @@ def create_demand_scenarios():
 			# read timeserie if deterministic
 			elif '.csv' in nameTS: # stochastic OR deterministic series
 				isDeterministic=False
-				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+				TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
 					
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
@@ -626,7 +641,7 @@ def create_inflows_scenarios():
 			InflowsScenarios[reservoir]=pd.DataFrame(columns=ListScenarios)
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['ParametersFormat']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
 		elif '.csv' in nameTS:  # stochastic series
-			TS=pd.read_csv(cfg['timeseriespath']+nameTS,index_col=0)
+			TS=read_input_timeseries(cfg, nameTS, index_col=0)
 			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
@@ -659,7 +674,7 @@ def create_res_scenarios():
 					
 		# read timeserie 
 		if '.csv' in nameTS:  # stochastic series
-			TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+			TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
@@ -695,7 +710,7 @@ def create_thermal_scenarios():
 				
 				# read timeserie 
 				if '.csv' in nameTS:  # stochastic series
-					TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+					TS=read_input_timeseries(cfg['timeseriespath'], nameTS,skiprows=0,index_col=0)
 					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 					TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
@@ -715,7 +730,7 @@ def create_thermal_scenarios():
 			
 			# read timeserie 
 			if '.csv' in nameTS:  # stochastic series
-				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+				TS=read_input_timeseries(cfg['timeseriespath'],nameTS,skiprows=0,index_col=0)
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS)
 				
@@ -1103,7 +1118,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					
 					BVfile=HSSS.loc[hydrosystem]['WaterValues'][hydrounit]
 					if BVfile!='':
-						BVdata=pd.read_csv(cfg['inputpath']+BVfile,index_col=0,skiprows=skip)
+						BVdata=read_input_timeseries(cfg['inputpath'],BVfile,index_col=0,skiprows=skip)
 						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
 						BVdata=BVdata[ (BVdata.index >=start) & (BVdata.index <=end)   ]
@@ -1150,7 +1165,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
-				WVdata=pd.read_csv(cfg['inputpath']+WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata=read_input_timeseries(cfg['inputpath'],WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
