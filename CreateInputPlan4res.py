@@ -21,6 +21,7 @@ handler = logging.StreamHandler()
 #handler.setFormatter(logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S'))
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
+pipe_replace = '-' # to replace | when writing files
 
 
 path = os.environ.get("PLAN4RESROOT")
@@ -535,6 +536,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						if sumValTS>0: newSerie=(1/sumValTS)*newSerie
 						else: newSerie=0.0*newSerie
 						nameNewSerie='AggregatedTimeSerie_'+typeSerie+'_'+reg+'.csv'
+						nameNewSerie=nameNewSerie.replace('|', pipe_replace)
 						newSerie.to_csv(cfg['dirTimeSeries']+nameNewSerie)
 						timeseriesdict[typeData][typeSerie][reg]=nameNewSerie
 		
@@ -898,11 +900,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	# treat global variables
 	globalvars=pd.Series(str)
 	for datagroup in cfg['listdatagroups']:
-		logger.info('treat datagroup ',datagroup)
+		logger.info('treat datagroup '+datagroup)
 		if 'techno' in cfg['datagroups'][datagroup]['listvariables'].keys():
 			for techno in cfg['datagroups'][datagroup]['listvariables']['techno'].keys():
 				if 'global' in cfg['datagroups'][datagroup]['listvariables']['techno'][techno].keys():
-					logger.info('there are global vars for:',datagroup,',techno:',techno)
+					logger.info('there are global vars for:'+datagroup+',techno:'+techno)
 					if type(cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global'])==list:
 						for var in cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global']:
 							for fuel in cfg['technos'][techno]:
@@ -937,7 +939,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		v=0
 		# loop on technos 
 		for oetechno in cfg['technos']['thermal']:
-			logger.info('treat ',oetechno)
+			logger.info('treat '+oetechno)
 			TU=pd.DataFrame({'Name':oetechno,'region':listregions})
 			TU=TU.set_index('region')
 			for variable in vardict['Input']['VarTU']:
@@ -957,7 +959,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					varname=vardict['Input']['VarTU'][variable]+oetechno
 				
 				if varname not in bigdata['variable'].unique():
-					logger.info('variable ',varname,' not in dataset')
+					logger.info('variable '+varname+' not in dataset')
 					if not isMainVar:
 						TreatVar=False
 					TreatVar=False
@@ -972,12 +974,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					isGlobal=False
 					Global=0
 					if vardict['Input']['VarTU'][variable]+oetechno in globalvars.index:
-						logger.info('variable ',variable,' ',varname,' is global for region ',globalvars[vardict['Input']['VarTU'][variable]+oetechno],' techno ',oetechno)
+						logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+oetechno]+' techno '+oetechno)
 						isGlobal=True
 						Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+oetechno] ]
 					if isFuel:
 						if vardict['Input']['VarTU'][variable]+fuel in globalvars.index:
-							logger.info('variable ',variable,' ',varname,' is global for region ',globalvars[vardict['Input']['VarTU'][variable]+fuel],' fuel ',fuel)
+							logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
 							isGlobal=True
 							Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+fuel] ]
 						
@@ -1101,7 +1103,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		logger.info('Treating SeasonalStorage')
 		v=0
 		for oetechno in	cfg['technos']['reservoir']:
-			logger.info('treat ',oetechno)
+			logger.info('treat '+oetechno)
 			SS=pd.DataFrame({'Name':oetechno,'region':listregions})
 			SS=SS.set_index('region')
 			
@@ -1116,7 +1118,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info('variable ',variable,' ',varname,' is global for region ',globalvars[varname],' techno ',oetechno)
+					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					
 					Global=data[variable][globalvars[varname] ]
@@ -1133,7 +1135,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if not isMaxVolume and 'MaxPower' in SS.columns:
 				multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 				SS['MaxVolume']=SS['MaxPower']*multfactor
-				logger.info('no Max Storage for ',oetechno,' replaced by MaxPower*',str(multfactor))
+				logger.info('no Max Storage for '+oetechno+' replaced by MaxPower*'+str(multfactor))
 				
 			# replace low capacities with 0
 			SS.loc[ SS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
@@ -1239,7 +1241,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		# treat short term hydro storage
 		isVarHydroStorage=pd.Series()
 		for oetechno in	cfg['technos']['hydrostorage']:
-			logger.info('treat ',oetechno)
+			logger.info('treat '+oetechno)
 			for variable in vardict['Input']['VarSTS|Hydro']:
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
@@ -1255,7 +1257,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				Global=0
 				# treat global variables
 				if varname in globalvars.index:
-					logger.info('variable ',variable,' ',varname,' is global for region ',globalvars[varname],' techno ',oetechno)
+					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					Global=data[variable][globalvars[varname] ]
 
@@ -1354,7 +1356,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		# treat batteries
 		isVarBattery=pd.Series()
 		for oetechno in	cfg['technos']['battery']:
-			logger.info('treat ',oetechno)
+			logger.info('treat '+oetechno)
 			BAT=pd.DataFrame({'region':listregions})
 			BAT=BAT.set_index('region')
 			for variable in vardict['Input']['VarSTS|Battery']:
@@ -1372,7 +1374,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info('variable ',variable,' ',varname,' is global for region ',globalvars[varname],' techno ',oetechno)
+					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					Global=data[variable][globalvars[varname] ]
 					
@@ -1488,7 +1490,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# loop on appliances
 			for appliance in cfg['technos']['demandresponseloadshifting']:
-				logger.info('treat ',appliance)
+				logger.info('treat '+appliance)
 				DRLS=pd.DataFrame({'region':cfg['partition'][partitionDemand]})
 				DRLS=DRLS.set_index('region')
 				EMminusE=pd.Series(index={'region':cfg['partition'][partitionDemand]})
@@ -1612,7 +1614,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		logger.info('Treating Renewable units')
 		isVarRes=pd.Series()
 		for oetechno in	cfg['technos']['res']+cfg['technos']['runofriver']:
-			logger.info('treat ',oetechno)
+			logger.info('treat '+oetechno)
 			RES=pd.DataFrame({'Name':oetechno,'region':listregions})
 			RES=RES.set_index('region')
 			for variable in vardict['Input']['VarRES']:
@@ -1630,7 +1632,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info(varname, ' is global')
+					logger.info(str(varname)+' is global')
 					isGlobal=True
 					Global=data[variable][globalvars[varname]]
 					#RES[variable]=RES[variable][globalvars[vardict['Input']['VarRES'][variable]] ]
