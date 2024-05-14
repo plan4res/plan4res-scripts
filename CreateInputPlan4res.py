@@ -1717,3 +1717,4 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigRES=BigRES.fillna(0)
 		BigRES.to_csv(outputdir+cfg['csvfiles']['RES_RenewableUnits'], index=False)
 
+sys.exit(0)
