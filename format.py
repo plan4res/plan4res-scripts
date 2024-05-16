@@ -11,12 +11,7 @@ from netCDF4 import Dataset
 import calendar
 import sys
 
-import logging
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-#handler.setFormatter(logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S'))
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+from p4r_python_utils import *
 
 path = os.environ.get("PLAN4RESROOT")
 logger.info('path='+path)
@@ -54,6 +49,7 @@ if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
 
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
+	cfg['path']=path+cfg['path']
 	cfg['outputpath']=path+cfg['outputpath']
 	cfg['inputpath']=path+cfg['inputpath']
 	cfg['timeseriespath']=path+cfg['timeseriespath']
@@ -80,20 +76,20 @@ if format=='excel':
 	sheets=list(excelfile.keys())
 else:
 	sheets=cfg['csvfiles']
-    
+
 def read_input_csv(cfg, file_name_key, **kwargs):
-    file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
-    if not os.path.isfile(file):
-        logger.error('File '+file+' does not exist. Use key inputpath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
-        sys.exit(2)
-    return pd.read_csv(file, **kwargs)
-    
+	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
+	if not os.path.isfile(file):
+		logger.error('File '+file+' does not exist. Use key inputpath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+		log_and_exit(2, cfg['path'])
+	return pd.read_csv(file, **kwargs)
+	
 def read_input_timeseries(cfg, ts_name, **kwargs):
-    file = os.path.join(cfg['timeseriespath'], ts_name)
-    if not os.path.isfile(file):
-        logger.error('File '+file+' does not exist. Use key timeseriespath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
-        sys.exit(2)
-    return pd.read_csv(file, **kwargs)
+	file = os.path.join(cfg['timeseriespath'], ts_name)
+	if not os.path.isfile(file):
+		logger.error('File '+file+' does not exist. Use key timeseriespath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+		log_and_exit(2, cfg['path'])
+	return pd.read_csv(file, **kwargs)
 
 #################################################################################################################################################
 #																																				#
@@ -129,7 +125,7 @@ for coupling_constraint in cfg['CouplingConstraints']:
 	if coupling_constraint not in ListPossibleTypesCoupling:
 		logger.error('Constraint '+coupling_constraint+'is not possible')
 		logger.error('Possible constraints are: '+', '.join(ListPossibleTypesCoupling))
-		exit(1)
+		log_and_exit(1, cfg['path'])
 	if coupling_constraint=="PollutantBudget":
 		NumberPollutants=len(cfg['CouplingConstraints']['PollutantBudget'])
 		for pollutant in ListPollutants:
@@ -270,7 +266,7 @@ if 'ZP_ZonePartition' in sheets:
 	TotalNumberPollutantZones=sum(len(Partition.loc[Coupling['Partition'][elem]]) for elem in ListPollutants)
 else:
 	logger.error('ZP_Partition missing')
-	exit(2)
+	log_and_exit(2, cfg['path'])
 
 # Read sheet IN_Interconnections
 #################################################################################################################################################
@@ -309,7 +305,7 @@ if 'ZV_ZoneValues' in sheets:
 	ZV=ZV.fillna(0)
 else: 
 	logger.error('ZV_ZoneValues missing')
-	exit(1)
+	log_and_exit(1, cfg['path'])
 
 # Read sheet TU_ThermalUnits
 #################################################################################################################################################
@@ -2121,7 +2117,7 @@ def createSDDPBlock(filename,id):
 	Scenarios=Block.createVariable("Scenarios",np.double,("NumberScenarios","ScenarioSize"))
 	indexScenario=0
 	for scenario in ListScenarios:
-		logger.info('scenario ',scenario)
+		logger.info('scenario '+scenario)
 		ScenarioData=pd.Series(index=range( NumberSSVTimeSteps ),dtype=object)
 		for t in range(NumberSSVTimeSteps):
 			start=datesSSV.loc[t]['start']
@@ -2659,7 +2655,7 @@ if cfg['FormatMode']=='SingleUC':
 elif cfg['FormatMode']=='UC':
 	logger.info('create One UCBlock per SSV timestep =>'+cfg['outputpath']+'UCBlock_*.nc4')
 	for i in range(NumberSSVTimeSteps):
-		logger.info('Create UCBlock '+str(i)+' from '+datesSSV.loc[i]['start']+' to '+datesSSV.loc[i]['end']+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 elif cfg['FormatMode']=='SDDP':
@@ -2670,7 +2666,7 @@ elif cfg['FormatMode']=='SDDPandUC':
 	logger.info('create One SDDPBlock and One UCBlock per SSV timestep =>'+cfg['outputpath']+'SDDPBlock.nc4')
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 	for i in range(NumberSSVTimeSteps):
-		logger.info('Create UCBlock ',i,' from ',datesSSV.loc[i]['start'],' to ',datesSSV.loc[i]['end'],' =>',cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 elif cfg['FormatMode']=='INVEST':
@@ -2687,7 +2683,7 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 	for i in range(NumberSSVTimeSteps):
-		logger.info('Create UCBlock '+i+' from ',datesSSV.loc[i]['start']+' to '+datesSSV.loc[i]['end']+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 

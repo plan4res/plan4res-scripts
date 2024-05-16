@@ -15,14 +15,7 @@ from calendar import monthrange
 from itertools import product
 import sys
 
-import logging
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-#handler.setFormatter(logging.Formatter('%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S'))
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
-pipe_replace = '-' # to replace | when writing files
-
+from p4r_python_utils import *
 
 path = os.environ.get("PLAN4RESROOT")
 nbargs=len(sys.argv)
@@ -57,8 +50,8 @@ if 'pythonDir' not in cfg:
 	if cfg['USEPLAN4RESROOT']: 
 		cfg['pythonDir']='scripts/python/plan4res-scripts/settings/'
 	else:
-		logger.error('pythonDir missing in settingsCreateInputPlan4res')
-		sys.exit(1)
+		logger.error('\npythonDir missing in settingsCreateInputPlan4res')
+		log_and_exit(1, cfg['path'])
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdatapath']=cfg['path']+'IAMC/'
@@ -354,9 +347,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				logger.info('read file '+file)
 				logger.info('read as df')
 				if not os.path.isfile(file):
-					logger.error('Error: '+file+' does not exist.') 
+					logger.error('\nError: '+file+' does not exist.') 
 					logger.error('Check file '+settings_create+'. You can specify the input data repository using key inputdatapath (default=IAMC) and file name using key inputdata (default=name of the study+.xlsx).')
-					sys.exit(2)
+					log_and_exit(2, cfg['path'])
 				if 'xlsx' in file:
 					df=pd.read_excel(file,sheet_name='data')
 				else:
@@ -495,10 +488,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							file = os.path.join(cfg['dirTimeSeries'], timeseriesdict[typeData][typeSerie][region])
 							logger.info('read file '+file)
 							if not os.path.isfile(file):
-								logger.error('Error: '+file+' does not exist.') 
+								logger.error('\nError: '+file+' does not exist.') 
 								logger.error('Check file '+settings_create+'. You can specify the timeseries input repository using key dirTimeSeries (default=study path/TimeSeries).')
 								logger.error('Also check the timeseries file name  for '+typeData+', '+typeSerie+', '+region+' in file '+timeseries_setting_file)
-								sys.exit(2)
+								log_and_exit(2, cfg['path'])
 							timeserie=pd.read_csv(file,index_col=0)
 							if len(timeserie.columns)>1:
 								for col in timeserie.columns:
@@ -1717,4 +1710,4 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigRES=BigRES.fillna(0)
 		BigRES.to_csv(outputdir+cfg['csvfiles']['RES_RenewableUnits'], index=False)
 
-sys.exit(0)
+log_and_exit(0, cfg['path'])
