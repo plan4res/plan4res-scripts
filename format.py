@@ -77,13 +77,6 @@ if format=='excel':
 else:
 	sheets=cfg['csvfiles']
 
-def read_input_csv(cfg, file_name_key, **kwargs):
-	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
-	if not os.path.isfile(file):
-		logger.error('File '+file+' does not exist. Use key inputpath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
-		log_and_exit(2, cfg['path'])
-	return pd.read_csv(file, **kwargs)
-	
 def read_input_timeseries(cfg, ts_name, **kwargs):
 	file = os.path.join(cfg['timeseriespath'], ts_name)
 	if not os.path.isfile(file):
