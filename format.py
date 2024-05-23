@@ -20,6 +20,7 @@ if nbargs>1:
 else:
 	settings_format="settings_format.yml"
 # read config file
+print('path+settings_format=',path+settings_format)
 cfg1={}
 with open(path+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)

@@ -248,11 +248,33 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	isInvest=cfg['ParametersCreate']['invest']
 	listTechnosInDataset=[]
 	listLinesInDataset=[]
+	listInvestedAssets=[]
+	
+	# seasonal storage mix
+	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage']):
+		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage'])
+		listTechnosSS=InputData.Name.unique().tolist()
+		for techno in listTechnosSS:
+			if techno not in listTechnosInDataset:
+				listTechnosInDataset.append(techno)
+			df=InputData[ InputData.Name==techno ]
+			df.index=df.Zone
+			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
+			InputVarCost[techno]=0
+			InputStartUpCost[techno]=0
+			InputStartUpCost[techno]=0
+		if isInvest:
+			IsInvestedTechno[techno]=False
+	else: listTechnosSS=[]	
 	
 	# thermal mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits']):
 		InputTUData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits'])
 		listTechnosTU=InputTUData.Name.unique().tolist()
+		if isInvest:
+			for row in InputTUData.index:
+				if (InputTUData.loc[row,'MaxAddedCapacity']>0)+(InputTUData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )
 		for techno in listTechnosTU:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -272,27 +294,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosTU=[]
 	
-	# seasonal storage mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage'])
-		listTechnosSS=InputData.Name.unique().tolist()
-		for techno in listTechnosSS:
-			if techno not in listTechnosInDataset:
-				listTechnosInDataset.append(techno)
-			df=InputData[ InputData.Name==techno ]
-			df.index=df.Zone
-			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
-			InputVarCost[techno]=0
-			InputStartUpCost[techno]=0
-			InputStartUpCost[techno]=0
-		if isInvest:
-			IsInvestedTechno[techno]=False
-	else: listTechnosSS=[]	
-	
 	# intermittent generation mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits']):
 		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits'])
 		listTechnosRES=InputData.Name.unique().tolist()
+		if isInvest:
+			for row in InputData.index:
+				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )
 		for techno in listTechnosRES:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -310,6 +319,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage']):
 		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage'])
 		listTechnosSTS=InputData.Name.unique().tolist()
+		if isInvest:
+			for row in InputData.index:
+				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )
 		for techno in listTechnosSTS:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -361,15 +374,20 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		# get solution of capacity expansion
 		sol=pd.read_csv(cfg['dir']+'Solution_OUT.csv',header=None)
 		indexSol=0
-		for techno in InstalledCapacity.columns:
-			for region in InstalledCapacity.index:
-				if IsInvestedTechno[techno].loc[region]:
-					InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
-					indexSol=indexSol+1
+		
+		
+		for asset in listInvestedAssets:
+			techno=asset[1]
+			region=asset[0]
+			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
+			#InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
+			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
+			indexSol=indexSol+1
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
-				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol]-LineCapacity.loc[line],decimals=cfg['arrondi'])
+				#InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol]-LineCapacity.loc[line],decimals=cfg['arrondi'])
+				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])
 				indexSol=indexSol+1
 		InvestedLine=InvestedLine.fillna(0.0)
 		InvestedCapacity.to_csv(cfg['dirOUT']+'InvestedCapacity.csv')
@@ -666,7 +684,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				if tech not in TechnosInGraph:
 					TechnosInGraph.append(tech)
 		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])
-		
 		if cfg['geopandas']:			 
 			figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
 			myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
@@ -682,6 +699,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				ColorsKept=Colors['color'].loc[ todraw.index ]
 				x=myeurope['x'][country]
 				y=myeurope['y'][country]
+				#axmapeurope.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
 				axmapeurope.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
 			step=1/len(df.columns)
 			X=np.arange(xmin,xmin+1,step)			
@@ -740,22 +758,23 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			x=0
 			y=0
 			for item in List:
-				chloroeurope=myeurope
-				chloroeurope[item]=mytable[item]
-				mintech=mytable[item].min()
-				maxtech=mytable[item].max()
-				chloroeurope=myeurope.fillna(0)
-				ax=chloroeurope.plot(column=item,ax=axes[y][x],cmap=ChloroColors.loc[item,'colormap'],vmin=mintech,vmax=maxtech,legend=True,\
-					legend_kwds={'label':"energy (MWh)",'orientation':"vertical"})
-				fig=ax.figure
-				cb_ax=fig.axes[1]
-				cb_ax.tick_params(labelsize=40)
-				axes[y][x].set_title(item,fontsize=TitleSize)
+				if item in mytable.columns:
+					chloroeurope=myeurope
+					chloroeurope[item]=mytable[item]
+					mintech=mytable[item].min()
+					maxtech=mytable[item].max()
+					chloroeurope=myeurope.fillna(0)
+					ax=chloroeurope.plot(column=item,ax=axes[y][x],cmap=ChloroColors.loc[item,'colormap'],vmin=mintech,vmax=maxtech,legend=True,\
+						legend_kwds={'label':"energy (MWh)",'orientation':"vertical"})
+					fig=ax.figure
+					cb_ax=fig.axes[1]
+					cb_ax.tick_params(labelsize=40)
+					axes[y][x].set_title(item,fontsize=TitleSize)
 
-				if x<NbCols-1: x=x+1
-				else:
-					x=0
-					y=y+1
+					if x<NbCols-1: x=x+1
+					else:
+						x=0
+						y=y+1
 			namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 			plt.savefig(namefigpng,dpi=dpi)
 			fig.clf()
@@ -999,7 +1018,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
 			if isInvest:
 				namefigpng=EuropePieMap(InitialInstalledCapacity,'InitialInstalledCapacityMapPieEurope.jpeg',TechnoColors)
-				namefigpng=EuropePieMap(InvestedInstalledCapacity,'InvestedInstalledCapacityMapPieEurope.jpeg',TechnoColors)
+				#namefigpng=EuropePieMap(InvestedInstalledCapacity,'InvestedInstalledCapacityMapPieEurope.jpeg',TechnoColors)
 
 		del namefigpng
 
@@ -1286,38 +1305,53 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=TimeIndex)
 		meanScenMonotone=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		SlackCmar=pd.DataFrame(columns=listscen)
+		nbHoursSlack=pd.DataFrame(columns=listscen)
 		i=0
 		for index in range(len(cfg['regionsANA'])):
 			reg=cfg['regionsANA'][index]
 			print('     writing file for ',reg)
 			MargCosts[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv')
 			#meanScenReg=MargCosts[index].mean(axis=1).reset_index()
-			meanScenReg=MargCosts[index].mean(axis=1)			
-			meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
-			meanScen[reg]=MargCosts[index].mean(axis=1)
-			meanTime[reg]=meanTimeReg
-			SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
-			List=[]
-			for col in MargCosts[index].columns:
-				data=MargCosts[index][col].tolist()
+			if len(listscen)>1:
+				meanScenReg=MargCosts[index].mean(axis=1)	
+				meanScen[reg]=MargCosts[index].mean(axis=1)
+				meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
+				meanTime[reg]=meanTimeReg
+				SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
+				List=[]
+				for col in MargCosts[index].columns:
+					data=MargCosts[index][col].tolist()
+					data.sort(reverse=True)
+					List.append(data)
+			else:
+				meanScenReg=MargCosts[index]
+				meanScen[reg]=MargCosts[index]
+				meanTimeReg=MargCosts[index].mean(axis=0)
+				meanTime[reg]=meanTimeReg
+				SortedSlack=pd.Series(index=MargCosts[index].index)
+				List=[]
+				data=MargCosts[index].tolist()
 				data.sort(reverse=True)
 				List.append(data)
 			SortedSlack=pd.DataFrame(data=List).transpose()
-			SortedSlack.columns=MargCosts[index].columns
+			if len(listscen)>1: SortedSlack.columns=MargCosts[index].columns
 			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv')
 			del data, SortedSlack, List
-						
-			# compute mean
-			SlackCmarReg=(MargCosts[index].apply(pd.value_counts)).tail(1).fillna(0.0)
-			SlackCmarReg.columns=listscen
+			
+			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
+			
+			SlackCmarReg.columns=listscen	
+			
 			if not(FailureCost in SlackCmarReg.index): 
 				print('       no non-served energy for zone ',reg)
-				for col in SlackCmarReg.columns: 
-					SlackCmarReg[col]=0
-			SlackCmar=pd.concat([SlackCmar, SlackCmarReg ],ignore_index=True)
+				nbHoursSlack.loc[reg]=0
+			else:
+				nbHoursSlack.loc[reg]=SlackCmarReg.iloc[0]
+			
+			#SlackCmar=pd.concat([SlackCmar, SlackCmarReg ],ignore_index=True)
 			del SlackCmarReg
 			
-		SlackCmar.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
+		nbHoursSlack.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
 		meanTime.index=cfg['ParametersFormat']['Scenarios']
 		meanTime.to_csv(cfg['dirOUT'] +'meanTimeCmar.csv',index=True)
 		meanScen.to_csv(cfg['dirOUT'] +'meanScenCmar.csv',index=True)
@@ -2788,10 +2822,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				mytable['name']=mytable.index
 				mytable=mytable.reset_index()
 				
-				namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
-					cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
-					cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
-					'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
+				# namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
+					# cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
+					# cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
+					# 'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
 
 				# draw chloromap for C02
 				myeurope['CO2']=tablebilansNRJ['CO2']
