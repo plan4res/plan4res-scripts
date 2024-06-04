@@ -10,8 +10,6 @@ years: [2030]
 # if data are located within the plan4res container, use plan4res path
 USEPLAN4RESROOT: True
 
-# path where openentrance nomenclature is cloned
-nomenclatureDir: '/scripts/python/openentrance/definitions/'
 csvfiles: # list of csv files to create in the plan4res excel file (comment line if not treated)
     ZP_ZonePartition: 'ZP_ZonePartition.csv'  # mandatory, contains description of regions
     IN_Interconnections: 'IN_Interconnections.csv'  # optionnal, contains description of network

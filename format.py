@@ -25,7 +25,6 @@ else:
 cfg1={}
 with open(path+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
-# it is possible to also pass the createplan4res config file which makes some data optional in settings format
 settings_create = None
 if nbargs>2:
 	settings_create=sys.argv[2]
@@ -512,7 +511,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	duration_TS_timestep=pd.Timedelta(str(Hours_freq)+' hours')
 	
 	if Hours_freq==1: 
-		#Extension.index=Extension.index+dates['durationData']
 		Extension.index=Extension.index+durationData
 	else:
 		Extension.index=Extension.index+pd.Timedelta(TS.index[-1]-TS.index[0])+pd.Timedelta(str(Hours_freq)+' hours')
@@ -521,10 +519,7 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	# case where timeserie is given at frequency bigger than hour
 	# resample to hour frequecy before resampling to the required frequency
 	if upsample:
-		#TS=(1/Hours_freq)*TS.resample('h').ffill()  # convert to hourly frequency
 		TS=TS.resample('h').ffill()		# convert to hourly frequency
-		#if isEnergy:
-		#	TS=(1/Hours_freq)*TS
 
 		# extend with missing dates: duplicate last dates
 		if TS.index[-1]< dates['UCEnd']:
@@ -533,7 +528,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 			Extension.index=Extension.index+dur_missing # shift over time
 			TS=pd.concat([TS,Extension]) # add at end of serie
 
-		#TS=TS.resample(newfreq).sum()  # converts to new frequency
 		TS=TS.resample(newfreq).sum()
 	else:
 		TS=TS.resample(newfreq).sum()
@@ -643,7 +637,6 @@ def create_inflows_scenarios():
 			DTS=valTS*DeterministicTimeSeries[nameTS]
 			InflowsScenarios.loc[reservoir]=pd.DataFrame(columns=ListScenarios)
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=DTS
-		#InflowsScenarios.loc[reservoir].to_csv('Inflows_'+str(reservoir[1])+'.csv')
 					
 	return InflowsScenarios
 	
@@ -1084,10 +1077,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,0]
 				elif NumberReservoirs==2:
 					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,InitialFlowRateData*UCTimeStep,0]
-					
-				#UpHillFlow=HBlock.createVariable("UpHillFlow",np.double,("NumberArcs"))
-				#DownHillFlow=HBlock.createVariable("DownHillFlow",np.double,("NumberArcs"))
-				
+									
 				indexHU=indexHU+1
 		# add polyhedral function for water values
 		PolyhedralFunctionBlock=HSBlock.createGroup('PolyhedralFunctionBlock')
@@ -1230,7 +1220,6 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					pmin=np.minimum(DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 					MinPower[:]=pmin
 				else:
-					#MinPowerData=MinPowerData*UCTimeStep
 					if len(MaxPowerProfile)>0 and  ( (MinPowerData>pmax).isin([True]).sum()>0 ):
 						pmin=np.minimum(MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 						MinPower=TBlock.createVariable("MinPower",np.double,("NumberIntervals"))
@@ -1840,7 +1829,6 @@ def createUCBlock(filename,id,scenario,start,end):
 	UCBlock.setncattr('SMS++_file_type',np.int64(1))
 	
 	# add the unique group Block of type UCBlock 
-	#Block=UCBlock.createGroup("Block_"+str(id))
 	Block=UCBlock.createGroup("Block_0")
 	Block.id=str(id)
 	Block.type="UCBlock"
@@ -2075,7 +2063,6 @@ def createSDDPBlock(filename,id):
 	# general attribute of the file
 	SDDPBlock.setncattr('SMS++_file_type',1)
 	Block=SDDPBlock.createGroup("Block_"+str(id))
-	#Block.id=str(id)
 	Block.type="SDDPBlock"
 	Block.createDimension("NumPolyhedralFunctionsPerSubBlock",NumberHydroSystems)
 	Block.createDimension("TimeHorizon",TimeHorizonSSV)
@@ -2222,7 +2209,6 @@ def createSDDPBlock(filename,id):
 		SetSizeData=NumberNodes*[Nb_APDTo,0]+2 * (Nb_SS + Nb_TPP + Nb_RGP)*[0]+2*[Nb_SS]
 		SetSize[:]=np.array(SetSizeData)
 		
-		#SetElements=StochasticBlocks.loc[indexSSV].createVariable("SetElements","u4",("SetElementsSize"))
 		SetElements=StochasticBlocks.createVariable("SetElements","u4",("SetElementsSize"))
 		SetElementsData=[]
 		if Nb_APDTo > 0:
@@ -2250,22 +2236,18 @@ def createSDDPBlock(filename,id):
 				reservoir_index=reservoir_index+SS.loc[reservoir]['NumberReservoirs']
 		SetElements[:]=np.array(SetElementsData)
 		
-		#FunctionName=StochasticBlocks.loc[indexSSV].createVariable("FunctionName",str,("NumberDataMappings"))
 		FunctionName=StochasticBlocks.createVariable("FunctionName",str,("NumberDataMappings"))
 		FunctionNameData=[]
 		if Nb_APDTo > 0: FunctionNameData=FunctionNameData+NumberNodes*["UCBlock::set_active_power_demand"]
 		FunctionNameData=FunctionNameData+Nb_SS*["HydroUnitBlock::set_inflow"]+Nb_TPP*["ThermalUnitBlock::set_maximum_power"]+Nb_RGP*["IntermittentUnitBlock::set_maximum_power"]+["BendersBFunction::modify_constants"]
 		FunctionName[:]=np.array(FunctionNameData)
 
-		#Caller=StochasticBlocks.loc[indexSSV].createVariable("Caller",'S1',("NumberDataMappings"))
 		Caller=StochasticBlocks.createVariable("Caller",'S1',("NumberDataMappings"))
 		CallerData=(NumberDataMappings-1)*"B"+"F"
 		Caller[:]=np.array(list(CallerData))
 
 		# create abstract path of stochastic blocks
 		APSB=StochasticBlocks.createGroup("AbstractPath")
-		#PathDim=TotalNumberReservoirs
-		#TotalLength=3*TotalNumberReservoirs
 		APSB.createDimension("PathDim",NumberDataMappings)
 		totalLength = (4 * Nb_SS) + (3 * Nb_TPP) + (3 * Nb_RGP) + 1
 		demandPathTotalLength = 0
@@ -2317,7 +2299,6 @@ def createSDDPBlock(filename,id):
 			PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+NumberThermalUnits+i
 			PathGroupIndicesIndex=PathGroupIndicesIndex+3
 		
-		#BendersBlocks.loc[indexSSV] = StochasticBlocks.loc[indexSSV].createGroup("Block")
 		BendersBlocks = StochasticBlocks.createGroup("Block")
 		BendersBlocks.type="BendersBlock"
 		
@@ -2495,7 +2476,6 @@ def createInvestmentBlock(filename):
 	LowerBound=Block.createVariable("LowerBound",np.double,("NumAssets"))
 	Cost=Block.createVariable("Cost",np.double,("NumAssets"))
 	
-	# il manque à concaténer
 	listAssets=[]
 	listAssetType=[]
 	listUpperBound=[]
@@ -2526,12 +2506,19 @@ def createInvestmentBlock(filename):
 		listLowerBound.append(np.array(INInvested['LowerBound']))
 		listCost.append(np.array(INInvested['Cost']))
 	
-	Assets[:]=np.concatenate(listAssets)
-	AssetType[:]=np.concatenate(listAssetType)
-	UpperBound[:]=np.concatenate(listUpperBound)
-	LowerBound[:]=np.concatenate(listLowerBound)
-	Cost[:]=np.concatenate(listCost)
-	
+	if NumberInvestedThermalUnits+NumberInvestedIntermittentUnits+NumberInvestedBatteryUnits+NumberInvestedLines>0:
+		Assets[:]=np.concatenate(listAssets)
+		AssetType[:]=np.concatenate(listAssetType)
+		UpperBound[:]=np.concatenate(listUpperBound)
+		LowerBound[:]=np.concatenate(listLowerBound)
+		Cost[:]=np.concatenate(listCost)
+	else:
+		Assets[:]=np.array([1])
+		AssetType[:]=np.array([0])
+		UpperBound[:]=np.array([1])
+		LowerBound[:]=np.array([0])
+		Cost[:]=np.array([0])
+			
 	if cfg['Invest']=='NRJ':
 		Block.createDimension("NumConstraints",NumberNodes)
 		Constraints_A=Block.createVariable("Constraints_A",np.double,("NumConstraints","NumAssets"))

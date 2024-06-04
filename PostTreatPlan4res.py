@@ -250,29 +250,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	isInvest=cfg['ParametersCreate']['invest']
 	listTechnosInDataset=[]
 	listLinesInDataset=[]
-	
-	# thermal mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits']):
-		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
-		listTechnosTU=InputTUData.Name.unique().tolist()
-		for techno in listTechnosTU:
-			if techno not in listTechnosInDataset:
-				listTechnosInDataset.append(techno)
-			df=InputTUData[ InputTUData.Name==techno ]
-			df.index=df.Zone
-			InputVarCost[techno]=df['VariableCost']
-			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
-			if 'VariableCost' in df.columns:
-				InputStartUpCost[techno]=df['VariableCost']
-			else:
-				InputStartUpCost[techno]=0
-			if 'FixedCost' in df.columns:
-				InputStartUpCost[techno]=df['VariableCost']/8760*TimeStepHours
-			else:
-				InputStartUpCost[techno]=0
-			if isInvest:
-				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
-	else: listTechnosTU=[]
+	listInvestedAssets=[]				  
 	
 	# seasonal storage mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage']):
@@ -291,10 +269,41 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			IsInvestedTechno[techno]=False
 	else: listTechnosSS=[]	
 	
+	# thermal mix
+	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits']):
+		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
+		listTechnosTU=InputTUData.Name.unique().tolist()
+		if isInvest:
+			for row in InputTUData.index:
+				if (InputTUData.loc[row,'MaxAddedCapacity']>0)+(InputTUData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )	  
+		for techno in listTechnosTU:
+			if techno not in listTechnosInDataset:
+				listTechnosInDataset.append(techno)
+			df=InputTUData[ InputTUData.Name==techno ]
+			df.index=df.Zone
+			InputVarCost[techno]=df['VariableCost']
+			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
+			if 'VariableCost' in df.columns:
+				InputStartUpCost[techno]=df['VariableCost']
+			else:
+				InputStartUpCost[techno]=0
+			if 'FixedCost' in df.columns:
+				InputStartUpCost[techno]=df['VariableCost']/8760*TimeStepHours
+			else:
+				InputStartUpCost[techno]=0
+			if isInvest:
+				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
+	else: listTechnosTU=[]
+		
 	# intermittent generation mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits']):
 		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
 		listTechnosRES=InputData.Name.unique().tolist()
+		if isInvest:
+			for row in InputData.index:
+				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	  
 		for techno in listTechnosRES:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -312,6 +321,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage']):
 		InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
 		listTechnosSTS=InputData.Name.unique().tolist()
+		if isInvest:
+			for row in InputData.index:
+				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	  
 		for techno in listTechnosSTS:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -327,6 +340,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosSTS=[]
 
 	listTechnosInDataset.append('SlackUnit')
+	
 	# create list of aggregated technos
 	listaggrTechnosInDataset=[]
 	for aggrTech in cfg['technosAggr']:
@@ -363,15 +377,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		# get solution of capacity expansion
 		sol=check_and_read_csv(cfg, cfg['dir']+'Solution_OUT.csv',header=None)
 		indexSol=0
-		for techno in InstalledCapacity.columns:
-			for region in InstalledCapacity.index:
-				if IsInvestedTechno[techno].loc[region]:
-					InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
-					indexSol=indexSol+1
+		for asset in listInvestedAssets:
+			techno=asset[1]
+			region=asset[0]
+			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
+			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
+			indexSol=indexSol+1
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
-				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol]-LineCapacity.loc[line],decimals=cfg['arrondi'])
+				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])																										
 				indexSol=indexSol+1
 		InvestedLine=InvestedLine.fillna(0.0)
 		InvestedCapacity.to_csv(cfg['dirOUT']+'InvestedCapacity.csv')
@@ -421,13 +436,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for elem in listFiles:
 			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")))
 		listscen=list(range(len(listscen)))
-		#df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+str(listscen[0])+'.csv',index_col=0)
-		#list_regions=df.columns.to_list()
 	else:
 		logger.error('missing Demand in results')
 		log_and_exit(2, cgf['path'])
 		
-	logger.info('scenarios in dataset: '+cfg['ParametersFormat']['Scenarios'])	
+	logger.info('scenarios in dataset: '+str(cfg['ParametersFormat']['Scenarios']))	
 	logger.info('  indexed: '+', '.join([str(s) for s in listscen]))
 	
 	#create shortened names of regions, used in the latex report (for graphics to be readable)
@@ -440,8 +453,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		cfg['regionsANA']=list_regions
 	
 	logger.info('Regions in dataset: '+', '.join(list_regions))
-	logger.info('   regions shortened names: '+cfg['regions_short'])
-	logger.info('   regions analysed: '+cfg['regionsANA'])
+	logger.info('   regions shortened names: '+str(cfg['regions_short']))
+	logger.info('   regions analysed: '+str(cfg['regionsANA']))
 	
 	# update list of regions with reservoirs
 	toremove=[]
@@ -457,8 +470,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			toremove.append(region)
 	for region in toremove:
 		cfg['ReservoirRegions'].remove(region)
-	logger.info('   regions with reservoirs: '+cfg['ReservoirRegions'])
-	logger.info('Lines in dataset: '+cfg['lines'])
+	logger.info('   regions with reservoirs: '+str(cfg['ReservoirRegions']))
+	logger.info('Lines in dataset: '+str(cfg['lines']))
 	
 	# treat dates
 	number_timesteps=len(df.index)
@@ -517,7 +530,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	world.to_csv('world.csv')
 	if cfg['map']:
 		####################################################################################################
-		# Create map of europe for selected regions
+		# Create map of selected regions
 		####################################################################################################
 		
 		logger.info('create map')
@@ -526,23 +539,20 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if 'private_map' in cfg:
 			logger.info('use private map')
-			df_europe = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
-			df_europe['geometry'] = df_europe['geometry'].apply(wkt.loads)
-			europe=gpd.GeoDataFrame(df_europe, crs='epsg:4326')
-			#europe = gpd.read_file(cfg['path']+cfg['private_map'])
-			#gdf.crs = 'epsg:4326'
+			df_continent = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
+			df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
+			continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 		else:
 			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-			europe = world [ world['continent'] == 'Europe' ]
-		europe['Aggr']=europe['name']
-		europe['country']=europe['name']
-		europe['index']=europe['name']
-		europe=europe.set_index('index')
+			continent = world [ world['continent'] == cfg['continent'] ]
+		continent['Aggr']=continent['name']
+		continent['country']=continent['name']
+		continent['index']=continent['name']
+		continent=continent.set_index('index')
 		if cfg['aggregateregions']:
 			for Aggr in cfg['aggregateregions']:
 				for country in cfg['aggregateregions'][Aggr]:
-					#if not (cfg['countryaggregates'] and Aggr in cfg['countryaggregates']):
-					europe.loc[country,'Aggr']=Aggr
+					continent.loc[country,'Aggr']=Aggr
 		else: 
 			logger.info('no aggregated regions')
 
@@ -562,58 +572,55 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				mycountries.append(country)
 		# keep only country names and geometry
-		europe['name']=europe['Aggr']
-		europe = europe[ ['continent','name','Aggr','country','geometry','pop_est'] ]
-		europe['isin']=0
-		for i in europe.index:
-			if europe.loc[i,'country'] in mycountries: 
-				europe.at[i,'isin']=1
-		myeurope = europe [ europe['isin'] ==1 ]
-		restofeurope = europe [ europe['isin'] == 0 ]
-		del myeurope['isin']
-		del restofeurope['isin']
+		continent['name']=continent['Aggr']
+		continent = continent[ ['continent','name','Aggr','country','geometry','pop_est'] ]
+		continent['isin']=0
+		for i in continent.index:
+			if continent.loc[i,'country'] in mycountries: 
+				continent.at[i,'isin']=1
+		mycontinent = continent [ continent['isin'] ==1 ]
+		restofcontinent = continent [ continent['isin'] == 0 ]
+		del mycontinent['isin']
+		del restofcontinent['isin']
 
 		# aggregate countries in the map
-		if cfg['aggregateregions']: myeurope = myeurope.dissolve(by='Aggr')
-		#p1 = Polygon([(-20, 30), (30, 30), (30, 72), (-20, 72)])
-		#bounding_box=p1.envelope
-		#bounding=gpd.GeoDataFrame(gpd.GeoSeries(bounding_box), columns=['geometry'])
-		#myeurope=gpd.overlay(bounding,myeurope,how='intersection')
-		# plot europe avec frontieres et representative point
-		figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
+		if cfg['aggregateregions']: mycontinent = mycontinent.dissolve(by='Aggr')
+
+		# plot continent avec frontieres et representative point
+		figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
 		
-		myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-		axmapeurope.set_xticklabels([])
-		axmapeurope.set_yticklabels([])
+		mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+		axmapcontinent.set_xticklabels([])
+		axmapcontinent.set_yticklabels([])
 		
 		# compute representative point of countries and get their coordinates
-		centers=myeurope.representative_point()
-		numcenters=pd.Series(myeurope.index,index=myeurope['name'])
-		myeurope['x']=centers.x
-		myeurope['y']=centers.y
-		myeurope['centers']=centers
-		myeurope=myeurope.set_index('name')
-		plt.savefig(cfg['dirIMG']+'myeurope.jpeg')
+		centers=mycontinent.representative_point()
+		numcenters=pd.Series(mycontinent.index,index=mycontinent['name'])
+		mycontinent['x']=centers.x
+		mycontinent['y']=centers.y
+		mycontinent['centers']=centers
+		mycontinent=mycontinent.set_index('name')
+		plt.savefig(cfg['dirIMG']+'mycontinent.jpeg')
 		plt.close()
 
 	####################################################################################################
 	# plot funtions
 	####################################################################################################
 
-	# functions for drawing europe maps with pies or bars
+	# functions for drawing continent maps with pies or bars
 	# df: dataframe with cfg['partition']['Level1'] as index
 	# NameFile: name of file => 'file.jpeg'
-	# create one pie per region and draw it at the right place over the europe map
+	# create one pie per region and draw it at the right place over the continent map
 	# returns a jpg file cfg['dirIMG']+NameFile
 	####################################################################################################
-	def EuropeFlowsMap(df,NameFile): 
-	# draws a map of europe with arrows representing the mean annual flows
+	def FlowsMap(df,NameFile): 
+	# draws a map of continent with arrows representing the mean annual flows
 	########################################################### 
 		namefigpng=cfg['dirIMG']+NameFile
 	
 		if cfg['geopandas']:							   		 
 			figflows, axflows = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axflows,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axflows,figsize=(10,10))
 			centers.plot(color='r',ax=axflows,markersize=1)
 
 			# fill data with flows and start/end
@@ -661,46 +668,45 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		return namefigpng
 		
 	def EuropePieMap(df,NameFile,Colors):  
-	# draw a map of europe with pies in each region
+	# draw a map of continent with pies in each region
 		namefigpng=cfg['dirIMG']+NameFile
 		TechnosInGraph=[]
 		for tech in df.columns:
 			if ~df[tech].isin([0,cfg['ParametersCreate']['zerocapacity']]).all() :
 				if tech not in TechnosInGraph:
 					TechnosInGraph.append(tech)
-		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])
-		
+		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])		
 		if cfg['geopandas']:			 
-			figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-			axmapeurope.set_xticklabels([])
-			axmapeurope.set_yticklabels([])
-			xbounds=axmapeurope.get_xbound()
-			ybounds=axmapeurope.get_ybound()
-			xmin,xmax=axmapeurope.get_xbound()
-			ymin,ymax=axmapeurope.get_ybound()
+			figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+			axmapcontinent.set_xticklabels([])
+			axmapcontinent.set_yticklabels([])
+			xbounds=axmapcontinent.get_xbound()
+			ybounds=axmapcontinent.get_ybound()
+			xmin,xmax=axmapcontinent.get_xbound()
+			ymin,ymax=axmapcontinent.get_ybound()
 			
 			for country in cfg['regionsANA']:
 				todraw=df.loc[country]
 				ColorsKept=Colors['color'].loc[ todraw.index ]
-				x=myeurope['x'][country]
-				y=myeurope['y'][country]
-				axmapeurope.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
+				x=mycontinent['x'][country]
+				y=mycontinent['y'][country]
+				axmapcontinent.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
 			step=1/len(df.columns)
 			X=np.arange(xmin,xmin+1,step)			
-			patches=axmapeurope.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
-			axmapeurope.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
-			axmapeurope.set_xbound(xbounds)
-			axmapeurope.set_ybound(ybounds)
+			patches=axmapcontinent.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
+			axmapcontinent.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
+			axmapcontinent.set_xbound(xbounds)
+			axmapcontinent.set_ybound(ybounds)
 
 			namefigpng=cfg['dirIMG']+NameFile
 			plt.savefig(namefigpng)
-			figmapeurope.clf()
+			figmapcontinent.clf()
 			plt.close('all')
 		return namefigpng
 
 	def EuropeBarMap(df,NameFile,Colors):
-	# draw a map of europe with a bargraph in each region
+	# draw a map of continent with a bargraph in each region
 		namefigpng=cfg['dirIMG']+NameFile
 		TechnosInGraph=[]
 		for tech in df.columns:
@@ -709,33 +715,33 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					TechnosInGraph.append(tech)
 		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])
 		if cfg['geopandas']:			 
-			figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-			axmapeurope.set_xticklabels([])
-			axmapeurope.set_yticklabels([])
-			xbounds=axmapeurope.get_xbound()
-			ybounds=axmapeurope.get_ybound()	
+			figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+			axmapcontinent.set_xticklabels([])
+			axmapcontinent.set_yticklabels([])
+			xbounds=axmapcontinent.get_xbound()
+			ybounds=axmapcontinent.get_ybound()	
 			barsize=3
 			for country in cfg['regionsANA']:
 				todraw=df.loc[country]
-				x=myeurope['x'][country]
-				y=myeurope['y'][country]
+				x=mycontinent['x'][country]
+				y=mycontinent['y'][country]
 				step=barsize/len(df.columns)
 				X=np.arange(x,x+barsize,step)
 				maxtodraw=todraw.max(axis=0)
 				todraw=todraw*barsize/maxtodraw
-				patches=axmapeurope.bar(X,todraw,bottom=y,width=0.9*step,color=ColorsInGraph['color'])
+				patches=axmapcontinent.bar(X,todraw,bottom=y,width=0.9*step,color=ColorsInGraph['color'])
 
-			axmapeurope.legend(patches,ColorsInGraph.index,loc="upper left",facecolor='white',ncol=2)
+			axmapcontinent.legend(patches,ColorsInGraph.index,loc="upper left",facecolor='white',ncol=2)
 				
 			namefigpng=cfg['dirIMG']+NameFile
 			plt.savefig(namefigpng)
-			figmapeurope.clf()
+			figmapcontinent.clf()
 			plt.close('all')
 		return namefigpng
 
 	def Chloromap(NbCols,NbRows,List,mytable,SizeCol,SizeRow,TitleSize,LabelSize,name,dpi=80):
-	# draw a serie of maps of europe with each region lighter if the value of the table is lower
+	# draw a serie of maps of continent with each region lighter if the value of the table is lower
 		namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 	
 		if cfg['geopandas']:																		   
@@ -743,22 +749,23 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			x=0
 			y=0
 			for item in List:
-				chloroeurope=myeurope
-				chloroeurope[item]=mytable[item]
-				mintech=mytable[item].min()
-				maxtech=mytable[item].max()
-				chloroeurope=myeurope.fillna(0)
-				ax=chloroeurope.plot(column=item,ax=axes[y][x],cmap=ChloroColors.loc[item,'colormap'],vmin=mintech,vmax=maxtech,legend=True,\
-					legend_kwds={'label':"energy (MWh)",'orientation':"vertical"})
-				fig=ax.figure
-				cb_ax=fig.axes[1]
-				cb_ax.tick_params(labelsize=40)
-				axes[y][x].set_title(item,fontsize=TitleSize)
+				if item in mytable.columns:			   
+					chloroeurope=mycontinent
+					chloroeurope[item]=mytable[item]
+					mintech=mytable[item].min()
+					maxtech=mytable[item].max()
+					chloroeurope=mycontinent.fillna(0)
+					ax=chloroeurope.plot(column=item,ax=axes[y][x],cmap=ChloroColors.loc[item,'colormap'],vmin=mintech,vmax=maxtech,legend=True,\
+						legend_kwds={'label':"energy (MWh)",'orientation':"vertical"})
+					fig=ax.figure
+					cb_ax=fig.axes[1]
+					cb_ax.tick_params(labelsize=40)
+					axes[y][x].set_title(item,fontsize=TitleSize)
 
-				if x<NbCols-1: x=x+1
-				else:
-					x=0
-					y=y+1
+					if x<NbCols-1: x=x+1
+					else:
+						x=0
+						y=y+1
 			namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 			plt.savefig(namefigpng,dpi=dpi)
 			fig.clf()
@@ -766,13 +773,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		return namefigpng
 		
 	def OneChloromap(mycol,TitleSize,LabelSize,name,dpi=80,mytitle=''):
-	# draw a unique map of europe with each region lighter if the value of the table is lower
+	# draw a unique map of continent with each region lighter if the value of the table is lower
 
 		namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 	
 		if cfg['geopandas']:	
 
-			chloroeurope=myeurope
+			chloroeurope=mycontinent
 			chloroeurope[mytitle]=mycol
 			mintech=0
 			maxtech=1
@@ -1002,7 +1009,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
 			if isInvest:
 				namefigpng=EuropePieMap(InitialInstalledCapacity,'InitialInstalledCapacityMapPieEurope.jpeg',TechnoColors)
-				namefigpng=EuropePieMap(InvestedInstalledCapacity,'InvestedInstalledCapacityMapPieEurope.jpeg',TechnoColors)
 
 		del namefigpng
 
@@ -1223,9 +1229,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				for index in range(len(cfg['regionsANA'])):
 					Demand[index]=pd.concat([Demand[index],df[regions[index]]], axis=1)
+		print(list_regions)
 		for index in range(len(list_regions)):
-			logger.info('     writing file for ',list_regions[index])
 			reg=list_regions[index]
+			logger.info('     writing file for '+reg)
 			Demand[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['Demand']['Dir']+'Demand-'+reg+'.csv')
 			
 		del df, Demand
@@ -1289,38 +1296,50 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=TimeIndex)
 		meanScenMonotone=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		SlackCmar=pd.DataFrame(columns=listscen)
+		nbHoursSlack=pd.DataFrame(columns=listscen)									 
 		i=0
 		for index in range(len(cfg['regionsANA'])):
 			reg=cfg['regionsANA'][index]
 			logger.info('     writing file for '+reg)
 			MargCosts[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv')
 			#meanScenReg=MargCosts[index].mean(axis=1).reset_index()
-			meanScenReg=MargCosts[index].mean(axis=1)			
-			meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
-			meanScen[reg]=MargCosts[index].mean(axis=1)
-			meanTime[reg]=meanTimeReg
-			SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
-			List=[]
-			for col in MargCosts[index].columns:
-				data=MargCosts[index][col].tolist()
+			if len(listscen)>1:		  
+				meanScenReg=MargCosts[index].mean(axis=1)			
+				meanScen[reg]=MargCosts[index].mean(axis=1)							   
+				meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
+				meanTime[reg]=meanTimeReg
+				SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
+				List=[]
+				for col in MargCosts[index].columns:
+					data=MargCosts[index][col].tolist()
+					data.sort(reverse=True)
+					List.append(data)
+			else:
+				meanScenReg=MargCosts[index]
+				meanScen[reg]=MargCosts[index]
+				meanTimeReg=MargCosts[index].mean(axis=0)
+				meanTime[reg]=meanTimeReg
+				SortedSlack=pd.Series(index=MargCosts[index].index)
+				List=[]
+				data=MargCosts[index].tolist()
 				data.sort(reverse=True)
 				List.append(data)
 			SortedSlack=pd.DataFrame(data=List).transpose()
-			SortedSlack.columns=MargCosts[index].columns
+			if len(listscen)>1: SortedSlack.columns=MargCosts[index].columns
 			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv')
 			del data, SortedSlack, List
 						
-			# compute mean
-			SlackCmarReg=(MargCosts[index].apply(pd.value_counts)).tail(1).fillna(0.0)
+			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
+			   
 			SlackCmarReg.columns=listscen
 			if not(FailureCost in SlackCmarReg.index): 
 				logger.info('       no non-served energy for zone '+reg)
-				for col in SlackCmarReg.columns: 
-					SlackCmarReg[col]=0
-			SlackCmar=pd.concat([SlackCmar, SlackCmarReg ],ignore_index=True)
+				nbHoursSlack.loc[reg]=0
+			else:
+				nbHoursSlack.loc[reg]=SlackCmarReg.iloc[0]
 			del SlackCmarReg
 			
-		SlackCmar.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
+		nbHoursSlack.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
 		meanTime.index=cfg['ParametersFormat']['Scenarios']
 		meanTime.to_csv(cfg['dirOUT'] +'meanTimeCmar.csv',index=True)
 		meanScen.to_csv(cfg['dirOUT'] +'meanScenCmar.csv',index=True)
@@ -1919,7 +1938,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			for technoAggr in listTechnosAggr: 
 				listTechnos=listTechnos+cfg['technosAggr'][technoAggr]['technos']
 				
-		# plot chloromap of europe 
+		# plot chloromap of continent 
 		if cfg['map']: namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
 			listTechnosAggr,MeanEnergyAggr,cfg['Graphs']['Power']['SizeCol'],\
 			cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
@@ -2078,7 +2097,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if(cfg['PostTreat']['Flows']['draw']):
 		logger.info('   Create graphs for Flows')
 		MeanFlows=pd.read_csv(cfg['dirOUT'] + 'MeanImportExport.csv',index_col=0).fillna(0.0)
-		if cfg['map']: namefigpng=EuropeFlowsMap(MeanFlows,'MeanFlows.jpeg')
+		if cfg['map']: namefigpng=FlowsMap(MeanFlows,'MeanFlows.jpeg')
 		del namefigpng
 		
 	# create flows chapter in latex report
@@ -2721,15 +2740,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 
 			###########################################################		
-			# graphs europe maps	
+			# graphs continent maps	
 			###########################################################		
 				
-			# draw europe with flows
+			# draw continent with flows
 			##################################################################
 			if cfg['PostTreat']['SpecificPeriods']['draw'] and cfg['map']:
 				# draw map
 				figflows, axflows = plt.subplots(1,1,figsize=(10,10))
-				myeurope.boundary.plot(ax=axflows,figsize=(10,10))
+				mycontinent.boundary.plot(ax=axflows,figsize=(10,10))
 				centers.plot(color='r',ax=axflows,markersize=1)
 
 				# fill data with flows and start/end
@@ -2785,23 +2804,19 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					namefigpng='Scenario_'+str(NumScen)+'_ArrowImpExp.jpeg'
 					bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of Interconnection uses over the whole period (MWh)',namefigpng)
 
-		# draw chloromap of europe
+		# draw chloromap of continent
 			if cfg['map']:
 				tablebilansNRJ=tablebilansNRJ.fillna(0)
 				mytable=tablebilansNRJ
 				mytable['name']=mytable.index
 				mytable=mytable.reset_index()
 				
-				namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
-					cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
-					cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
-					'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
-
+				
 				# draw chloromap for C02
-				myeurope['CO2']=tablebilansNRJ['CO2']
-				myeurope=myeurope.fillna(0)
+				mycontinent['CO2']=tablebilansNRJ['CO2']
+				mycontinent=mycontinent.fillna(0)
 				figchloroeurope, axchloroeurope = plt.subplots(1,1)
-				myeurope.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
+				mycontinent.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
 				axchloroeurope.set_title('Emissions (t)',fontsize=10)
 				namefigpng='Scenario_ChloroMap-CO2.jpeg'
 				plt.savefig(cfg['dirIMG']+namefigpng)
@@ -2817,7 +2832,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of energy generated for Scenario '+str(NumScen)+' (MWh)',namefigpng)
 				
 			###########################################################
-			#europe pies
+			#continent pies
 			#############################################################
 			#if cfg['map']: namefigpng=EuropePieMap(tablebilansNRJ.drop(['CO2','name','Non Served'],axis=1),'EnergyPieEurope-Scenario.jpeg',TechnoAggrColors)
 			if cfg['PostTreat']['SpecificPeriods']['latex']:
