@@ -18,6 +18,7 @@ import sys
 from p4r_python_utils import *
 
 path = os.environ.get("PLAN4RESROOT")
+print('path0:',path)
 nbargs=len(sys.argv)
 if nbargs>1: 
 	settings_create=sys.argv[1]
@@ -30,7 +31,6 @@ with open(path+settings_create,"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 	
 # replace name of current dataset by name given as input
-
 if nbargs>2:
 	namedataset=sys.argv[2]
 	if cfg['USEPLAN4RESROOT']: 
@@ -52,26 +52,33 @@ if 'pythonDir' not in cfg:
 	else:
 		logger.error('\npythonDir missing in settingsCreateInputPlan4res')
 		log_and_exit(1, cfg['path'])
+if 'nomenclatureDir' not in cfg: 
+	if cfg['USEPLAN4RESROOT']: 
+		cfg['nomenclatureDir']='scripts/python/openentrance/definitions/'
+	else:
+		logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
+		log_and_exit(1, cfg['path'])		
+
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdatapath']=cfg['path']+'IAMC/'
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
-	
+
 if cfg['USEPLAN4RESROOT']:
-	#cfg['outputpath']=os.path.join(path, cfg['outputpath'])
+	cfg['outputpath']=os.path.join(path, cfg['outputpath'])
 	cfg['dirTimeSeries']=os.path.join(path, cfg['timeseriespath'])
 	cfg['nomenclatureDir']=os.path.join(path, cfg['nomenclatureDir'])
 	cfg['pythonDir']=os.path.join(path, cfg['pythonDir'])
 	for datagroup in cfg['datagroups']:
-		cfg['datagroups'][datagroup]['inputdatapath']=os.path.join(cfg['path'], cfg['datagroups'][datagroup]['inputdatapath'])
+		cfg['datagroups'][datagroup]['inputdatapath']=os.path.join(path, cfg['datagroups'][datagroup]['inputdatapath'])
 else:
 	cfg['dirTimeSeries']=cfg['timeseriespath']
 	
 if not os.path.isdir(cfg['outputpath']):
 	os.mkdir(cfg['outputpath'])
-logger.info('path: '+cfg['outputpath'])
-	
+logger.info('results of this script will be available in: '+cfg['outputpath'])
+
 isInertia= ( 'InertiaDemand' in cfg['CouplingConstraints'] )
 isPrimary= ( 'PrimaryDemand' in cfg['CouplingConstraints'] )
 isSecondary= ( 'SecondaryDemand' in cfg['CouplingConstraints'] )
@@ -94,7 +101,6 @@ if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-#with open(path+cfg['configDir']+"VariablesDictionnary.yml","r") as myvardict:
 with open(cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
@@ -159,6 +165,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listGlobalReg=[]
 
 	# define list of aggregated regions
+	print('cfg[ParametersCreate][ExistsNuts]',cfg['ParametersCreate']['ExistsNuts'])
 	if cfg['ParametersCreate']['ExistsNuts']:
 		with open(os.path.join(cfg['nomenclatureDir'], "region/nuts3.yaml"),"r",encoding='UTF-8') as nutsreg:
 			nuts3=yaml.safe_load(nutsreg)
@@ -574,7 +581,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	#############################################################
 	if cfg['csvfiles']['ZP_ZonePartition']:
 		logger.info('Treating ZonePartition')
-		#dictzone = dict(zip(paramZone['Name'], paramZone['Partition']))
 		nbreg=len(cfg['partition'][ partitionDemand  ])
 		nbpartition=len(cfg['partition'])
 
@@ -1628,7 +1634,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					logger.info(str(varname)+' is global')
 					isGlobal=True
 					Global=data[variable][globalvars[varname]]
-					#RES[variable]=RES[variable][globalvars[vardict['Input']['VarRES'][variable]] ]
 				
 				RES=pd.concat([RES, data], axis=1)	
 				if isGlobal: RES[variable]=Global
@@ -1684,11 +1689,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if row in timeseriesdict['RES'][oetechno].keys():
 					filetimeserie=timeseriesdict['RES'][oetechno][row]
 					RES.loc[row, 'MaxPowerProfile']=filetimeserie
-					# compute energy scaling coefficient in inflows
-					# timeserie=pd.read_csv(cfg['dirTimeSeries']+filetimeserie,header=1,index_col=0)
-					# energy=timeserie[cfg['StochasticScenarios']].sum(axis=0)
-					# Energy=energy.mean()
-					# RES.loc[row, 'Energy_Timeserie']=Energy
 					
 			if v==0:
 				BigRES=RES
