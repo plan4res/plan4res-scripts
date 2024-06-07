@@ -2679,6 +2679,6 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
-
+log_and_exit(0, cgf['path'])
 
 

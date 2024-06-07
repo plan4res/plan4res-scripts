@@ -2838,5 +2838,5 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			myfile.write(containerlatex)
 			myfile.close()
 
-
+log_and_exit(0, cgf['path'])
 
