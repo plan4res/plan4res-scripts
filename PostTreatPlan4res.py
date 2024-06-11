@@ -15,6 +15,7 @@ import pyam
 from itertools import product
 import sys
 from shapely import wkt
+from p4r_python_utils import *
 
 OE_SUBANNUAL_FORMAT = lambda x: x.strftime("%m-%d %H:%M%z").replace("+0100", "+01:00") 
 
@@ -53,11 +54,11 @@ else:
 cfg={}
 # open the configuration files 
 with open(path+settings_posttreat,"r") as myyaml:
-    cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
+	cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
 with open(path+settings_create,"r") as mysettings:
-    cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
+	cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
 with open(path+settings_format,"r") as mysettings:
-    cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
+	cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
 
@@ -68,7 +69,7 @@ if nbargs>4:
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 	else:
 		cfg['path']='/data/local/'+namedataset+'/'
-	print('posttreat ',namedataset)
+	logger.info('posttreat '+namedataset)
 
 cfg['dir']=cfg['path']+cfg['Resultsdir']
 cfg['inputpath']=cfg['path']+cfg['inputDir']
@@ -84,11 +85,11 @@ if 'pythonDir' not in cfg:
 	if cfg['USEPLAN4RESROOT']: 
 		cfg['pythonDir']='/scripts/python/plan4res-scripts/settings/'
 	else:
-		print('pythonDir missing in settingsCreateInputPlan4res')
-		exit()
+		logger.error('pythonDir missing in settingsCreateInputPlan4res')
+		log_and_exit(1, cfg['path'])
 
-print('results in:',cfg['dir'])
-print('dataset in:',cfg['inputpath'])
+logger.info('results in:'+cfg['dir'])
+logger.info('dataset in:'+cfg['inputpath'])
 # define latex functions
 ############################
 isLatex=cfg['PostTreat']['Volume']['latex']+cfg['PostTreat']['Flows']['latex']\
@@ -153,7 +154,8 @@ if cfg['geopandas']:
 if 'variants' not in cfg: cfg['variants']=['']
 if 'option' not in cfg: cfg['option']=['']
 for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
-	if len(variant)>0 or len(option)>0: print('treat ',variant,' ',option)
+	if len(variant)>0 or len(option)>0: 
+		logger.info('treat '+variant+' '+option)
 	
 	# create the paths to the different directories
 	# dirSto is the main directory for one (scenario,year,option)
@@ -228,18 +230,18 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# create list of regions
 	##########################################################
-	print('read regions')
+	logger.info('read regions')
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['ZP_ZonePartition']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['ZP_ZonePartition'])
+		InputData=read_input_csv(cfg, 'ZP_ZonePartition')
 		colregion=cfg['CouplingConstraints']['ActivePowerDemand']['Partition']
 		list_regions=InputData[colregion].unique().tolist()
 	else:
-		print('no file ZP_ZonePartition in dataset')
-		exit()
+		logger.error('no file ZP_ZonePartition in dataset')
+		log_and_exit(1, cfg['path'])
 		
 	# create list of technos, installed capacities and costs
 	##########################################################
-	print('read installed capacity and costs')
+	logger.info('read installed capacity and costs')
 	InputVarCost=pd.DataFrame(index=list_regions)
 	InputStartUpCost=pd.DataFrame(index=list_regions)
 	InputFixedCost=pd.DataFrame(index=list_regions)
@@ -248,11 +250,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	isInvest=cfg['ParametersCreate']['invest']
 	listTechnosInDataset=[]
 	listLinesInDataset=[]
-	listInvestedAssets=[]
+	listInvestedAssets=[]				  
 	
 	# seasonal storage mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage'])
+		InputData=read_input_csv(cfg,'SS_SeasonalStorage')
 		listTechnosSS=InputData.Name.unique().tolist()
 		for techno in listTechnosSS:
 			if techno not in listTechnosInDataset:
@@ -269,12 +271,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 	# thermal mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits']):
-		InputTUData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits'])
+		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
 		listTechnosTU=InputTUData.Name.unique().tolist()
 		if isInvest:
 			for row in InputTUData.index:
 				if (InputTUData.loc[row,'MaxAddedCapacity']>0)+(InputTUData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )
+					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )	 
 		for techno in listTechnosTU:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -293,15 +295,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if isInvest:
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosTU=[]
-	
+    
 	# intermittent generation mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits'])
+		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
 		listTechnosRES=InputData.Name.unique().tolist()
 		if isInvest:
 			for row in InputData.index:
 				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	  
 		for techno in listTechnosRES:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -317,12 +319,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# short term storage mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage'])
+		InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
 		listTechnosSTS=InputData.Name.unique().tolist()
 		if isInvest:
 			for row in InputData.index:
 				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	  
 		for techno in listTechnosSTS:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -338,6 +340,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosSTS=[]
 
 	listTechnosInDataset.append('SlackUnit')
+	
 	# create list of aggregated technos
 	listaggrTechnosInDataset=[]
 	for aggrTech in cfg['technosAggr']:
@@ -347,7 +350,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# interconnections
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['IN_Interconnections']):
-		InputData=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['IN_Interconnections'])
+		InputData=read_input_csv(cfg, 'IN_Interconnections')
 		if 'Name' in InputData.columns:
 			InputData=InputData.set_index('Name')
 		listLinesInDataset=InputData.index.tolist()
@@ -372,22 +375,18 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		InvestedLine=pd.DataFrame(index=LineCapacity.index,columns=LineCapacity.columns,data=0.0)
 		
 		# get solution of capacity expansion
-		sol=pd.read_csv(cfg['dir']+'Solution_OUT.csv',header=None)
+		sol=check_and_read_csv(cfg, cfg['dir']+'Solution_OUT.csv',header=None)
 		indexSol=0
-		
-		
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
 			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
-			#InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
 			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
 			indexSol=indexSol+1
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
-				#InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol]-LineCapacity.loc[line],decimals=cfg['arrondi'])
-				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])
+				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])																										
 				indexSol=indexSol+1
 		InvestedLine=InvestedLine.fillna(0.0)
 		InvestedCapacity.to_csv(cfg['dirOUT']+'InvestedCapacity.csv')
@@ -437,14 +436,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for elem in listFiles:
 			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")))
 		listscen=list(range(len(listscen)))
-		#df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+str(listscen[0])+'.csv',index_col=0)
-		#list_regions=df.columns.to_list()
 	else:
-		print('missing Demand in results')
-		exit()
+		logger.error('missing Demand in results')
+		log_and_exit(2, cgf['path'])
 		
-	print('scenarios in dataset: ',cfg['ParametersFormat']['Scenarios'])	
-	print('  indexed: ',listscen)	
+	logger.info('scenarios in dataset: '+str(cfg['ParametersFormat']['Scenarios']))	
+	logger.info('  indexed: '+', '.join([str(s) for s in listscen]))
 	
 	#create shortened names of regions, used in the latex report (for graphics to be readable)
 	cfg['regions_short']=[]
@@ -455,9 +452,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if 'regionsANA' not in cfg:
 		cfg['regionsANA']=list_regions
 	
-	print('Regions in dataset: ',list_regions)
-	print('   regions shortened names: ',cfg['regions_short'])
-	print('   regions analysed: ',cfg['regionsANA'])
+	logger.info('Regions in dataset: '+', '.join(list_regions))
+	logger.info('   regions shortened names: '+str(cfg['regions_short']))
+	logger.info('   regions analysed: '+str(cfg['regionsANA']))
 	
 	# update list of regions with reservoirs
 	toremove=[]
@@ -473,8 +470,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			toremove.append(region)
 	for region in toremove:
 		cfg['ReservoirRegions'].remove(region)
-	print('   regions with reservoirs: ',cfg['ReservoirRegions'])
-	print('Lines in dataset: ',cfg['lines'])
+	logger.info('   regions with reservoirs: '+str(cfg['ReservoirRegions']))
+	logger.info('Lines in dataset: '+str(cfg['lines']))
 	
 	# treat dates
 	number_timesteps=len(df.index)
@@ -483,30 +480,30 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if cfg['Calendar']['TimeStep']['Unit']=='days': TimeStepHours=TimeStepHours*24
 	elif cfg['Calendar']['TimeStep']['Unit']=='weeks': TimeStepHours=TimeStepHours*168
 	elif cfg['Calendar']['TimeStep']['Unit']!='hours': 
-		print('only hours, days, weeks possible as timestep unit')
-		exit()
+		logger.error('only hours, days, weeks possible as timestep unit')
+		log_and_exit(2, cgf['path'])
 	EndDataset=BeginDataset+number_timesteps*pd.Timedelta(str(TimeStepHours)+' hours')-pd.Timedelta('1 hours')
 	BeginTreat=pd.Timestamp(pd.to_datetime(cfg['BeginTreatData'],dayfirst=cfg['dayfirst']))
 	EndTreat=pd.Timestamp(pd.to_datetime(cfg['EndTreatData'],dayfirst=cfg['dayfirst']))
 	
 	if BeginTreat>EndDataset:
-		print('Treatment start date is after end of available data')
-		exit()
+		logger.error('Treatment start date is after end of available data')
+		log_and_exit(2, cgf['path'])
 	if EndTreat<BeginDataset:
-		print('Treatment end date is before start of available data')
-		exit()
+		logger.error('Treatment end date is before start of available data')
+		log_and_exit(2, cgf['path'])
 	if BeginTreat<BeginDataset: BeginTreat=BeginDataset
 	if EndTreat>EndDataset: EndTreat=EndDataset
 	if EndTreat<BeginTreat:
-		print('Treatment end date is before treatment start date')
-		exit()
+		logger.error('Treatment end date is before treatment start date')
+		log_and_exit(2, cgf['path'])
 	cfg['p4r_start']=BeginDataset
 	cfg['p4r_end']=EndDataset
 	cfg['plot_start']=BeginTreat
 	cfg['plot_end']=EndTreat
 	
-	print('data available between ',BeginDataset,' and ',EndDataset)
-	print('PostTreating between ',BeginTreat,' and ',EndTreat)
+	logger.info('data available between '+str(BeginDataset)+' and '+str(EndDataset))
+	logger.info('PostTreating between '+str(BeginTreat)+' and '+str(EndTreat))
 
 	# compute date ranges
 	cfg['Tp4r'] = pd.date_range(start=pd.to_datetime(cfg['p4r_start'],dayfirst=cfg['dayfirst']),end=pd.to_datetime(cfg['p4r_end'],dayfirst=cfg['dayfirst']), freq=str(TimeStepHours)+'h')	
@@ -533,33 +530,31 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	world.to_csv('world.csv')
 	if cfg['map']:
 		####################################################################################################
-		# Create map of europe for selected regions
+		# Create map of selected regions
 		####################################################################################################
 		
-		print('create map')
+		logger.info('create map')
 		listcountrymap=list_regions
 		if 'nameregions' in cfg.keys(): listcountrymap=cfg['nameregions']
 		
 		if 'private_map' in cfg:
-			print('use private map')
-			df_europe = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
-			df_europe['geometry'] = df_europe['geometry'].apply(wkt.loads)
-			europe=gpd.GeoDataFrame(df_europe, crs='epsg:4326')
-			#europe = gpd.read_file(cfg['path']+cfg['private_map'])
-			#gdf.crs = 'epsg:4326'
+			logger.info('use private map')
+			df_continent = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
+			df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
+			continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 		else:
 			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-			europe = world [ world['continent'] == 'Europe' ]
-		europe['Aggr']=europe['name']
-		europe['country']=europe['name']
-		europe['index']=europe['name']
-		europe=europe.set_index('index')
+			continent = world [ world['continent'] == cfg['continent'] ]
+		continent['Aggr']=continent['name']
+		continent['country']=continent['name']
+		continent['index']=continent['name']
+		continent=continent.set_index('index')
 		if cfg['aggregateregions']:
 			for Aggr in cfg['aggregateregions']:
 				for country in cfg['aggregateregions'][Aggr]:
-					#if not (cfg['countryaggregates'] and Aggr in cfg['countryaggregates']):
-					europe.loc[country,'Aggr']=Aggr
-		else: print('no aggregated regions')
+					continent.loc[country,'Aggr']=Aggr
+		else: 
+			logger.info('no aggregated regions')
 
 		# create list of countries and sample of values (to delete)
 		mycountries=[]
@@ -577,58 +572,55 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				mycountries.append(country)
 		# keep only country names and geometry
-		europe['name']=europe['Aggr']
-		europe = europe[ ['continent','name','Aggr','country','geometry','pop_est'] ]
-		europe['isin']=0
-		for i in europe.index:
-			if europe.loc[i,'country'] in mycountries: 
-				europe.at[i,'isin']=1
-		myeurope = europe [ europe['isin'] ==1 ]
-		restofeurope = europe [ europe['isin'] == 0 ]
-		del myeurope['isin']
-		del restofeurope['isin']
+		continent['name']=continent['Aggr']
+		continent = continent[ ['continent','name','Aggr','country','geometry','pop_est'] ]
+		continent['isin']=0
+		for i in continent.index:
+			if continent.loc[i,'country'] in mycountries: 
+				continent.at[i,'isin']=1
+		mycontinent = continent [ continent['isin'] ==1 ]
+		restofcontinent = continent [ continent['isin'] == 0 ]
+		del mycontinent['isin']
+		del restofcontinent['isin']
 
 		# aggregate countries in the map
-		if cfg['aggregateregions']: myeurope = myeurope.dissolve(by='Aggr')
-		#p1 = Polygon([(-20, 30), (30, 30), (30, 72), (-20, 72)])
-		#bounding_box=p1.envelope
-		#bounding=gpd.GeoDataFrame(gpd.GeoSeries(bounding_box), columns=['geometry'])
-		#myeurope=gpd.overlay(bounding,myeurope,how='intersection')
-		# plot europe avec frontieres et representative point
-		figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
+		if cfg['aggregateregions']: mycontinent = mycontinent.dissolve(by='Aggr')
+
+		# plot continent avec frontieres et representative point
+		figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
 		
-		myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-		axmapeurope.set_xticklabels([])
-		axmapeurope.set_yticklabels([])
+		mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+		axmapcontinent.set_xticklabels([])
+		axmapcontinent.set_yticklabels([])
 		
 		# compute representative point of countries and get their coordinates
-		centers=myeurope.representative_point()
-		numcenters=pd.Series(myeurope.index,index=myeurope['name'])
-		myeurope['x']=centers.x
-		myeurope['y']=centers.y
-		myeurope['centers']=centers
-		myeurope=myeurope.set_index('name')
-		plt.savefig(cfg['dirIMG']+'myeurope.jpeg')
+		centers=mycontinent.representative_point()
+		numcenters=pd.Series(mycontinent.index,index=mycontinent['name'])
+		mycontinent['x']=centers.x
+		mycontinent['y']=centers.y
+		mycontinent['centers']=centers
+		mycontinent=mycontinent.set_index('name')
+		plt.savefig(cfg['dirIMG']+'mycontinent.jpeg')
 		plt.close()
 
 	####################################################################################################
 	# plot funtions
 	####################################################################################################
 
-	# functions for drawing europe maps with pies or bars
+	# functions for drawing continent maps with pies or bars
 	# df: dataframe with cfg['partition']['Level1'] as index
 	# NameFile: name of file => 'file.jpeg'
-	# create one pie per region and draw it at the right place over the europe map
+	# create one pie per region and draw it at the right place over the continent map
 	# returns a jpg file cfg['dirIMG']+NameFile
 	####################################################################################################
-	def EuropeFlowsMap(df,NameFile): 
-	# draws a map of europe with arrows representing the mean annual flows
+	def FlowsMap(df,NameFile): 
+	# draws a map of continent with arrows representing the mean annual flows
 	########################################################### 
 		namefigpng=cfg['dirIMG']+NameFile
 	
 		if cfg['geopandas']:							   		 
 			figflows, axflows = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axflows,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axflows,figsize=(10,10))
 			centers.plot(color='r',ax=axflows,markersize=1)
 
 			# fill data with flows and start/end
@@ -676,46 +668,45 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		return namefigpng
 		
 	def EuropePieMap(df,NameFile,Colors):  
-	# draw a map of europe with pies in each region
+	# draw a map of continent with pies in each region
 		namefigpng=cfg['dirIMG']+NameFile
 		TechnosInGraph=[]
 		for tech in df.columns:
 			if ~df[tech].isin([0,cfg['ParametersCreate']['zerocapacity']]).all() :
 				if tech not in TechnosInGraph:
 					TechnosInGraph.append(tech)
-		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])
+		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])		
 		if cfg['geopandas']:			 
-			figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-			axmapeurope.set_xticklabels([])
-			axmapeurope.set_yticklabels([])
-			xbounds=axmapeurope.get_xbound()
-			ybounds=axmapeurope.get_ybound()
-			xmin,xmax=axmapeurope.get_xbound()
-			ymin,ymax=axmapeurope.get_ybound()
+			figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+			axmapcontinent.set_xticklabels([])
+			axmapcontinent.set_yticklabels([])
+			xbounds=axmapcontinent.get_xbound()
+			ybounds=axmapcontinent.get_ybound()
+			xmin,xmax=axmapcontinent.get_xbound()
+			ymin,ymax=axmapcontinent.get_ybound()
 			
 			for country in cfg['regionsANA']:
 				todraw=df.loc[country]
 				ColorsKept=Colors['color'].loc[ todraw.index ]
-				x=myeurope['x'][country]
-				y=myeurope['y'][country]
-				#axmapeurope.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
-				axmapeurope.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
+				x=mycontinent['x'][country]
+				y=mycontinent['y'][country]
+				axmapcontinent.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
 			step=1/len(df.columns)
 			X=np.arange(xmin,xmin+1,step)			
-			patches=axmapeurope.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
-			axmapeurope.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
-			axmapeurope.set_xbound(xbounds)
-			axmapeurope.set_ybound(ybounds)
+			patches=axmapcontinent.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
+			axmapcontinent.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
+			axmapcontinent.set_xbound(xbounds)
+			axmapcontinent.set_ybound(ybounds)
 
 			namefigpng=cfg['dirIMG']+NameFile
 			plt.savefig(namefigpng)
-			figmapeurope.clf()
+			figmapcontinent.clf()
 			plt.close('all')
 		return namefigpng
 
 	def EuropeBarMap(df,NameFile,Colors):
-	# draw a map of europe with a bargraph in each region
+	# draw a map of continent with a bargraph in each region
 		namefigpng=cfg['dirIMG']+NameFile
 		TechnosInGraph=[]
 		for tech in df.columns:
@@ -724,33 +715,33 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					TechnosInGraph.append(tech)
 		ColorsInGraph=pd.DataFrame(data=Colors.loc[ TechnosInGraph ])
 		if cfg['geopandas']:			 
-			figmapeurope, axmapeurope = plt.subplots(1,1,figsize=(10,10))
-			myeurope.boundary.plot(ax=axmapeurope,figsize=(10,10))
-			axmapeurope.set_xticklabels([])
-			axmapeurope.set_yticklabels([])
-			xbounds=axmapeurope.get_xbound()
-			ybounds=axmapeurope.get_ybound()	
+			figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axmapcontinent,figsize=(10,10))
+			axmapcontinent.set_xticklabels([])
+			axmapcontinent.set_yticklabels([])
+			xbounds=axmapcontinent.get_xbound()
+			ybounds=axmapcontinent.get_ybound()	
 			barsize=3
 			for country in cfg['regionsANA']:
 				todraw=df.loc[country]
-				x=myeurope['x'][country]
-				y=myeurope['y'][country]
+				x=mycontinent['x'][country]
+				y=mycontinent['y'][country]
 				step=barsize/len(df.columns)
 				X=np.arange(x,x+barsize,step)
 				maxtodraw=todraw.max(axis=0)
 				todraw=todraw*barsize/maxtodraw
-				patches=axmapeurope.bar(X,todraw,bottom=y,width=0.9*step,color=ColorsInGraph['color'])
+				patches=axmapcontinent.bar(X,todraw,bottom=y,width=0.9*step,color=ColorsInGraph['color'])
 
-			axmapeurope.legend(patches,ColorsInGraph.index,loc="upper left",facecolor='white',ncol=2)
+			axmapcontinent.legend(patches,ColorsInGraph.index,loc="upper left",facecolor='white',ncol=2)
 				
 			namefigpng=cfg['dirIMG']+NameFile
 			plt.savefig(namefigpng)
-			figmapeurope.clf()
+			figmapcontinent.clf()
 			plt.close('all')
 		return namefigpng
 
 	def Chloromap(NbCols,NbRows,List,mytable,SizeCol,SizeRow,TitleSize,LabelSize,name,dpi=80):
-	# draw a serie of maps of europe with each region lighter if the value of the table is lower
+	# draw a serie of maps of continent with each region lighter if the value of the table is lower
 		namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 	
 		if cfg['geopandas']:																		   
@@ -758,12 +749,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			x=0
 			y=0
 			for item in List:
-				if item in mytable.columns:
-					chloroeurope=myeurope
+				if item in mytable.columns:			   
+					chloroeurope=mycontinent
 					chloroeurope[item]=mytable[item]
 					mintech=mytable[item].min()
 					maxtech=mytable[item].max()
-					chloroeurope=myeurope.fillna(0)
+					chloroeurope=mycontinent.fillna(0)
 					ax=chloroeurope.plot(column=item,ax=axes[y][x],cmap=ChloroColors.loc[item,'colormap'],vmin=mintech,vmax=maxtech,legend=True,\
 						legend_kwds={'label':"energy (MWh)",'orientation':"vertical"})
 					fig=ax.figure
@@ -782,13 +773,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		return namefigpng
 		
 	def OneChloromap(mycol,TitleSize,LabelSize,name,dpi=80,mytitle=''):
-	# draw a unique map of europe with each region lighter if the value of the table is lower
+	# draw a unique map of continent with each region lighter if the value of the table is lower
 
 		namefigpng=cfg['dirIMG']+'ChloroMap-'+name+'.jpeg'
 	
 		if cfg['geopandas']:	
 
-			chloroeurope=myeurope
+			chloroeurope=mycontinent
 			chloroeurope[mytitle]=mycol
 			mintech=0
 			maxtech=1
@@ -1003,7 +994,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 	if(cfg['PostTreat']['InstalledCapacity']['draw']):
 	# create graphs for installed capacity
-		print('Draw Installed capacity')
+		logger.info('Draw Installed capacity')
 		InstalledCapacity=pd.read_csv(cfg['dirOUT']+'InstalledCapacity.csv',index_col=0).fillna(0.0)
 		AggrInstalledCapacity=pd.read_csv(cfg['dirOUT']+'AggrInstalledCapacity.csv',index_col=0).fillna(0.0)
 		namefigpng=StackedBar(InstalledCapacity,'InstalledCapacityBar.jpeg',TechnoColors)
@@ -1018,13 +1009,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
 			if isInvest:
 				namefigpng=EuropePieMap(InitialInstalledCapacity,'InitialInstalledCapacityMapPieEurope.jpeg',TechnoColors)
-				#namefigpng=EuropePieMap(InvestedInstalledCapacity,'InvestedInstalledCapacityMapPieEurope.jpeg',TechnoColors)
 
 		del namefigpng
 
 	if(cfg['PostTreat']['InstalledCapacity']['latex']):
 	# create latex chapter about installed capacity
-		print('Include Installed capacity in latex report')
+		logger.info('Include Installed capacity in latex report')
 		writelatex=True
 		namefigpng='InstalledCapacityMapPieEurope.jpeg'
 		namefigpng2='InstalledCapacityMapBarEurope.jpeg'
@@ -1045,7 +1035,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	if(cfg['PostTreat']['InstalledCapacity']['iamc']):
 	# create Open ENTRANCE format files with Installed Capacity and Variable Costs
-		print('Create Installed capacity Iamc Files')
+		logger.info('Create Installed capacity Iamc Files')
 		firstAnnualIAMC==True
 		InstalledCapacity=pd.read_csv(cfg['dirOUT']+'InstalledCapacity.csv',index_col=0)
 		VariableCost=pd.read_csv(cfg['dirOUT']+'InputVariableCost.csv',index_col=0)
@@ -1107,12 +1097,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		cfg['marginalcostlimits']={'max':cfg['PostTreat']['MarginalCost']['max'],'min':(-1)*cfg['PostTreat']['MarginalCost']['max']}
 	else:
 		cfg['marginalcostlimits']={'max':10000,'min':-10000}
-	print('Treat Stochastic results')
+	logger.info('Treat Stochastic results')
 	if isLatex: bodylatex_Sto=bodylatex_Sto+"\\chapter{Stochastic Results}\n" 
 	
 	# read VolumeOUT.csv per scenario and create 1 file per reservoir with all scenario data
 	if (cfg['PostTreat']['Volume']['read']):
-		print('   Read Stochastic results for Volumes')
+		logger.info('   Read Stochastic results for Volumes')
 		reservoirs=cfg['ReservoirRegions']
 		nbreservoirs=len(reservoirs)
 		Volumes=[]
@@ -1129,7 +1119,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		# treat scenarised results for Volume
 		for scen in listscen:
-			print('     opening file Volumes for scenario '+str(scen))
+			logger.info('     opening file Volumes for scenario '+str(scen))
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',usecols=usecols,index_col=0)
 			df.index=TimeIndex
 			
@@ -1192,7 +1182,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# write volumes in IAMC data format
 	if (cfg['PostTreat']['Volume']['iamc']):
-		print('   creating pyam for Volume')
+		logger.info('   creating pyam for Volume')
 		reservoirs=cfg['ReservoirRegions']
 		nbreservoirs=len(reservoirs)
 		var=vardict['Output']['Volume']
@@ -1219,12 +1209,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# postreat electricity demand per scenarised timeserie
 	# read DemandOUT.csv per scenario and create 1 file per region with all scenario data
 	if (cfg['PostTreat']['Demand']['read']):
-		print('   Read Stochastic results for Demand')
+		logger.info('   Read Stochastic results for Demand')
 		first=1
 		Demand=[]
 		i=0
 		for scen in listscen:
-			print('     opening file Demand for scenario '+str(scen))
+			logger.info('     opening file Demand for scenario '+str(scen))
 			regions=[]
 			for reg in list_regions:
 				regions.append(reg+'-'+str(scen))
@@ -1239,20 +1229,21 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				for index in range(len(cfg['regionsANA'])):
 					Demand[index]=pd.concat([Demand[index],df[regions[index]]], axis=1)
+		print(list_regions)
 		for index in range(len(list_regions)):
-			print('     writing file for ',list_regions[index])
 			reg=list_regions[index]
+			logger.info('     writing file for '+reg)
 			Demand[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['Demand']['Dir']+'Demand-'+reg+'.csv')
 			
 		del df, Demand
 			
 	# write demands in Open ENTRANCE data format
 	if (cfg['PostTreat']['Demand']['iamc']):
-		print('   creating pyam for demand')
+		logger.info('   creating pyam for demand')
 		var=vardict['Output']['Demand']
 		for reg in cfg['regionsANA']:
 			firstIAMC=True
-			print('     creating pyam for demand in region ',reg)
+			logger.info('     creating pyam for demand in region ',reg)
 			treat=True
 			if 'regions' in cfg['PostTreat']['Demand']:
 				if reg not in cfg['PostTreat']['Demand']['regions']: 
@@ -1279,12 +1270,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# postreat marginal costs
 	# read MarginalCostActivePowerDemandOUT.csv per scenario and create 1 file per region with all scenario data
 	if (cfg['PostTreat']['MarginalCost']['read']):
-		print('   Read Stochastic results for Marginal Costs')
+		logger.info('   Read Stochastic results for Marginal Costs')
 		first=1
 		MargCosts=[]
 		i=0
 		for scen in listscen:
-			print('     opening file MarginalCost for scenario '+str(scen))
+			logger.info('     opening file MarginalCost for scenario '+str(scen))
 			regions=[]
 			for reg in cfg['regionsANA']:
 				regions.append(reg+'-'+str(scen))
@@ -1305,16 +1296,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=TimeIndex)
 		meanScenMonotone=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		SlackCmar=pd.DataFrame(columns=listscen)
-		nbHoursSlack=pd.DataFrame(columns=listscen)
+		nbHoursSlack=pd.DataFrame(columns=listscen)									 
 		i=0
 		for index in range(len(cfg['regionsANA'])):
 			reg=cfg['regionsANA'][index]
-			print('     writing file for ',reg)
+			logger.info('     writing file for '+reg)
 			MargCosts[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv')
 			#meanScenReg=MargCosts[index].mean(axis=1).reset_index()
-			if len(listscen)>1:
-				meanScenReg=MargCosts[index].mean(axis=1)	
-				meanScen[reg]=MargCosts[index].mean(axis=1)
+			if len(listscen)>1:		  
+				meanScenReg=MargCosts[index].mean(axis=1)			
+				meanScen[reg]=MargCosts[index].mean(axis=1)							   
 				meanTimeReg=MargCosts[index].mean(axis=0).transpose().reset_index().drop('index',axis=1)
 				meanTime[reg]=meanTimeReg
 				SortedSlack=pd.DataFrame(columns=MargCosts[index].columns, index=MargCosts[index].index)
@@ -1336,19 +1327,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SortedSlack=pd.DataFrame(data=List).transpose()
 			if len(listscen)>1: SortedSlack.columns=MargCosts[index].columns
 			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv')
-			del data, SortedSlack, List
-			
+						
 			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
-			
-			SlackCmarReg.columns=listscen	
-			
+			   
+			SlackCmarReg.columns=listscen
 			if not(FailureCost in SlackCmarReg.index): 
-				print('       no non-served energy for zone ',reg)
+				logger.info('       no non-served energy for zone '+reg)
 				nbHoursSlack.loc[reg]=0
 			else:
 				nbHoursSlack.loc[reg]=SlackCmarReg.iloc[0]
-			
-			#SlackCmar=pd.concat([SlackCmar, SlackCmarReg ],ignore_index=True)
 			del SlackCmarReg
 			
 		nbHoursSlack.to_csv(cfg['dirOUT'] +'nbHoursSlack.csv',index=True)
@@ -1372,17 +1359,17 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# create Open ENTRANCE data format files for marginal costs
 	if (cfg['PostTreat']['MarginalCost']['iamc']):
-		print('   creating pyam for marginal costs')
+		logger.info('   creating pyam for marginal costs')
 		firstIAMC=True
 		for reg in cfg['regionsANA']:
 			
-			print('     creating pyam for marginal costs in region ',reg)
+			logger.info('     creating pyam for marginal costs in region '+reg)
 			treat=True
 			if 'regions' in cfg['PostTreat']['MarginalCost']:
 				if reg not in cfg['PostTreat']['MarginalCost']['regions']: 
 					treat=False
 			if treat:
-				print('     treat ',reg)
+				logger.info('     treat '+reg)
 				MargCosts=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv',index_col=0)
 				# aggregate per season
 				
@@ -1406,7 +1393,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			
 				MargCostsScenario=MargCostsScenario.rename(columns={reg:'value'})
 				varscenario=cfg['scenario']+variant
-				if len(option)>0: varscenario=cfg['scenario']+variant+'|'+option
+				if len(option)>0: 
+					varscenario=cfg['scenario']+variant+'|'+option
 				IAMC=pyam.IamDataFrame(MargCostsScenario.drop(['year'],axis=1),region=reg,model=cfg['model'],scenario=varscenario,unit='EUR_2020/MWh',variable='Marginal Cost|Final Energy|Electricity')
 				IAMC.swap_time_for_year(subannual=OE_SUBANNUAL_FORMAT).to_excel(cfg['dirIAMC']+reg+'-MarginalCost.xlsx', sheet_name='data', iamc_index=False, include_meta=True)			
 
@@ -1449,11 +1437,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# post-treat marginal costs for flows in interconnections
 	# read MarginalCostFlowsOUT.csv per scenario and create 1 file per line with all scenario data
 	if (cfg['PostTreat']['MarginalCostFlows']['read']):
-		print('   Reading marginal costs of interconnections')
+		logger.info('   Reading marginal costs of interconnections')
 		MargCosts=pd.Series()
 		i=0
 		for scen in listscen:
-			print('     opening file MarginalCost for scenario '+str(scen))
+			logger.info('     opening file MarginalCost for scenario '+str(scen))
 			
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+str(scen)+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			df.index=TimeIndex
@@ -1468,18 +1456,18 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				for line in lines:
 					MargCosts.loc[line][line+'-'+str(scen)]=df[line+'-'+str(scen)]
 		for line in lines:
-			print('     writing file ',line)
+			logger.info('     writing file '+line)
 			line2=line.replace('>','2')
 			MargCosts[line].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows-'+line2+'.csv')
 		del df, MargCosts
 
 	# create open ENTRANCE data format output files for Marginal costs of flows
 	if (cfg['PostTreat']['MarginalCostFlows']['iamc']):
-		print('   creating pyam for marginal costs of interconnections')
+		logger.info('   creating pyam for marginal costs of interconnections')
 		
 		for reg in cfg['lines']:
 			firstIAMC=True
-			print('     creating pyam for marginal costs of flows for line ',reg)
+			logger.info('     creating pyam for marginal costs of flows for line ',reg)
 		 
 			treat_reg=True
 			reg1=reg.split('>')[0]
@@ -1507,14 +1495,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# post-treat flows in interconnections
 	# read flowsOUT.csv per scenario and create 1 file per region with imports and exports with all scenario data
 	if (cfg['PostTreat']['Flows']['read']):
-		print(' reading flows')
+		logger.info(' reading flows')
 		CreateMean=True
 		MeanFlows=[]
 		MeanImportExport=pd.DataFrame(columns=cfg['lines'],index=TimeIndex,data=0.0)
 		for indexzone in range(len(cfg['regionsANA'])):
 			MeanFlows.append(pd.DataFrame(columns=['Export','Import'],index=TimeIndex,data=0.0))
 		for scen in listscen:
-			print('     opening file Flows for scenario '+str(scen))
+			logger.info('     opening file Flows for scenario '+str(scen))
 			newzones=[]
 			for zone in cfg['regionsANA']:
 				newzones.append(zone+'-'+str(scen))
@@ -1562,7 +1550,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# post-treat generation schedules
 	# read ActivePowerOUT.csv per scenario and create 1 file per region with all scenario data, for selected technos
 	if (cfg['PostTreat']['Power']['read']):	
-		print('   Read Stochastic results for Power')
+		logger.info('   Read Stochastic results for Power')
 		#listTechnosAggr=cfg['technosAggr'].keys()
 		#listTechnos=cfg['Technos'].keys()
 		listTechnosAggr=listaggrTechnosInDataset
@@ -1598,7 +1586,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		CreateMeanTechnoValues=True
 		
 		for scen in listscen:
-			print('     opening file Activepower for scenario '+str(scen))
+			logger.info('     opening file Activepower for scenario '+str(scen))
 			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'ActivePower'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			
 			# separate pumping from turbining for _PUMP technos
@@ -1765,7 +1753,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 	# compute variable costs of technologies
 	if (cfg['PostTreat']['Power']['computecost']):
-		print('   Compute costs')
+		logger.info('   Compute costs')
 		listTechnosAggr=listaggrTechnosInDataset
 		listTechnos=listTechnosInDataset
 		
@@ -1794,7 +1782,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		InputVarCost=pd.read_csv(cfg['dirOUT']+'InputVariableCost.csv',index_col=0)
 		
 		for scen in listscen:
-			print('     compute cost for scenario ',scen)
+			logger.info('     compute cost for scenario '+str(scen))
 			for region in cfg['regionsANA']:
 				scenreg=region + '-' + str(scen)
 				dfregion=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'Generation-'+region+'-'+str(scen)+'.csv')
@@ -1831,7 +1819,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 	# create demand graphs
 	if(cfg['PostTreat']['Demand']['draw']):
-		print('   Create graphs for demand')
+		logger.info('   Create graphs for demand')
 		drawMean=False
 		if 'DrawMean' in cfg['PostTreat']['Demand']: 
 			drawMean=cfg['PostTreat']['Demand']['DrawMean']
@@ -1851,7 +1839,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 	# create marginal costs graphs
 	if(cfg['PostTreat']['MarginalCost']['draw']):
-		print('   Create graphs for marginal costs')
+		logger.info('   Create graphs for marginal costs')
 		if 'max' in cfg['PostTreat']['MarginalCost'].keys(): 
 			maxCmarSto=cfg['PostTreat']['MarginalCost']['max']
 		else:
@@ -1891,7 +1879,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			+ figure(cfg['dirIMGLatex']+namefigpng4,'Histogram of Mean Marginal Costs (Euro/MWh)',namefigpng4) \
 			+ figure(cfg['dirIMGLatex']+namefigpng5,'Mean on all Timesteps of Marginal Costs per Scenario (Euro/MWh)',namefigpng5) 	
 	if(cfg['PostTreat']['Volume']['draw']):
-		print('   create stochastic volumes graphs')
+		logger.info('   create stochastic volumes graphs')
 		drawMean=False
 		if 'DrawMean' in cfg['PostTreat']['Volume']: 
 			drawMean=cfg['PostTreat']['Volume']['DrawMean']
@@ -1914,7 +1902,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if(cfg['PostTreat']['Power']['draw']):
 		NbRows=len(TimeIndex)
 		nbres=len(list_regions)
-		print('   create graphs for generation')
+		logger.info('   create graphs for generation')
 		MeanEnergyAggr=pd.read_csv(cfg['dirOUT'] + 'AggrGeneration.csv',index_col=0).fillna(0.0)
 		MeanEnergy=pd.read_csv(cfg['dirOUT'] + 'Generation.csv',index_col=0).fillna(0.0)
 
@@ -1949,7 +1937,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			for technoAggr in listTechnosAggr: 
 				listTechnos=listTechnos+cfg['technosAggr'][technoAggr]['technos']
 				
-		# plot chloromap of europe 
+		# plot chloromap of continent 
 		if cfg['map']: namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
 			listTechnosAggr,MeanEnergyAggr,cfg['Graphs']['Power']['SizeCol'],\
 			cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
@@ -1957,7 +1945,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 			
 		# for techno in listTechnosAggr:
-		print('     create stochastic graph for non served energy')
+		logger.info('     create stochastic graph for non served energy')
 		drawMean=False
 		if 'DrawMean' in cfg['PostTreat']['Demand']: 
 			drawMean=cfg['PostTreat']['Demand']['MarginalCost']
@@ -1975,7 +1963,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		firstIAMC=True
 		firstSubAnnualIAMC=True
 		
-		print('   Create Energy Iamc Files')
+		logger.info('   Create Energy Iamc Files')
 		Generation=pd.read_csv(cfg['dirOUT']+'Generation.csv',index_col=0)
 		for Tech in Generation.columns:
 			if ('Import' not in Tech and 'Export' not in Tech and 'SlackUnit' not in Tech and Tech not in cfg['technos']['battery']):
@@ -2018,7 +2006,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			Generation['hour'] = Generation.index.hour
 			
 			######################################################
-			print('     Create Energy Iamc Files for region ',reg)
+			logger.info('     Create Energy Iamc Files for region '+reg)
 			# aggregate per season
 			Generation['subannual']=Generation['DOY'].map(lambda x: season(x))
 			Generation=Generation.groupby('subannual').sum()
@@ -2106,9 +2094,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# create graphs for flows
 	if(cfg['PostTreat']['Flows']['draw']):
-		print('   Create graphs for Flows')
+		logger.info('   Create graphs for Flows')
 		MeanFlows=pd.read_csv(cfg['dirOUT'] + 'MeanImportExport.csv',index_col=0).fillna(0.0)
-		if cfg['map']: namefigpng=EuropeFlowsMap(MeanFlows,'MeanFlows.jpeg')
+		if cfg['map']: namefigpng=FlowsMap(MeanFlows,'MeanFlows.jpeg')
 		del namefigpng
 		
 	# create flows chapter in latex report
@@ -2124,7 +2112,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 	# create output files in openentrance data format for flows
 	if(cfg['PostTreat']['Flows']['iamc']):
-		print('   Create Flows Iamc Files')
+		logger.info('   Create Flows Iamc Files')
 		Flows=pd.read_csv(cfg['dirOUT']+'MeanImportExport.csv',index_col=0)
 		var=vardict['Output']['Flow']
 		Flows=Flows.sum()
@@ -2157,14 +2145,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		# read plan4res résults 
 		indexScen=0
 		for NumScen in cfg['PostTreat']['SpecificPeriods']['scenarios']:
-			print('Treat scenario ',NumScen)
+			logger.info('Treat scenario '+str(NumScen))
 			useNumScen=True
 			cfg['dirOUTScen']=cfg['dirOUTScenario'][indexScen]
 			if(cfg['PostTreat']['SpecificPeriods']['latex']): bodylatex_Det=bodylatex_Det+"\\chapter{Detailed Results on Scenario "+str(NumScen)+"}\n"
 		
 			# Read Generation schedule
 			##########################
-			print('   reading ActivePowerOUT.csv')
+			logger.info('   reading ActivePowerOUT.csv')
 			SMSPower=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir'] +'ActivePower'+str(NumScen)+'.csv')
 			SMSPower.drop(['Timestep'], axis='columns', inplace=True)
 
@@ -2174,7 +2162,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSPower=SMSPower[ (SMSPower.index>=datestart) & (SMSPower.index<=dateend) ]
 
 			# reading Demand
-			print('   reading DemandOUT.csv')
+			logger.info('   reading DemandOUT.csv')
 			SMSDemand=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir'] +'Demand' +str(NumScen)+'.csv')
 			SMSDemand.drop(['Timestep'], axis='columns', inplace=True)
 			SMSDemand['Time']=cfg['Tp4r']
@@ -2183,7 +2171,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSDemand=SMSDemand[ (SMSDemand.index>=datestart) & (SMSDemand.index<=dateend) ]
 
 			# reading marginal costs
-			print('   reading MarginalCostActivePowerDemandOUT.csv')
+			logger.info('   reading MarginalCostActivePowerDemandOUT.csv')
 			SMSCMarAPD=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+str(NumScen)+'.csv')
 			SMSCMarAPD.drop(['Timestep'], axis='columns', inplace=True)
 			SMSCMarAPD['Time']=cfg['Tp4r']
@@ -2191,7 +2179,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSCMarAPD=np.round(SMSCMarAPD,decimals=cfg['arrondi'])
 			SMSCMarAPD=SMSCMarAPD[ (SMSCMarAPD.index>=datestart) & (SMSCMarAPD.index<=dateend) ]
 
-			print('   reading MarginalCostFlowsOUT.csv')
+			logger.info('   reading MarginalCostFlowsOUT.csv')
 			SMSCMarFlo=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+str(NumScen)+'.csv')
 			SMSCMarFlo.drop(['Timestep'], axis='columns', inplace=True)
 			SMSCMarFlo['Time']=cfg['Tp4r']
@@ -2205,7 +2193,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSCMarFlo.columns=cfg['lines']
 
 			# reading Volumes
-			print('   reading VolumeOUT.csv')
+			logger.info('   reading VolumeOUT.csv')
 			SMSVolume=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['Volume']['Dir']+'Volume'+str(NumScen)+'.csv')
 			SMSVolume.drop(['Timestep'], axis='columns', inplace=True)
 			SMSVolume['Time']=cfg['Tp4r']
@@ -2214,7 +2202,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSVolume=SMSVolume[ (SMSVolume.index>=datestart) & (SMSVolume.index<=dateend) ]
 
 			# reading Flows
-			print('   reading FlowsOUT.csv')
+			logger.info('   reading FlowsOUT.csv')
 			SMSFlows=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir'] +'Flows'+str(NumScen)+'.csv')
 			SMSFlows.drop(['Timestep'], axis='columns', inplace=True)
 			SMSFlows['Time']=cfg['Tp4r']
@@ -2244,13 +2232,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			CoutTotalAllCountriesSMShorsVU=0.0
 			if cfg['PostTreat']['SpecificPeriods']['read']:
 				for country in cfg['regionsANA']:
-					print('   Treat '+country)
+					logger.info('   Treat '+country)
 					if cfg['PostTreat']['SpecificPeriods']['latex']: bodylatex_Det=bodylatex_Det+"\\newpage\\section{"+country+"}\n"
 				
 					################################################################################################
 					# treat active power and compute active power stackings
 					################################################################################################
-					print('     treating Active power')
+					logger.info('     treating Active power')
 					SMSPowercols=SMSPower.columns
 					# sélect country
 					SMSPowerCountryCols=[elem for elem in SMSPowercols if country in elem]
@@ -2319,7 +2307,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					################################################################################################
 					# treat flows
 					################################################################################################
-					print('     treating Flows')
+					logger.info('     treating Flows')
 					SMSFlowscols=SMSFlows.columns
 					
 					Importcols=[elem for elem in SMSFlowscols if country in elem.split('>')[1]]
@@ -2386,7 +2374,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 							end_week = pd.to_datetime(cfg['PostTreat']['SpecificPeriods']['periods'][week]['end'],dayfirst=cfg['Calendar']['dayfirst'])
 							start_short=str(start_week)[0:10]
 							end_short= str(end_week)[0:10]
-							print('     treat specific period ',week,' from ',start_short,' to ',end_short)
+							logger.info('     treat specific period '+str(week)+' from '+str(start_short)+' to '+str(end_short))
 							WeekTimeIndex=pd.date_range(start=start_week,end=end_week, freq='1H')	
 							NbTimeStepsWeek=len(WeekTimeIndex)
 								
@@ -2436,11 +2424,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					end_week = pd.to_datetime(cfg['p4r_end'])
 					start_short=str(start_week)[0:10]
 					end_short= str(end_week)[0:10]
-					print('     treat marginal costs whole period')
+					logger.info('     treat marginal costs whole period')
 						
 					# treat and draw Marginal Costs Active Power whole period
 					namefigpng='Scenario_'+str(NumScen)+'_MarginalCostDemand_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
-					print('        for Active Power')
+					logger.info('        for Active Power')
 					# graphs for demand marginal costs
 					MaxCmar=SMSCMarAPD[ (SMSCMarAPD<cfg['marginalcostlimits']['max']) & (SMSCMarAPD>cfg['marginalcostlimits']['min']) ].max().iloc[0]	
 					MinCmar=SMSCMarAPD[ (SMSCMarAPD<cfg['marginalcostlimits']['max']) & (SMSCMarAPD>cfg['marginalcostlimits']['min']) ].min().iloc[0]
@@ -2455,7 +2443,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					################################################################################################
 					# treatment of volumes
 					################################################################################################
-					print('     treating Volumes')
+					logger.info('     treating Volumes')
 					SMSVolcols=SMSVolume.columns
 
 					# select country
@@ -2469,7 +2457,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 						for col in SMSVolCountry.columns:
 							# is it a fictive reservoir?
 							if col[-4:].count('_')>1 and int(col[-4:].split('_')[2])==1: 
-								print(        col+' is a fictive resevoir')
+								logger.info(        col+' is a fictive resevoir')
 								deletecols.append(col)
 							else:
 								# replace techno names
@@ -2491,7 +2479,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 						# seasonal storage, pumped storage , battery and demand response
 						if len(SMSVolCountry.columns)>0:
 							for hydrotech in cfg['graphVolumes']:
-								print('        creating volume graph for '+hydrotech)
+								logger.info('        creating volume graph for '+hydrotech)
 							
 								P4Rtitle='Volumes '+ hydrotech + ' '+country  
 								nbtechs=0
@@ -2555,7 +2543,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					################################################################################################
 					# creation of indicators
 					################################################################################################
-					print('     computing indicators')
+					logger.info('     computing indicators')
 					# compute annual averages
 					BilansSMS=SMSAggrPowerCountry.sum(axis=0)
 					# aggregation per group of technologies
@@ -2651,7 +2639,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				################################################################################################
 
 			if cfg['usevu']:
-				print('compute SMS VB')
+				logger.info('compute SMS VB')
 				SMSVB=pd.read_csv(cfg['dirScen'] +'BellmanValuesOUT.csv')
 				cols=['Timestep']+cfg['ReservoirRegions']+['b']
 				SMSVB.columns=cols
@@ -2698,7 +2686,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if cfg['usevu'] : VBSMS.to_csv(cfg['dirOUTScen']+'BV.csv',sep=',',mode='w',header=False,index=False)
 			tablebilansNRJ.to_csv(cfg['dirOUTScen']+'Balance.csv',sep=',',mode='w')
 				
-			print('Treat Import Exports')
+			logger.info('Treat Import Exports')
 			#CostFlows.to_csv(cfg['dirOUTScen']+'CostFlows'+'.csv',sep=',',mode='w',header=True,index=True)
 			
 			# build flows dataframe (import/export in same col)
@@ -2751,15 +2739,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 
 			###########################################################		
-			# graphs europe maps	
+			# graphs continent maps	
 			###########################################################		
 				
-			# draw europe with flows
+			# draw continent with flows
 			##################################################################
 			if cfg['PostTreat']['SpecificPeriods']['draw'] and cfg['map']:
 				# draw map
 				figflows, axflows = plt.subplots(1,1,figsize=(10,10))
-				myeurope.boundary.plot(ax=axflows,figsize=(10,10))
+				mycontinent.boundary.plot(ax=axflows,figsize=(10,10))
 				centers.plot(color='r',ax=axflows,markersize=1)
 
 				# fill data with flows and start/end
@@ -2815,23 +2803,18 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					namefigpng='Scenario_'+str(NumScen)+'_ArrowImpExp.jpeg'
 					bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of Interconnection uses over the whole period (MWh)',namefigpng)
 
-		# draw chloromap of europe
+		# draw chloromap of continent
 			if cfg['map']:
 				tablebilansNRJ=tablebilansNRJ.fillna(0)
 				mytable=tablebilansNRJ
 				mytable['name']=mytable.index
 				mytable=mytable.reset_index()
 				
-				# namefigpng=Chloromap(cfg['Graphs']['Power']['ChloroGraph']['nbcols'],cfg['Graphs']['Power']['ChloroGraph']['nblines'],\
-					# cfg['technosAggr'],tablebilansNRJ,cfg['Graphs']['Power']['SizeCol'],\
-					# cfg['Graphs']['Power']['SizeRow'],cfg['Graphs']['Power']['TitleSize'],cfg['Graphs']['Power']['LabelSize'],\
-					# 'Scenario_MeanEnergy',cfg['Graphs']['Power']['ChloroGraph']['dpi'])
-
 				# draw chloromap for C02
-				myeurope['CO2']=tablebilansNRJ['CO2']
-				myeurope=myeurope.fillna(0)
+				mycontinent['CO2']=tablebilansNRJ['CO2']
+				mycontinent=mycontinent.fillna(0)
 				figchloroeurope, axchloroeurope = plt.subplots(1,1)
-				myeurope.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
+				mycontinent.plot(column='CO2',ax=axchloroeurope,cmap='Greys',legend=True,legend_kwds={'label':"CO2 Emissions (t)",'orientation':"horizontal"})
 				axchloroeurope.set_title('Emissions (t)',fontsize=10)
 				namefigpng='Scenario_ChloroMap-CO2.jpeg'
 				plt.savefig(cfg['dirIMG']+namefigpng)
@@ -2847,7 +2830,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of energy generated for Scenario '+str(NumScen)+' (MWh)',namefigpng)
 				
 			###########################################################
-			#europe pies
+			#continent pies
 			#############################################################
 			#if cfg['map']: namefigpng=EuropePieMap(tablebilansNRJ.drop(['CO2','name','Non Served'],axis=1),'EnergyPieEurope-Scenario.jpeg',TechnoAggrColors)
 			if cfg['PostTreat']['SpecificPeriods']['latex']:
@@ -2868,5 +2851,5 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			myfile.write(containerlatex)
 			myfile.close()
 
-
+log_and_exit(0, cgf['path'])
 

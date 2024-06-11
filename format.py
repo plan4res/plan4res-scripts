@@ -11,8 +11,10 @@ from netCDF4 import Dataset
 import calendar
 import sys
 
+from p4r_python_utils import *
+
 path = os.environ.get("PLAN4RESROOT")
-print('path=',path)
+logger.info('path='+path)
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -24,7 +26,7 @@ print('path+settings_format=',path+settings_format)
 cfg1={}
 with open(path+settings_format,"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
-# it is possible to also pass the createplan4res config file which makes some data optional in settings format
+settings_create = None
 if nbargs>2:
 	settings_create=sys.argv[2]
 	cfg2={}
@@ -47,10 +49,11 @@ if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
 
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
+	cfg['path']=path+cfg['path']
 	cfg['outputpath']=path+cfg['outputpath']
 	cfg['inputpath']=path+cfg['inputpath']
 	cfg['timeseriespath']=path+cfg['timeseriespath']
-print('path: ',cfg['inputpath'])
+logger.info('path: '+cfg['inputpath'])
 
 cfg['treat']=cfg['csvfiles']
 cfg['treat']['ZP']=cfg['csvfiles']['ZP_ZonePartition']
@@ -73,6 +76,13 @@ if format=='excel':
 	sheets=list(excelfile.keys())
 else:
 	sheets=cfg['csvfiles']
+
+def read_input_timeseries(cfg, ts_name, **kwargs):
+	file = os.path.join(cfg['timeseriespath'], ts_name)
+	if not os.path.isfile(file):
+		logger.error('File '+file+' does not exist. Use key timeseriespath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+		log_and_exit(2, cfg['path'])
+	return pd.read_csv(file, **kwargs)
 
 #################################################################################################################################################
 #																																				#
@@ -106,10 +116,9 @@ Coupling=pd.DataFrame(index=ListCouplingConstraints+ListPollutants,dtype=object,
 NumberPollutants=0
 for coupling_constraint in cfg['CouplingConstraints']:
 	if coupling_constraint not in ListPossibleTypesCoupling:
-		print('Constraint ',coupling_constraint, 'is not possible')
-		print('Possible constraints are:')
-		for constraint in ListPossibleTypesCoupling: print('   - ',constraint)
-		exit()
+		logger.error('Constraint '+coupling_constraint+'is not possible')
+		logger.error('Possible constraints are: '+', '.join(ListPossibleTypesCoupling))
+		log_and_exit(1, cfg['path'])
 	if coupling_constraint=="PollutantBudget":
 		NumberPollutants=len(cfg['CouplingConstraints']['PollutantBudget'])
 		for pollutant in ListPollutants:
@@ -118,8 +127,8 @@ for coupling_constraint in cfg['CouplingConstraints']:
 	else:
 		Coupling.loc[coupling_constraint,'Sum']=cfg['CouplingConstraints'][coupling_constraint]['SumOf']
 		Coupling.loc[coupling_constraint,'Partition']=cfg['CouplingConstraints'][coupling_constraint]['Partition']
-print('Coupling constraints:',ListCouplingConstraints)
-print('Emissions constraints:',ListPollutants)
+logger.info('Coupling constraints:'+', '.join(ListCouplingConstraints))
+logger.info('Emissions constraints:'+', '.join(ListPollutants))
 # get dates
 dates=pd.Series()
 beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
@@ -130,8 +139,8 @@ endTS=pd.to_datetime(cfg['Calendar']['EndTimeSeries'],dayfirst=cfg['Calendar']['
 dates['UCEndData']=pd.Timestamp(year=endTS.year,month=endTS.month,day=endTS.day,hour=endTS.hour,minute=endTS.minute)
 endDS=pd.to_datetime(cfg['Calendar']['EndDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEnd']=pd.Timestamp(year=endDS.year,month=endDS.month,day=endDS.day,hour=endDS.hour,minute=endDS.minute)
-print('dates: timeseries start: ',dates['UCBeginData'],' end: ',dates['UCEndData'])
-print('       plan4res dataset start: ',dates['UCBegin'],' end: ',dates['UCEnd'])
+logger.info('dates: timeseries start: '+str(dates['UCBeginData'])+' end: '+str(dates['UCEndData']))
+logger.info('plan4res dataset start : '+str(dates['UCBegin'])+' end: '+str(dates['UCEnd']))
 
 dates['UCBeginDataYearP4R']=pd.Timestamp(year=dates['UCBegin'].year,month=dates['UCBeginData'].month,day=dates['UCBeginData'].day,hour=dates['UCBeginData'].hour,minute=dates['UCBeginData'].minute)
 DurationTimeSeries=pd.Timedelta(dates['UCEndData']-dates['UCBeginData'])
@@ -172,7 +181,7 @@ durationInstance=dates.UCEnd-dates.UCBegin+pd.Timedelta(hours=1)
 NumberUCTimeSteps=int((durationInstance.days*24+durationInstance.seconds/3600)/UCTimeStep)
 durationUCTimeStep=pd.Timedelta(str(UCTimeStep)+' hours')
 durationSSVTimeStep=pd.Timedelta(str(SSVTimeStep)+' hours')
-print('Duration instance:',durationInstance)
+logger.info('Duration instance:'+str(durationInstance))
 
 if not ((durationInstance.total_seconds()/3600)/SSVTimeStep)-int((durationInstance.total_seconds()/3600)/SSVTimeStep)==0:
 	NewNumberUCTimeSteps=int((durationInstance.total_seconds()/3600)/SSVTimeStep)*SSVTimeStep/UCTimeStep
@@ -181,13 +190,13 @@ if not ((durationInstance.total_seconds()/3600)/SSVTimeStep)-int((durationInstan
 	durationToDelete=pd.Timedelta(str(NumberUCTimeStepsToDelete*UCTimeStep)+' hours')
 	dates['UCEnd']=dates['UCEnd']-durationToDelete
 	durationInstance=dates.UCEnd-dates.UCBegin+pd.Timedelta(hours=1)
-print('Number of time steps:',NumberUCTimeSteps,' of duration:',durationUCTimeStep)
+logger.info('Number of time steps:'+str(NumberUCTimeSteps)+' of duration:'+str(durationUCTimeStep))
 	
 TimeHorizonUC=int(SSVTimeStep/UCTimeStep)
 NumberIntervals=TimeHorizonUC
 NumberSSVTimeSteps=int(NumberUCTimeSteps*UCTimeStep/SSVTimeStep)
 TimeHorizonSSV=NumberSSVTimeSteps
-print('Number of SSV time steps:',NumberSSVTimeSteps,' of duration:',TimeHorizonUC,' timesteps = ',durationSSVTimeStep)
+logger.info('Number of SSV time steps:'+str(NumberSSVTimeSteps)+' of duration:'+str(TimeHorizonUC)+' timesteps = '+str(durationSSVTimeStep))
 
 # create dataframe with start and end dates of all SSV timesteps
 datesSSV=pd.DataFrame(index=list(range(NumberSSVTimeSteps)),columns=['start','end'])
@@ -218,7 +227,7 @@ if 'ZP_ZonePartition' in sheets:
 	if format=='excel':
 		ZP=pd.read_excel(p4r_excel,sheet_name='ZP_ZonePartition',skiprows=0,index_col=None)
 	else:
-		ZP=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['ZP_ZonePartition'],skiprows=0,index_col=None)
+		ZP=read_input_csv(cfg, 'ZP_ZonePartition', skiprows=0, index_col=None)
 	
 	ZP=ZP.drop_duplicates()
 	Nodes=ZP[Coupling['Partition'].loc['ActivePowerDemand']]
@@ -249,8 +258,8 @@ if 'ZP_ZonePartition' in sheets:
 	else: NumberInertiaZones=0
 	TotalNumberPollutantZones=sum(len(Partition.loc[Coupling['Partition'][elem]]) for elem in ListPollutants)
 else:
-	print('ZP_Partition missing')
-	exit()
+	logger.error('ZP_Partition missing')
+	log_and_exit(2, cfg['path'])
 
 # Read sheet IN_Interconnections
 #################################################################################################################################################
@@ -258,7 +267,7 @@ if 'IN_Interconnections' in sheets:
 	if format=='excel':
 		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
 	else:
-		IN=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['IN_Interconnections'],skiprows=skip,index_col=0)
+		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
 	IN=IN.drop_duplicates()
 	NumberLines=len(IN.index)
 	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
@@ -270,7 +279,7 @@ if 'IN_Interconnections' in sheets:
 	else:
 		NumberInvestedLines=0
 else: 
-	print('No interconnections in this dataset')
+	logger.warning('No interconnections in this dataset')
 	NumberLines=0
 
 # Read sheet ZV_ZoneValues
@@ -279,7 +288,7 @@ if 'ZV_ZoneValues' in sheets:
 	if format=='excel':
 		ZV=pd.read_excel(p4r_excel,sheet_name='ZV_ZoneValues',skiprows=0,index_col=None)
 	else:
-		ZV=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['ZV_ZoneValues'],skiprows=0,index_col=None)
+		ZV=read_input_csv(cfg, 'ZV_ZoneValues',skiprows=0,index_col=None)
 	ZV=ZV.drop_duplicates()
 	ZV=ZV.set_index(['Type','Zone'])
 	if 'Profile_Timeserie' in ZV.columns:
@@ -288,8 +297,8 @@ if 'ZV_ZoneValues' in sheets:
 		ZV['Profile_Timeserie']=''
 	ZV=ZV.fillna(0)
 else: 
-	print('ZV_ZoneValues missing')
-	exit()
+	logger.error('ZV_ZoneValues missing')
+	log_and_exit(1, cfg['path'])
 
 # Read sheet TU_ThermalUnits
 #################################################################################################################################################
@@ -297,7 +306,7 @@ if 'TU_ThermalUnits' in sheets:
 	if format=='excel':
 		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=None)
 	else:
-		TU=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits'],skiprows=skip,index_col=None)
+		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=None)
 	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
 	TU=TU.drop_duplicates()
 	TU=TU.set_index(['Name','Zone'])
@@ -311,7 +320,7 @@ if 'TU_ThermalUnits' in sheets:
 	else:
 		NumberInvestedThermalUnits=0
 else: 
-	print('No thermal mix in this dataset')
+	logger.warning('No thermal mix in this dataset')
 	NumberThermalUnits=0
 
 # Read sheet SS_SeasonalStorage
@@ -320,7 +329,7 @@ if 'SS_SeasonalStorage' in sheets:
 	if format=='excel':
 		SS=pd.read_excel(p4r_excel,sheet_name='SS_SeasonalStorage',skiprows=skip,index_col=None)
 	else:
-		SS=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage'],skiprows=skip,index_col=None)
+		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=None)
 	if len(SS.index)>0:
 		SS=SS.drop_duplicates()
 		SS=SS.drop( SS[ SS['NumberUnits']==0 ].index )
@@ -346,10 +355,10 @@ if 'SS_SeasonalStorage' in sheets:
 		for hs in range(NumberHydroSystems):
 			HSSS.loc[hs]=SS[ SS['HydroSystem']==hs ]
 	else: 
-		print('No seasonal storage mix in this dataset')
+		logger.warning('No seasonal storage mix in this dataset')
 		NumberHydroSystems=0	
 else: 
-	print('No seasonal storage mix in this dataset')
+	logger.warning('No seasonal storage mix in this dataset')
 	NumberHydroSystems=0
 	
 # Read sheet STS_ShortTermStorage
@@ -358,7 +367,7 @@ if 'STS_ShortTermStorage' in sheets:
 	if format=='excel':
 		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
 	else:
-		STS=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage'],skiprows=skip,index_col=None)
+		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
 	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
 	STS=STS.drop_duplicates()
 	STS=STS.set_index(['Name','Zone'])
@@ -372,7 +381,7 @@ if 'STS_ShortTermStorage' in sheets:
 	else:
 		NumberInvestedBatteryUnits=0
 else: 
-	print('No short term storage mix in this dataset')
+	logger.warning('No short term storage mix in this dataset')
 	NumberBatteryUnits=0
 
 # Read sheet RES_RenewableUnits
@@ -381,7 +390,7 @@ if 'RES_RenewableUnits' in sheets:
 	if format=='excel':
 		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=None)
 	else:
-		RES=pd.read_csv(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits'],skiprows=skip,index_col=None)
+		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=None)
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
 	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
@@ -400,7 +409,7 @@ if 'RES_RenewableUnits' in sheets:
 		NumberInvestedIntermittentUnits=0
 
 else: 
-	print('No intermittent generation mix in this dataset')
+	logger.warning('No intermittent generation mix in this dataset')
 	NumberIntermittentUnits=0
 
 # Read sheet SYN SynchCond
@@ -416,7 +425,7 @@ if 'SYN_SynchCond' in sheets:
 	SYN=SYN.set_index(['Name','Zone'])
 	NumberSyncUnits=SYN['NumberUnits'].sum()
 else: 
-	print('No synchronous condensers mix in this dataset')
+	logger.warning('No synchronous condensers mix in this dataset')
 	NumberSyncUnits=0
 
 
@@ -434,14 +443,14 @@ else:
 	NumberArcs=0
 	NumberHydroUnits=0
 NumberElectricalGenerators=NumberArcs+NumberThermalUnits+NumberBatteryUnits+NumberIntermittentUnits+NumberSyncUnits+NumberSlackUnits
-print(NumberHydroSystems,' Hydrosystems')
-print(NumberHydroUnits,' Hydro Units with ',NumberArcs,' generators')
-print(NumberThermalUnits,' Thermal Units')
-print(NumberBatteryUnits,' Short term Storage Units')
-print(NumberIntermittentUnits,' Intermittent Units')
-print(NumberSyncUnits,' Synchronous condensers')
-print(NumberSlackUnits,' Slack Units')
-print(NumberUnits,' units, ',NumberElectricalGenerators,' generators')
+logger.info(str(NumberHydroSystems)+' Hydrosystems')
+logger.info(str(NumberHydroUnits)+' Hydro Units with '+str(NumberArcs)+' generators')
+logger.info(str(NumberThermalUnits)+' Thermal Units')
+logger.info(str(NumberBatteryUnits)+' Short term Storage Units')
+logger.info(str(NumberIntermittentUnits)+' Intermittent Units')
+logger.info(str(NumberSyncUnits)+' Synchronous condensers')
+logger.info(str(NumberSlackUnits)+' Slack Units')
+logger.info(str(NumberUnits)+' units, '+str(NumberElectricalGenerators)+' generators')
 
 #################################################################################################################################################
 #																																				#
@@ -503,7 +512,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	duration_TS_timestep=pd.Timedelta(str(Hours_freq)+' hours')
 	
 	if Hours_freq==1: 
-		#Extension.index=Extension.index+dates['durationData']
 		Extension.index=Extension.index+durationData
 	else:
 		Extension.index=Extension.index+pd.Timedelta(TS.index[-1]-TS.index[0])+pd.Timedelta(str(Hours_freq)+' hours')
@@ -512,10 +520,7 @@ def ExtendAndResample(name,TS,isEnergy=True):
 	# case where timeserie is given at frequency bigger than hour
 	# resample to hour frequecy before resampling to the required frequency
 	if upsample:
-		#TS=(1/Hours_freq)*TS.resample('h').ffill()  # convert to hourly frequency
 		TS=TS.resample('h').ffill()		# convert to hourly frequency
-		#if isEnergy:
-		#	TS=(1/Hours_freq)*TS
 
 		# extend with missing dates: duplicate last dates
 		if TS.index[-1]< dates['UCEnd']:
@@ -524,7 +529,6 @@ def ExtendAndResample(name,TS,isEnergy=True):
 			Extension.index=Extension.index+dur_missing # shift over time
 			TS=pd.concat([TS,Extension]) # add at end of serie
 
-		#TS=TS.resample(newfreq).sum()  # converts to new frequency
 		TS=TS.resample(newfreq).sum()
 	else:
 		TS=TS.resample(newfreq).sum()
@@ -578,7 +582,7 @@ def create_demand_scenarios():
 			# read timeserie if deterministic
 			elif '.csv' in nameTS: # stochastic OR deterministic series
 				isDeterministic=False
-				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+				TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
 					
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
@@ -621,7 +625,7 @@ def create_inflows_scenarios():
 			InflowsScenarios[reservoir]=pd.DataFrame(columns=ListScenarios)
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['ParametersFormat']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
 		elif '.csv' in nameTS:  # stochastic series
-			TS=pd.read_csv(cfg['timeseriespath']+nameTS,index_col=0)
+			TS=read_input_timeseries(cfg, nameTS, index_col=0)
 			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
@@ -634,7 +638,6 @@ def create_inflows_scenarios():
 			DTS=valTS*DeterministicTimeSeries[nameTS]
 			InflowsScenarios.loc[reservoir]=pd.DataFrame(columns=ListScenarios)
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=DTS
-		#InflowsScenarios.loc[reservoir].to_csv('Inflows_'+str(reservoir[1])+'.csv')
 					
 	return InflowsScenarios
 	
@@ -654,7 +657,7 @@ def create_res_scenarios():
 					
 		# read timeserie 
 		if '.csv' in nameTS:  # stochastic series
-			TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+			TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
@@ -690,7 +693,7 @@ def create_thermal_scenarios():
 				
 				# read timeserie 
 				if '.csv' in nameTS:  # stochastic series
-					TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+					TS=read_input_timeseries(cfg['timeseriespath'], nameTS,skiprows=0,index_col=0)
 					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 					TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
@@ -710,7 +713,7 @@ def create_thermal_scenarios():
 			
 			# read timeserie 
 			if '.csv' in nameTS:  # stochastic series
-				TS=pd.read_csv(cfg['timeseriespath']+nameTS,skiprows=0,index_col=0)
+				TS=read_input_timeseries(cfg['timeseriespath'],nameTS,skiprows=0,index_col=0)
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS)
 				
@@ -1075,10 +1078,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,0]
 				elif NumberReservoirs==2:
 					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,InitialFlowRateData*UCTimeStep,0]
-					
-				#UpHillFlow=HBlock.createVariable("UpHillFlow",np.double,("NumberArcs"))
-				#DownHillFlow=HBlock.createVariable("DownHillFlow",np.double,("NumberArcs"))
-				
+									
 				indexHU=indexHU+1
 		# add polyhedral function for water values
 		PolyhedralFunctionBlock=HSBlock.createGroup('PolyhedralFunctionBlock')
@@ -1098,7 +1098,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					
 					BVfile=HSSS.loc[hydrosystem]['WaterValues'][hydrounit]
 					if BVfile!='':
-						BVdata=pd.read_csv(cfg['inputpath']+BVfile,index_col=0,skiprows=skip)
+						BVdata=read_input_timeseries(cfg['inputpath'],BVfile,index_col=0,skiprows=skip)
 						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
 						BVdata=BVdata[ (BVdata.index >=start) & (BVdata.index <=end)   ]
@@ -1145,7 +1145,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
-				WVdata=pd.read_csv(cfg['inputpath']+WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata=read_input_timeseries(cfg['inputpath'],WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
@@ -1202,7 +1202,7 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 							MaxPower[:]=np.array(DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 							pmax=MaxPowerData*DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 					else:
-						print('deterministic timeseries for maxpower not implemented')
+						logger.warning('deterministic timeseries for maxpower not implemented')
 						# not implemented
 						# read det time serie
 						# extend and resample
@@ -1221,7 +1221,6 @@ def addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					pmin=np.minimum(DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 					MinPower[:]=pmin
 				else:
-					#MinPowerData=MinPowerData*UCTimeStep
 					if len(MaxPowerProfile)>0 and  ( (MinPowerData>pmax).isin([True]).sum()>0 ):
 						pmin=np.minimum(MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],pmax)
 						MinPower=TBlock.createVariable("MinPower",np.double,("NumberIntervals"))
@@ -1831,7 +1830,6 @@ def createUCBlock(filename,id,scenario,start,end):
 	UCBlock.setncattr('SMS++_file_type',np.int64(1))
 	
 	# add the unique group Block of type UCBlock 
-	#Block=UCBlock.createGroup("Block_"+str(id))
 	Block=UCBlock.createGroup("Block_0")
 	Block.id=str(id)
 	Block.type="UCBlock"
@@ -2066,7 +2064,6 @@ def createSDDPBlock(filename,id):
 	# general attribute of the file
 	SDDPBlock.setncattr('SMS++_file_type',1)
 	Block=SDDPBlock.createGroup("Block_"+str(id))
-	#Block.id=str(id)
 	Block.type="SDDPBlock"
 	Block.createDimension("NumPolyhedralFunctionsPerSubBlock",NumberHydroSystems)
 	Block.createDimension("TimeHorizon",TimeHorizonSSV)
@@ -2097,11 +2094,11 @@ def createSDDPBlock(filename,id):
 	SizeRandomDataGroups[:]=SizeRandomDataGroupsData
 	
 	# create scenarios
-	print('fill scenarios')
+	logger.info('fill scenarios')
 	Scenarios=Block.createVariable("Scenarios",np.double,("NumberScenarios","ScenarioSize"))
 	indexScenario=0
 	for scenario in ListScenarios:
-		print('scenario ',scenario)
+		logger.info('scenario '+scenario)
 		ScenarioData=pd.Series(index=range( NumberSSVTimeSteps ),dtype=object)
 		for t in range(NumberSSVTimeSteps):
 			start=datesSSV.loc[t]['start']
@@ -2193,7 +2190,7 @@ def createSDDPBlock(filename,id):
 	##################################################################################
 	# create stochastic blocks and benders blocks
 	##################################################################################
-	print('Create StochasticBlocks')
+	logger.info('Create StochasticBlocks')
 	for indexSSV in range(NumberSSVTimeSteps):
 		# create blocks
 		StochasticBlocks=Block.createGroup("StochasticBlock_"+str(indexSSV))
@@ -2213,7 +2210,6 @@ def createSDDPBlock(filename,id):
 		SetSizeData=NumberNodes*[Nb_APDTo,0]+2 * (Nb_SS + Nb_TPP + Nb_RGP)*[0]+2*[Nb_SS]
 		SetSize[:]=np.array(SetSizeData)
 		
-		#SetElements=StochasticBlocks.loc[indexSSV].createVariable("SetElements","u4",("SetElementsSize"))
 		SetElements=StochasticBlocks.createVariable("SetElements","u4",("SetElementsSize"))
 		SetElementsData=[]
 		if Nb_APDTo > 0:
@@ -2241,22 +2237,18 @@ def createSDDPBlock(filename,id):
 				reservoir_index=reservoir_index+SS.loc[reservoir]['NumberReservoirs']
 		SetElements[:]=np.array(SetElementsData)
 		
-		#FunctionName=StochasticBlocks.loc[indexSSV].createVariable("FunctionName",str,("NumberDataMappings"))
 		FunctionName=StochasticBlocks.createVariable("FunctionName",str,("NumberDataMappings"))
 		FunctionNameData=[]
 		if Nb_APDTo > 0: FunctionNameData=FunctionNameData+NumberNodes*["UCBlock::set_active_power_demand"]
 		FunctionNameData=FunctionNameData+Nb_SS*["HydroUnitBlock::set_inflow"]+Nb_TPP*["ThermalUnitBlock::set_maximum_power"]+Nb_RGP*["IntermittentUnitBlock::set_maximum_power"]+["BendersBFunction::modify_constants"]
 		FunctionName[:]=np.array(FunctionNameData)
 
-		#Caller=StochasticBlocks.loc[indexSSV].createVariable("Caller",'S1',("NumberDataMappings"))
 		Caller=StochasticBlocks.createVariable("Caller",'S1',("NumberDataMappings"))
 		CallerData=(NumberDataMappings-1)*"B"+"F"
 		Caller[:]=np.array(list(CallerData))
 
 		# create abstract path of stochastic blocks
 		APSB=StochasticBlocks.createGroup("AbstractPath")
-		#PathDim=TotalNumberReservoirs
-		#TotalLength=3*TotalNumberReservoirs
 		APSB.createDimension("PathDim",NumberDataMappings)
 		totalLength = (4 * Nb_SS) + (3 * Nb_TPP) + (3 * Nb_RGP) + 1
 		demandPathTotalLength = 0
@@ -2308,7 +2300,6 @@ def createSDDPBlock(filename,id):
 			PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+NumberThermalUnits+i
 			PathGroupIndicesIndex=PathGroupIndicesIndex+3
 		
-		#BendersBlocks.loc[indexSSV] = StochasticBlocks.loc[indexSSV].createGroup("Block")
 		BendersBlocks = StochasticBlocks.createGroup("Block")
 		BendersBlocks.type="BendersBlock"
 		
@@ -2486,7 +2477,6 @@ def createInvestmentBlock(filename):
 	LowerBound=Block.createVariable("LowerBound",np.double,("NumAssets"))
 	Cost=Block.createVariable("Cost",np.double,("NumAssets"))
 	
-	# il manque à concaténer
 	listAssets=[]
 	listAssetType=[]
 	listUpperBound=[]
@@ -2517,12 +2507,19 @@ def createInvestmentBlock(filename):
 		listLowerBound.append(np.array(INInvested['LowerBound']))
 		listCost.append(np.array(INInvested['Cost']))
 	
-	Assets[:]=np.concatenate(listAssets)
-	AssetType[:]=np.concatenate(listAssetType)
-	UpperBound[:]=np.concatenate(listUpperBound)
-	LowerBound[:]=np.concatenate(listLowerBound)
-	Cost[:]=np.concatenate(listCost)
-	
+	if NumberInvestedThermalUnits+NumberInvestedIntermittentUnits+NumberInvestedBatteryUnits+NumberInvestedLines>0:
+		Assets[:]=np.concatenate(listAssets)
+		AssetType[:]=np.concatenate(listAssetType)
+		UpperBound[:]=np.concatenate(listUpperBound)
+		LowerBound[:]=np.concatenate(listLowerBound)
+		Cost[:]=np.concatenate(listCost)
+	else:
+		Assets[:]=np.array([1])
+		AssetType[:]=np.array([0])
+		UpperBound[:]=np.array([1])
+		LowerBound[:]=np.array([0])
+		Cost[:]=np.array([0])
+			
 	if cfg['Invest']=='NRJ':
 		Block.createDimension("NumConstraints",NumberNodes)
 		Constraints_A=Block.createVariable("Constraints_A",np.double,("NumConstraints","NumAssets"))
@@ -2591,28 +2588,28 @@ def createInvestmentBlock(filename):
 
 # read all timeseries data
 if 'DeterministicTimeSeries' in cfg:
-	print('read deterministic timeseries')
+	logger.info('read deterministic timeseries')
 	DeterministicTimeSeries=read_deterministic_timeseries(True)
 else:
 	DeterministicTimeSeries=read_deterministic_timeseries(False)
 
 if cfg['IncludeScenarisedData'] or 'SDDP' in cfg['FormatMode'] or 'INVEST' in cfg['FormatMode']:
-	print('read demand timeseries')
+	logger.info('read demand timeseries')
 	Nb_APD=Nb_APDTo=Nb_SS=Nb_TPP=Nb_RGP=0
 	if 'ActivePowerDemand' in ScenarisedData:
 		DemandScenarios=create_demand_scenarios()
 		Nb_APDTo=TimeHorizonUC
 		Nb_APD=len(DemandScenarios.index)
 	if NumberIntermittentUnits>0 and 'Renewable:MaxPowerProfile' in ScenarisedData: 
-		print('read renewable generation timeseries')
+		logger.info('read renewable generation timeseries')
 		RESScenarios=create_res_scenarios()
 		Nb_RGP=len(RESScenarios.index)
 	if NumberHydroSystems>0 and 'Hydro:Inflows' in ScenarisedData: 
-		print('read inflows timeseries')
+		logger.info('read inflows timeseries')
 		InflowsScenarios=create_inflows_scenarios()
 		Nb_SS=len(InflowsScenarios.index)
 	if NumberThermalUnits>=0 and 'Thermal:MaxPowerProfile' in ScenarisedData: 
-		print('read thermal maxpower timeseries')
+		logger.info('read thermal maxpower timeseries')
 		ThermalScenarios=create_thermal_scenarios()
 		Nb_TPP=len(ThermalScenarios.index)
 	ThermalMaxPowerSize=SSVTimeStep/ThermalMaxPowerTimeSpan
@@ -2633,43 +2630,43 @@ if NumberSyncUnits>0:
 if NumberBatteryUnits>0:
 	listData.append((STS,'STS'))
 if cfg['FormatMode']=='SingleUC':
-	print('create single UCBlock on the whole period =>',cfg['outputpath']+'UCBlock.nc4')
+	logger.info('create single UCBlock on the whole period =>'+cfg['outputpath']+'UCBlock.nc4')
 	createUCBlock(cfg['outputpath']+'UCBlock.nc4',0,ListScenarios[0],datesSSV.loc[0]['start'],datesSSV.loc[0]['end'])
 
 elif cfg['FormatMode']=='UC':
-	print('create One UCBlock per SSV timestep =>',cfg['outputpath']+'UCBlock_*.nc4')
+	logger.info('create One UCBlock per SSV timestep =>'+cfg['outputpath']+'UCBlock_*.nc4')
 	for i in range(NumberSSVTimeSteps):
-		print('Create UCBlock ',i,' from ',datesSSV.loc[i]['start'],' to ',datesSSV.loc[i]['end'], '=>',cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 elif cfg['FormatMode']=='SDDP':
-	print('create One SDDPBlock =>',cfg['outputpath']+'SDDPBlock.nc4')
+	logger.info('create One SDDPBlock =>'+cfg['outputpath']+'SDDPBlock.nc4')
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 
 elif cfg['FormatMode']=='SDDPandUC':
-	print('create One SDDPBlock and One UCBlock per SSV timestep =>', cfg['outputpath']+'SDDPBlock.nc4')
+	logger.info('create One SDDPBlock and One UCBlock per SSV timestep =>'+cfg['outputpath']+'SDDPBlock.nc4')
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 	for i in range(NumberSSVTimeSteps):
-		print('Create UCBlock ',i,' from ',datesSSV.loc[i]['start'],' to ',datesSSV.loc[i]['end'],' =>',cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 elif cfg['FormatMode']=='INVEST':
-	print('create One InvestmentBlock, => '+cfg['outputpath']+'InvestmentBlock.nc4')
+	logger.info('create One InvestmentBlock, => '+cfg['outputpath']+'InvestmentBlock.nc4')
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 
 elif cfg['FormatMode']=='INVESTandSDDP':
-	print('create One SDDPBlock and one InvestmentBlock =>',cfg['outputpath']+'SDDPBlock.nc4',' and ',cfg['outputpath']+'InvestmentBlock.nc4'  )
+	logger.info('create One SDDPBlock and one InvestmentBlock =>'+cfg['outputpath']+'SDDPBlock.nc4  and '+cfg['outputpath']+'InvestmentBlock.nc4'  )
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 
 elif cfg['FormatMode']=='INVESTandSDDPandUC':
-	print('create One InvestmentBlock, One SDDPBlock and One UCBlock per SSV timestep =>',cfg['outputpath']+'SDDPBlock.nc4',' , ',cfg['outputpath']+'InvestmentBlock.nc4' )
+	logger.info('create One InvestmentBlock, One SDDPBlock and One UCBlock per SSV timestep => '+cfg['outputpath']+'SDDPBlock.nc4 , '+cfg['outputpath']+'InvestmentBlock.nc4' )
 	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 	for i in range(NumberSSVTimeSteps):
-		print('Create UCBlock ',i,' from ',datesSSV.loc[i]['start'],' to ',datesSSV.loc[i]['end'],' =>',cfg['outputpath']+'Block_'+str(i)+'.nc4')
+		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
-
+log_and_exit(0, cgf['path'])
 
 
