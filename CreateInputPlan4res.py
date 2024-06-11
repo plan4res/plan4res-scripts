@@ -18,34 +18,35 @@ import sys
 from p4r_python_utils import *
 
 path = os.environ.get("PLAN4RESROOT")
-print('path0:',path)
 nbargs=len(sys.argv)
 if nbargs>1: 
 	settings_create=sys.argv[1]
 else:
 	settings_create="settingsCreateInputPlan4res.yml"
+if os.path.abspath(settings_create):
+	settings_create = os.path.relpath(settings_create, path)
 
 cfg={}
 # open the configuration file using the pathway defined below
-with open(path+settings_create,"r") as mysettings:
+with open(os.path.join(path, settings_create),"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 	
 # replace name of current dataset by name given as input
 if nbargs>2:
 	namedataset=sys.argv[2]
 	if cfg['USEPLAN4RESROOT']: 
-		cfg['path']=os.path.join(path, 'data/local/'+namedataset+'/')
+		cfg['path']=os.path.join(path, 'data/local', namedataset)
 	else: 
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 if 'outputpath' not in cfg: 
 	if cfg['ParametersCreate']['invest']:
-		cfg['outputpath']=cfg['path']+'csv_invest/'
+		cfg['outputpath']=os.path.join(cfg['path'], 'csv_invest')
 	else:
-		cfg['outputpath']=cfg['path']+'csv_simul/'
-if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries']=cfg['path']+'TimeSeries/'
-if 'genesys_resultspath' not in cfg: cfg['genesys_inputpath']=cfg['path']+'genesys_inputs/'
-if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
-if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
+		cfg['outputpath']=os.path.join(cfg['path'], 'csv_simul')
+if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 'TimeSeries')
+if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs')
+if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries')
+if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
 if 'pythonDir' not in cfg: 
 	if cfg['USEPLAN4RESROOT']: 
 		cfg['pythonDir']='scripts/python/plan4res-scripts/settings/'
@@ -61,9 +62,11 @@ if 'nomenclatureDir' not in cfg:
 
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
-		cfg['datagroups'][datagroup]['inputdatapath']=cfg['path']+'IAMC/'
+		cfg['datagroups'][datagroup]['inputdatapath']='IAMC'
+	cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'])
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
+
 
 if cfg['USEPLAN4RESROOT']:
 	cfg['outputpath']=os.path.join(path, cfg['outputpath'])
@@ -73,8 +76,8 @@ if cfg['USEPLAN4RESROOT']:
 	for datagroup in cfg['datagroups']:
 		cfg['datagroups'][datagroup]['inputdatapath']=os.path.join(path, cfg['datagroups'][datagroup]['inputdatapath'])
 else:
-	cfg['dirTimeSeries']=cfg['timeseriespath']
-	
+	cfg['dirTimeSeries']=cfg['timeseriespath']	
+
 if not os.path.isdir(cfg['outputpath']):
 	os.mkdir(cfg['outputpath'])
 logger.info('results of this script will be available in: '+cfg['outputpath'])
@@ -141,15 +144,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		if not os.path.isdir(outputdir):
 			os.mkdir(outputdir)
 	elif not current_option=='None':
-		outputdir=cfg['outputpath']+'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])+'-'+current_option
+		outputdir=os.path.join(cfg['outputpath'], 'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])+'-'+current_option)
 		if not os.path.isdir(outputdir):
 			os.mkdir(outputdir)
-		outputdir=outputdir+'/'
 	else:
-		outputdir=cfg['outputpath']+'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])
+		outputdir=os.path.join(cfg['outputpath'], 'plan4res-'+cfg['scenario']+'-'+str(cfg['year']))
 		if not os.path.isdir(outputdir):
 			os.mkdir(outputdir)
-		outputdir=outputdir+'/'
 
 	# upload of relevant Scenario data from platform
 	# creation of a csv file and a pandas dataframe containing all necessary data
@@ -165,7 +166,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listGlobalReg=[]
 
 	# define list of aggregated regions
-	print('cfg[ParametersCreate][ExistsNuts]',cfg['ParametersCreate']['ExistsNuts'])
 	if cfg['ParametersCreate']['ExistsNuts']:
 		with open(os.path.join(cfg['nomenclatureDir'], "region/nuts3.yaml"),"r",encoding='UTF-8') as nutsreg:
 			nuts3=yaml.safe_load(nutsreg)
@@ -341,9 +341,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				logger.info('reading '+datagroup)
 														
 				if 'Start' in cfg['datagroups'][datagroup]['inputdata']:
-					file=os.path.join(cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata']['Start'], str(cfg['variant']), cfg['datagroups'][datagroup]['inputdata']['End'])
+					file=os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata']['Start'], str(cfg['variant']), cfg['datagroups'][datagroup]['inputdata']['End'])
 				else:
-					file=os.path.join(cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata'])
+					file=os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata'])
 				
 				# creation of empty df for storing annual and subannual data for the current group
 				dfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
@@ -537,7 +537,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						else: newSerie=0.0*newSerie
 						nameNewSerie='AggregatedTimeSerie_'+typeSerie+'_'+reg+'.csv'
 						nameNewSerie=nameNewSerie.replace('|', pipe_replace)
-						newSerie.to_csv(cfg['dirTimeSeries']+nameNewSerie)
+						newSerie.to_csv(os.path.join(cfg['dirTimeSeries'], nameNewSerie))
 						timeseriesdict[typeData][typeSerie][reg]=nameNewSerie
 		
 			# aggregation of variables
@@ -559,11 +559,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 	if ExistsAnnualData: 
 		AnnualDataFrame=AnnualDataFrame.filter(region=(listregion+lines))
-		AnnualDataFrame.to_csv(outputdir+'IAMC_annual_data.csv')
+		AnnualDataFrame.to_csv(os.path.join(outputdir, 'IAMC_annual_data.csv'))
 		bigdata=AnnualDataFrame
 	if ExistsSubAnnualData: 
 		SubAnnualDataFrame=SubAnnualDataFrame.filter(region=(listregion+lines))
-		SubAnnualDataFrame.to_csv(outputdir+'IAMC_subannual_data.csv')
+		SubAnnualDataFrame.to_csv(os.path.join(outputdir, 'IAMC_subannual_data.csv'))
 		bigdata_SubAnnual=SubAnnualDataFrame
 				
 	# creation of plan4res dataset
@@ -590,7 +590,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if not partition == cfg['CouplingConstraints']['ActivePowerDemand']['Partition']:
 				if len(cfg['partition'][partition])==nbreg: ZP[partition]=pd.Series(cfg['partition'][partition],name=partition,index=range(nbreg))
 				else: ZP[partition]=pd.Series(cfg['partition'][partition][0] ,name=partition,index=range(nbreg))
-		ZP.to_csv(outputdir+cfg['csvfiles']['ZP_ZonePartition'], index=False)
+		ZP.to_csv(os.path.join(outputdir, cfg['csvfiles']['ZP_ZonePartition']), index=False)
 
 	# create file IN_Interconnections
 	###############################################################
@@ -718,7 +718,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if (regend not in listregions):
 				LinesToDelete.append(line)
 		IN=IN.drop(LinesToDelete)
-		IN.to_csv(outputdir+cfg['csvfiles']['IN_Interconnections'], index=False)
+		IN.to_csv(os.path.join(outputdir, cfg['csvfiles']['IN_Interconnections']), index=False)
 		
 	# create file ZV_ZoneValues
 	###############################################################
@@ -894,7 +894,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 		columnsZV=['Type','Zone','value','Profile_Timeserie']
 		datapartition=datapartition[columnsZV]
-		datapartition.to_csv(outputdir+cfg['csvfiles']['ZV_ZoneValues'], index=False)
+		datapartition.to_csv(os.path.join(outputdir, cfg['csvfiles']['ZV_ZoneValues']), index=False)
 
 	# treat global variables
 	globalvars=pd.Series(str)
@@ -1092,7 +1092,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		BigTU=BigTU[ BigTU['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigTU=BigTU[BigTU.NumberUnits >0]
-		BigTU.to_csv(outputdir+cfg['csvfiles']['TU_ThermalUnits'], index=False)
+		BigTU.to_csv(os.path.join(outputdir, cfg['csvfiles']['TU_ThermalUnits']), index=False)
 
 	# treat seasonal storage
 	# filling sheet SS_SeasonalStorage and STS_ShortTermStorage
@@ -1226,7 +1226,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigSS=BigSS[ listcols ]
 		
 		BigSS=BigSS[ BigSS['Zone'].isin(cfg['partition'][partitionDemand]) ]
-		BigSS.to_csv(outputdir+cfg['csvfiles']['SS_SeasonalStorage'], index=False)
+		BigSS.to_csv(os.path.join(outputdir, cfg['csvfiles']['SS_SeasonalStorage']), index=False)
 
 	# filling sheet STS_ShortTermStorage
 	###############################################################	
@@ -1605,7 +1605,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		BigSTS=BigSTS[ BigSTS['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigSTS=BigSTS.fillna(0)
-		BigSTS.to_csv(outputdir+cfg['csvfiles']['STS_ShortTermStorage'], index=False)
+		BigSTS.to_csv(os.path.join(outputdir, cfg['csvfiles']['STS_ShortTermStorage']), index=False)
 		
 	# treating res
 	if cfg['csvfiles']['RES_RenewableUnits']:
@@ -1708,6 +1708,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		BigRES=BigRES[ listcols ]
 		BigRES=BigRES[ BigRES['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		BigRES=BigRES.fillna(0)
-		BigRES.to_csv(outputdir+cfg['csvfiles']['RES_RenewableUnits'], index=False)
+		BigRES.to_csv(os.path.join(outputdir, cfg['csvfiles']['RES_RenewableUnits']), index=False)
 
 log_and_exit(0, cfg['path'])

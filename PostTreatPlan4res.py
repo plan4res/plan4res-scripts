@@ -36,13 +36,16 @@ def season(x):
 		return 'Winter'
 path = os.environ.get("PLAN4RESROOT")
 
+def abspath_to_relpath(path, basepath):
+		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+
 nbargs=len(sys.argv)
 if nbargs>1: 
-	settings_posttreat=sys.argv[1]
+	settings_posttreat=abspath_to_relpath(sys.argv[1])
 	if nbargs>2:
-		settings_format=sys.argv[2]
+		settings_format=abspath_to_relpath(sys.argv[2])
 		if nbargs>3:
-			settings_create=sys.argv[3]
+			settings_create=abspath_to_relpath(sys.argv[3])
 		else:
 			settings_create="settingsCreateInputPlan4res.yml"
 	else:
@@ -53,11 +56,11 @@ else:
 # read config file
 cfg={}
 # open the configuration files 
-with open(path+settings_posttreat,"r") as myyaml:
+with open(os.path.join(path, settings_posttreat),"r") as myyaml:
 	cfg1=yaml.load(myyaml,Loader=yaml.FullLoader)
-with open(path+settings_create,"r") as mysettings:
+with open(os.path.join(path, settings_create),"r") as mysettings:
 	cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
-with open(path+settings_format,"r") as mysettings:
+with open(os.path.join(path, settings_format),"r") as mysettings:
 	cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
@@ -276,7 +279,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		if isInvest:
 			for row in InputTUData.index:
 				if (InputTUData.loc[row,'MaxAddedCapacity']>0)+(InputTUData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )	 
+					listInvestedAssets.append( (InputTUData.loc[row,'Zone'],InputTUData.loc[row,'Name']) )	  
 		for techno in listTechnosTU:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -295,7 +298,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if isInvest:
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosTU=[]
-    
+		
 	# intermittent generation mix
 	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits']):
 		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
@@ -1327,6 +1330,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SortedSlack=pd.DataFrame(data=List).transpose()
 			if len(listscen)>1: SortedSlack.columns=MargCosts[index].columns
 			SortedSlack.to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'HistCmar-'+reg+'.csv')
+			del data, SortedSlack, List
 						
 			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
 			   
@@ -2809,6 +2813,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				mytable=tablebilansNRJ
 				mytable['name']=mytable.index
 				mytable=mytable.reset_index()
+				
 				
 				# draw chloromap for C02
 				mycontinent['CO2']=tablebilansNRJ['CO2']
