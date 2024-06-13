@@ -26,6 +26,7 @@ else:
 if os.path.abspath(settings_create):
 	settings_create = os.path.relpath(settings_create, path)
 
+
 cfg={}
 # open the configuration file using the pathway defined below
 with open(os.path.join(path, settings_create),"r") as mysettings:
@@ -63,7 +64,8 @@ if 'nomenclatureDir' not in cfg:
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdatapath']='IAMC'
-	cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'])
+	#cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'])
+	cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['path'], cfg['datagroups'][datagroup]['inputdatapath'])
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
 

@@ -41,11 +41,11 @@ def abspath_to_relpath(path, basepath):
 
 nbargs=len(sys.argv)
 if nbargs>1: 
-	settings_posttreat=abspath_to_relpath(sys.argv[1])
+	settings_posttreat=abspath_to_relpath(sys.argv[1], path)
 	if nbargs>2:
-		settings_format=abspath_to_relpath(sys.argv[2])
+		settings_format=abspath_to_relpath(sys.argv[2], path)
 		if nbargs>3:
-			settings_create=abspath_to_relpath(sys.argv[3])
+			settings_create=abspath_to_relpath(sys.argv[3], path)
 		else:
 			settings_create="settingsCreateInputPlan4res.yml"
 	else:
@@ -73,6 +73,8 @@ if nbargs>4:
 	else:
 		cfg['path']='/data/local/'+namedataset+'/'
 	logger.info('posttreat '+namedataset)
+
+TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 
 cfg['dir']=cfg['path']+cfg['Resultsdir']
 cfg['inputpath']=cfg['path']+cfg['inputDir']
@@ -441,7 +443,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		listscen=list(range(len(listscen)))
 	else:
 		logger.error('missing Demand in results')
-		log_and_exit(2, cgf['path'])
+		log_and_exit(2, cfg['path'])
 		
 	logger.info('scenarios in dataset: '+str(cfg['ParametersFormat']['Scenarios']))	
 	logger.info('  indexed: '+', '.join([str(s) for s in listscen]))
@@ -479,27 +481,26 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# treat dates
 	number_timesteps=len(df.index)
 	BeginDataset=pd.Timestamp(pd.to_datetime(cfg['BeginDataset'],dayfirst=cfg['dayfirst']))
-	TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 	if cfg['Calendar']['TimeStep']['Unit']=='days': TimeStepHours=TimeStepHours*24
 	elif cfg['Calendar']['TimeStep']['Unit']=='weeks': TimeStepHours=TimeStepHours*168
 	elif cfg['Calendar']['TimeStep']['Unit']!='hours': 
 		logger.error('only hours, days, weeks possible as timestep unit')
-		log_and_exit(2, cgf['path'])
+		log_and_exit(2, cfg['path'])
 	EndDataset=BeginDataset+number_timesteps*pd.Timedelta(str(TimeStepHours)+' hours')-pd.Timedelta('1 hours')
 	BeginTreat=pd.Timestamp(pd.to_datetime(cfg['BeginTreatData'],dayfirst=cfg['dayfirst']))
 	EndTreat=pd.Timestamp(pd.to_datetime(cfg['EndTreatData'],dayfirst=cfg['dayfirst']))
 	
 	if BeginTreat>EndDataset:
 		logger.error('Treatment start date is after end of available data')
-		log_and_exit(2, cgf['path'])
+		log_and_exit(2, cfg['path'])
 	if EndTreat<BeginDataset:
 		logger.error('Treatment end date is before start of available data')
-		log_and_exit(2, cgf['path'])
+		log_and_exit(2, cfg['path'])
 	if BeginTreat<BeginDataset: BeginTreat=BeginDataset
 	if EndTreat>EndDataset: EndTreat=EndDataset
 	if EndTreat<BeginTreat:
 		logger.error('Treatment end date is before treatment start date')
-		log_and_exit(2, cgf['path'])
+		log_and_exit(2, cfg['path'])
 	cfg['p4r_start']=BeginDataset
 	cfg['p4r_end']=EndDataset
 	cfg['plot_start']=BeginTreat
@@ -547,7 +548,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 		else:
 			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-			continent = world [ world['continent'] == cfg['continent'] ]
+			print(world.keys())
+			print(cfg.keys())
+			continent = world [ world['Continent'] == cfg['Continent'] ]
 		continent['Aggr']=continent['name']
 		continent['country']=continent['name']
 		continent['index']=continent['name']
@@ -2856,5 +2859,5 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			myfile.write(containerlatex)
 			myfile.close()
 
-log_and_exit(0, cgf['path'])
+log_and_exit(0, cfg['path'])
 

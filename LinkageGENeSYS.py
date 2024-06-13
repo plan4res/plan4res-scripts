@@ -13,45 +13,50 @@ from math import ceil
 from datetime import timedelta
 from calendar import monthrange
 
+from p4r_python_utils import *
 
 path = os.environ.get("PLAN4RESROOT")
+print('path ',path)
 nbargs=len(sys.argv)
 if nbargs>1: 
 	settings=sys.argv[1]
 else:
 	settings="settingsLinkageGENeSYS.yml"
+if os.path.abspath(settings):
+	settings = os.path.relpath(settings, path)
 
 cfg={}
-with open(path+settings,"r") as mysettings:
+with open(os.path.join(path, settings),"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 # replace name of current dataset by name given as input
 if nbargs>1:
 	namedataset=sys.argv[2]
-	if cfg['USEPLAN4RESROOT']: cfg['path']='/data/local/'+namedataset+'/'
+	if cfg['USEPLAN4RESROOT']: 
+		cfg['path']=os.path.join(path, 'data/local', namedataset)
 	else: cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 	
-if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
-if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath']=cfg['path']+'genesys_inputs/'
-if 'genesys_resultspath' not in cfg: cfg['genesys_resultspath']=cfg['path']+'genesys_inputs/'
-if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
-if 'mappingspath' not in cfg: cfg['mappingspath']=cfg['path']+'settings/mappings_genesys/'
-if 'outputpath' not in cfg: cfg['outputpath']=cfg['path']+'IAMC/'
+if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings/')
+if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath']=os.path.join(cfg['path'], 'genesys_inputs/')
+if 'genesys_resultspath' not in cfg: cfg['genesys_resultspath']=os.path.join(cfg['path'], 'genesys_inputs/')
+if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'], 'TimeSeries/')
+if 'mappingspath' not in cfg: cfg['mappingspath']=os.path.join(cfg['path'], 'settings/mappings_genesys/')
+if 'outputpath' not in cfg: cfg['outputpath']=os.path.join(cfg['path'], 'IAMC/')
 if 'outputfile' not in cfg: cfg['outputfile']=namedataset+'.csv'
 
-cfg['outputpath']=path+cfg['outputpath']
-cfg['timeseriespath']=path+cfg['timeseriespath']
-cfg['configDir']=path+cfg['configDir']
-cfg['genesys_inputpath']=path+cfg['genesys_inputpath']
-cfg['genesys_resultspath']=path+cfg['genesys_resultspath']
-cfg['mappingspath']=path+cfg['mappingspath']
-outputfile=cfg['outputpath']+cfg['outputfile']
+cfg['outputpath']=os.path.join(path,cfg['outputpath'])
+cfg['timeseriespath']=os.path.join(path,cfg['timeseriespath'])
+cfg['configDir']=os.path.join(path,cfg['configDir'])
+cfg['genesys_inputpath']=os.path.join(path,cfg['genesys_inputpath'])
+cfg['genesys_resultspath']=os.path.join(path,cfg['genesys_resultspath'])
+cfg['mappingspath']=os.path.join(path,cfg['mappingspath'])
+cfg['outputfile']=os.path.join(cfg['outputpath'],cfg['outputfile'])
 if not os.path.isdir(cfg['outputpath']):os.mkdir(cfg['outputpath'])
 if not os.path.isdir(cfg['timeseriespath']):os.mkdir(cfg['timeseriespath'])
-if os.path.exists(outputfile):
-	os.remove(outputfile)
+if os.path.exists(cfg['outputfile']):
+	os.remove(cfg['outputfile'])
 
-print('create IAMC file for GENeSYS-MOD outputs in ',cfg['genesys_inputpath'])
+logger.info('create IAMC file for GENeSYS-MOD outputs in '+cfg['genesys_inputpath'])
 
 # loop on the different variables
 BigOut=pd.DataFrame()
@@ -59,22 +64,22 @@ firstVar=True
 
 # open datafiles
 data=pd.Series()
-print('read ',cfg['genesys_inputpath']+cfg['genesys_datafiles']['input'])
+logger.info('read '+os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['input']))
 for sheet in cfg['genesys_datafiles']['input_sheets']:
-	print('  sheet ',sheet)
-	data.loc['input_'+sheet]=pd.read_excel(cfg['genesys_inputpath']+cfg['genesys_datafiles']['input'],sheet_name=sheet).fillna(0)
+	logger.info('  sheet '+sheet)
+	data.loc['input_'+sheet]=pd.read_excel(os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['input']),sheet_name=sheet).fillna(0)
 
 for file in cfg['genesys_datafiles']:
 	if (file!='input') and (file!='input_sheets'):
-		print('read ',cfg['genesys_inputpath']+cfg['genesys_datafiles'][file])
-		data.loc[file]=pd.read_csv(cfg['genesys_inputpath']+cfg['genesys_datafiles'][file])
+		logger.info('read '+os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles'][file]))
+		data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles'][file]))
 
 # read mappings
 mappings=pd.Series()
-print('read mappings')
+logger.info('read mappings')
 for mapping in cfg['mappings']:
-	print('   mapping ',mapping,' in ',cfg['mappingspath']+cfg['mappings'][mapping])
-	mappings.loc[mapping]=pd.read_csv(cfg['mappingspath']+cfg['mappings'][mapping],index_col=0,header=None)
+	logger.info('   mapping '+mapping+' in '+os.path.join(cfg['mappingspath'],cfg['mappings'][mapping]))
+	mappings.loc[mapping]=pd.read_csv(os.path.join(cfg['mappingspath'],cfg['mappings'][mapping]),index_col=0,header=None)
 	rows_to_remove=[elem for elem in mappings.loc[mapping].index if str(elem)[0]=='#']
 	mappings.loc[mapping].drop(rows_to_remove,inplace=True)
 out=pd.DataFrame()
@@ -95,16 +100,16 @@ for region1 in regions:
 				reg=str(region1)+'>'+str(region2)
 				if reg not in regions_interco and region2!=region1:
 					regions_interco.append(reg)
-print('regions in dataset ',regions)
-print('interco in dataset ',regions_interco)
+logger.info('regions in dataset '+str(regions))
+logger.info('interco in dataset '+str(regions_interco))
 
 Yearsdf=pd.Series(data.loc['input_Sets']['Year'])
 Yearsdf=Yearsdf.drop(Yearsdf.loc[Yearsdf ==0].index,axis=0 ).astype(int)
 Years=Yearsdf.to_list()
-print('years in dataset ',Years)
+logger.info('years in dataset '+', '.join([str(y) for y in Years]))
 for var in cfg['variables']:
 	isInternal=False
-	print('treat ',var)
+	logger.info('treat '+var)
 	
 	if 'source' in cfg['variables'][var]:
 		if cfg['variables'][var]['source']=='internal':
@@ -124,12 +129,12 @@ for var in cfg['variables']:
 						vardata=pd.concat([vardata,vardatasheet],axis=0)
 	elif 'sources' in cfg['variables'][var]:
 		if cfg['variables'][var]['sources']=='input':
-			print('input cannot be in multiple source')
-			exit()
+			logger.error('input cannot be in multiple source')
+			log_and_exit(1, cfg['path'])
 		else:
 			firstFile=True
 			for file in cfg['variables'][var]['sources']:
-				print(' read ',file)
+				logger.info(' read '+file)
 				vardatafile=pd.DataFrame(data=data.loc[file])
 				if 'Unit' not in vardatafile.columns: vardatafile['Unit']=cfg['variables'][var]['unit']
 					
@@ -151,7 +156,7 @@ for var in cfg['variables']:
 		vardata['Unit']=cfg['variables'][var]['unit']
 
 	for rulecat in cfg['variables'][var]['rules']:
-		print('   apply ',rulecat)
+		logger.info('   apply '+rulecat)
 		if rulecat=='selectAndMap':
 			# select rows 
 			colmap=cfg['variables'][var]['rules'][rulecat]['column']
@@ -215,9 +220,8 @@ for var in cfg['variables']:
 			colmap=cfg['variables'][var]['rules'][rulecat]['column']
 			map=cfg['variables'][var]['rules'][rulecat]['mapping']
 			if colmap not in colsdata: colsdata.append(colmap)
+			
 			# map variable name
-			#dict=mappings.loc[map].transpose().to_dict()
-			#dict={k : v for k,v in mappings.loc[map].values}
 			dict={mappings.loc[map].index[i]: mappings.loc[map].iloc[i,0] for i in range(len(mappings.loc[map].index))}
 			
 			vardata['Variable']=vardata[colmap].map(lambda a: dict[a] if a in dict.keys() else 'None')
@@ -233,7 +237,6 @@ for var in cfg['variables']:
 			vardata=vardata[ colsKeep ]
 
 			colsToAggr=[]			
-			#if colmap in vardata.columns: vardata=vardata.drop(columns=colmap)
 			for coldata in vardata.columns:
 				if coldata != 'Value' and coldata not in colsToAggr:
 					colsToAggr.append(coldata)
@@ -242,8 +245,6 @@ for var in cfg['variables']:
 			for colselect in cfg['variables'][var]['rules'][rulecat]:
 				values=cfg['variables'][var]['rules'][rulecat][colselect]['values']
 				vardata=vardata[ vardata[colselect].isin(values) ]
-			if 'Fixed' in var:
-				vardata.to_csv(cfg['outputpath']+str(2)+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
 	
 		elif rulecat=='group':
 			ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
@@ -271,7 +272,7 @@ for var in cfg['variables']:
 			vardata=vardata.drop(['endVar'],axis=1)
 		elif rulecat=='combineWithOtherSources':
 			for subrule in cfg['variables'][var]['rules'][rulecat]:
-				print('        apply ',subrule)
+				logger.info('        apply '+subrule)
 				if 'source' in cfg['variables'][var]['rules'][rulecat][subrule]:
 					if cfg['variables'][var]['rules'][rulecat][subrule]['source']!='input':
 						newdata=data.loc[cfg['variables'][var]['rules'][rulecat][subrule]['source']]
@@ -298,7 +299,6 @@ for var in cfg['variables']:
 					colval=cfg['variables'][var]['rules'][rulecat][subrule]['value']
 					colmap=cfg['variables'][var]['rules'][rulecat][subrule]['map']
 					newvalue=newdata[['Value',colmap]].groupby([colref]).first().reset_index()
-					#valuedict={k : v for k,v in newvalue.values}
 					valuedict={newvalue.iloc[i,0]: newvalue.iloc[i,1] for i in range(len(newvalue.index))}
 					rows_to_remove=[]
 					if cfg['variables'][var]['rules'][rulecat][subrule]['rule']=='mult':
@@ -415,21 +415,16 @@ for var in cfg['variables']:
 		else:
 			out=pd.concat([out,vardata],axis=0,ignore_index=True)
 	
-	else: print('empty data')
+	else: logger.info('empty data')
 	
-	#vardata.to_csv(cfg['outputpath']+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
-	
-	#IAM=pyam.IamDataFrame(vardata)
-	#IAM.to_csv(cfg['outputpath']+'IAMC_'+var.replace('|','_').replace(',','').replace('.','').replace(' ','')+'_'+cfg['outputfile'])
-
-out.to_csv(cfg['outputpath']+'csv_'+cfg['outputfile'])	
+out.to_csv(cfg['outputfile'])	
 
 # check for duplicated and output synthesis of data
-print('scenarios in data ',out['Scenario'].unique())
-print('models in data ',out['Model'].unique())
-print('regions in data ',out['Region'].unique())
-print('variables in data ',out['Variable'].unique())
-print('years in data ',out['Year'].unique())
+logger.info('scenarios in data '+', '.join([str(_) for _ in out['Scenario'].unique()]))
+logger.info('models in data '+', '.join([str(_) for _ in out['Model'].unique()]))
+logger.info('regions in data '+', '.join([str(_) for _ in out['Region'].unique()]))
+#logger.info('variables in data '+', '.join([str(_) for _ in out['Variable'].unique()]))
+logger.info('years in data '+', '.join([str(_) for _ in out['Year'].unique()]))
 
 
 duplicates=out.duplicated()
@@ -438,23 +433,17 @@ for row in duplicates.index:
 	if duplicates.loc[row]==True:
 		duprows.append(row)
 if len(duprows)>0:
-	print('there are duplicated rows')
-	print(duprows)
+	logger.warning('there are duplicated rows')
+	logger.warning(', '.join([str(_) for _ in duprows]))
 	duplicated_rows=out.loc[duprows]
-	print('  for variables',duplicated_rows['Variable'].unique())
-	#out_duplicated=out.loc[
+	logger.warning('  for variables'+', '.join([str(_) for _ in duplicated_rows['Variable'].unique()]))
 else:
-	print('no duplicated rows')
+	logger.info('no duplicated rows')
 	
-df=pd.read_csv(cfg['outputpath']+'csv_'+cfg['outputfile'],index_col=0)
+df=pd.read_csv(cfg['outputfile'],index_col=0)
  
 # conversion to IAMDataFrame
 BigIAM=pyam.IamDataFrame(df)
 
 BigIAM.validate(exclude_on_fail=True)
-BigIAM.to_excel(cfg['outputpath']+cfg['outputfile'].replace('csv','xlsx'))
-
-
-
-
-
+BigIAM.to_excel(cfg['outputfile'].replace('csv','xlsx'))
