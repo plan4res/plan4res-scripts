@@ -16,21 +16,26 @@ from p4r_python_utils import *
 path = os.environ.get("PLAN4RESROOT")
 logger.info('path='+path)
 
+def abspath_to_relpath(path, basepath):
+		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+
 nbargs=len(sys.argv)
 if nbargs>1: 
 	settings_format=sys.argv[1]
 else:
 	settings_format="settings_format.yml"
+settings_format = abspath_to_relpath(settings_format, path)
+    
+    
 # read config file
-print('path+settings_format=',path+settings_format)
 cfg1={}
-with open(path+settings_format,"r") as mysettings:
+with open(os.path.join(path, settings_format),"r") as mysettings:
 	cfg1=yaml.load(mysettings,Loader=yaml.FullLoader)
 settings_create = None
 if nbargs>2:
-	settings_create=sys.argv[2]
+	settings_create=abspath_to_relpath(sys.argv[2], path)
 	cfg2={}
-	with open(path+settings_create,"r") as mysettings:
+	with open(os.path.join(path, settings_create),"r") as mysettings:
 		cfg2=yaml.load(mysettings,Loader=yaml.FullLoader)
 	cfg = {**cfg1, **cfg2}
 else:
@@ -43,9 +48,9 @@ if nbargs>3:
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 	else:
 		cfg['path']='/data/local/'+namedataset+'/'
-cfg['inputpath']=cfg['path']+cfg['inputDir']
-cfg['outputpath']=cfg['path']+cfg['outputDir']
-if 'timeseriespath' not in cfg: cfg['timeseriespath']=cfg['path']+'TimeSeries/'
+cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
+cfg['outputpath']=os.path.join(cfg['path'], cfg['outputDir'])
+if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'],'TimeSeries/')
 
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
@@ -2667,6 +2672,6 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
-log_and_exit(0, cgf['path'])
+log_and_exit(0, cfg['path'])
 
 
