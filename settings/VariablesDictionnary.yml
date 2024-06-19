@@ -31,9 +31,11 @@ Input:
     VarZV: # variables related to coupling constraints (demand, inertia, system services,...)
         Total: 'Final Energy|Electricity'
         ElecHeating: 'Final Energy|Electricity|Heat'
+        Cooking: 'Final Energy|Electricity|Cooking'
         AirCondition: 'Final Energy|Electricity|Cooling'
         ElecVehicle: 'Final Energy|Electricity|Transportation'
         OtherExclHeatTransp: 'Final Energy|Electricity|Other (excl. Heat, Transport)'
+        OtherExclHeatTranspCooking: 'Final Energy|Electricity|Other (excl. Heat, Transport, Cooking)'
         OtherExclHeatCoolTransp: 'Final Energy|Electricity|Other (excl. Heat, Cooling, Transport)'  
         #PrimaryDemand: 'Network|Electricity|Reserve|Requirement|Frequency Containment'
         #SecondaryDemand: 'Network|Electricity|Reserve|Requirement|Automatic Frequency Restoration'

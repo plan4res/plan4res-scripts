@@ -480,10 +480,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 									elif typeagr=='mean': 
 										if newvar not in listvarmean: 
 											listvarmean.append(newvar)
-
 	if(cfg['aggregateregions']!=None):
 		for reg in cfg['aggregateregions'].keys():
-			logger.info('aggregating ' +reg)
+			logger.info('aggregating ' +reg+' for subregions:')
+			logger.info(cfg['aggregateregions'][reg])
 			# creation of aggregated timeseries
 			listTypes={'ZV': cfg['CouplingConstraints']['ActivePowerDemand']['SumOf'],'RES':cfg['technos']['res']+cfg['technos']['runofriver'],'SS':['Inflows']}
 			for typeData in listTypes:
@@ -495,7 +495,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						if region in timeseriesdict[typeData][typeSerie].keys():
 							isSeries=True
 							file = os.path.join(cfg['dirTimeSeries'], timeseriesdict[typeData][typeSerie][region])
-							logger.info('read file '+file)
 							if not os.path.isfile(file):
 								logger.error('\nError: '+file+' does not exist.') 
 								logger.error('Check file '+settings_create+'. You can specify the timeseries input repository using key dirTimeSeries (default=study path/TimeSeries).')
@@ -639,30 +638,42 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							if AggReg2 in cfg['aggregateregions'].keys(): # AggReg2 is another aggregated  region
 								# sum all lines fitting this selection
 								MaxPowerFlow=0.0
+								InvCost=0.0
+								LossFactor=0.0
 								for reg1 in cfg['aggregateregions'][AggReg1]:
 									for reg2 in cfg['aggregateregions'][AggReg2]:
 										if (reg1+'>'+reg2) in IN.index:
 											MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][reg1+'>'+reg2]
+											InvCost=InvCost+IN['InvestmentCost'][reg1+'>'+reg2]
+											LossFactor=LossFactor+IN['LossFactor'][reg1+'>'+reg2]
 											DeleteLines.append(reg1+'>'+reg2) # delete individual line
-								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
+								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 							else: 
 								# AggReg2 is not an aggregated region
 								MaxPowerFlow=0.0
+								InvCost=0.0
+								LossFactor=0.0
 								for reg1 in cfg['aggregateregions'][AggReg1]:
 									if (reg1+'>'+AggReg2) in IN.index:
+										LossFactor=LossFactor+IN['LossFactor'][reg1+'>'+AggReg2]
 										MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][reg1+'>'+AggReg2]
+										InvCost=InvCost+IN['InvestmentCost'][reg1+'>'+AggReg2]
 										DeleteLines.append(reg1+'>'+AggReg2) # delete individual line
-								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
+								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 				else:
 					for AggReg2 in cfg['partition'][partitionDemand]:
 						if AggReg2 != AggReg1:
 							if AggReg2 in cfg['aggregateregions'].keys(): # AggReg2 is an aggregated  region
 								MaxPowerFlow=0.0
+								InvCost=0.0
+								LossFactor=0.0
 								for reg2 in cfg['aggregateregions'][AggReg2]:
 									if (AggReg1+'>'+reg2) in IN.index:
+										InvCost=InvCost+IN['InvestmentCost'][AggReg1+'>'+reg2]
+										LossFactor=LossFactor+IN['LossFactor'][AggReg1+'>'+reg2]
 										MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][AggReg1+'>'+reg2]
 										DeleteLines.append(AggReg1+'>'+reg2) # delete individual line
-								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
+								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 		IN=IN.drop(DeleteLines )
 		RowsToDelete = IN[ IN['MaxPowerFlow'] == 0 ].index
 		IN=IN.drop(RowsToDelete )
@@ -775,20 +786,30 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		isTotalEnergy=False
 		isOtherExclHeatTransp=False
 		isOtherExclHeatTranspCool=False
+		isOtherExclHeatTranspCooking=False
+		
 		isHeat=False
 		isTransport=False
 		isCooling=False
 		isShareCooling=False
 		isElectrolyzer=False
+		isCooking=False
 		
+		if 'Cooking' in datapartition.Type.unique(): isCooking=True
 		if 'ElecVehicle' in datapartition.Type.unique(): isTransport=True
 		if 'ElecHeating'  in datapartition.Type.unique(): isHeat=True
 		if 'OtherExclHeatTransp' in datapartition.Type.unique(): isOtherExclHeatTransp=True
 		if 'OtherExclHeatTranspCool' in datapartition.Type.unique(): isOtherExclHeatTranspCool=True
+		if 'OtherExclHeatTranspCooking' in datapartition.Type.unique(): isOtherExclHeatTranspCooking=True
 		if 'Total' in datapartition.Type.unique() : isTotalEnergy=True
 		if 'AirCondition' in datapartition.Type.unique(): isCooling=True
 		if 'Share|Final Energy|Electricity|Cooling' in bigdata.variable : isShareCooling=True
 		for region in cfg['partition'][partitionDemand]:			
+			if isCooking: 
+				CookingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Cooking') ]['value'].mean()
+				if math.isnan(CookingEnergy): CookingEnergy=0
+			else: CookingEnergy=0
+			
 			if isHeat: 
 				HeatEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'ElecHeating') ]['value'].mean()
 				if math.isnan(HeatEnergy): HeatEnergy=0
@@ -810,6 +831,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if math.isnan(OtherExclHeatTranspCoolEnergy): OtherExclHeatTranspCoolEnergy=0
 			else: OtherExclHeatTranspCoolEnergy=0
 			
+			if isOtherExclHeatTranspCooking: 
+				OtherExclHeatTranspCookingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'OtherExclHeatTranspCooking') ]['value'].mean()
+				if math.isnan(OtherExclHeatTranspCookingEnergy): OtherExclHeatTranspCookingEnergy=0
+			else: OtherExclHeatTranspCookingEnergy=0
+			
 			if isTotalEnergy: 
 				TotalEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Total') ]['value'].mean()
 				if math.isnan(TotalEnergy): TotalEnergy=0
@@ -829,8 +855,17 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			else : CoolingEnergy=0
 			
 			# Total Energy is computed if not present
-			if not isTotalEnergy: TotalEnergy=HeatEnergy+CoolingEnergy+OtherExclHeatTranspCoolEnergy+TransportEnergy
-		
+			if not isTotalEnergy:
+				if isOtherExclHeatTransp: 
+					TotalEnergy=HeatEnergy+OtherExclHeatTranspEnergy+TransportEnergy
+				elif isOtherExclHeatTranspCool:
+					TotalEnergy=HeatEnergy+CoolingEnergy+CoolingEnergy+OtherExclHeatTranspCoolEnergy+TransportEnergy
+				elif isOtherExclHeatTranspCooking:
+					TotalEnergy=HeatEnergy+CookingEnergy+OtherExclHeatTranspCookingEnergy+TransportEnergy
+				else:
+					logger.info('missing variable for electricity demand')
+					exit(0)
+					
 			if isPrimary:
 				Primary=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'PrimaryDemand') ]['value'].mean()
 			if isSecondary:
@@ -1260,7 +1295,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if varname in globalvars.index:
 					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
-					Global=data[variable][globalvars[varname] ]
+					if len(data[variable])>0:
+						Global=data[variable][globalvars[varname] ]
 
 				STS=pd.concat([STS, data], axis=1)	
 
@@ -1377,7 +1413,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if varname in globalvars.index:
 					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
-					Global=data[variable][globalvars[varname] ]
+					if len(data[variable])>0:
+						Global=data[variable][globalvars[varname] ]
 					
 				BAT=pd.concat([BAT, data], axis=1)	
 				if isGlobal: BAT[variable]=Global
@@ -1635,7 +1672,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if varname in globalvars.index:
 					logger.info(str(varname)+' is global')
 					isGlobal=True
-					Global=data[variable][globalvars[varname]]
+					if len(data[variable])>0:
+						Global=data[variable][globalvars[varname]]
 				
 				RES=pd.concat([RES, data], axis=1)	
 				if isGlobal: RES[variable]=Global
