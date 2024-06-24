@@ -236,7 +236,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# create list of regions
 	##########################################################
 	logger.info('read regions')
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['ZP_ZonePartition']):
+	if os.path.isfile(os.path.join(cfg['inputpath'],cfg['csvfiles']['ZP_ZonePartition'])):
 		InputData=read_input_csv(cfg, 'ZP_ZonePartition')
 		colregion=cfg['CouplingConstraints']['ActivePowerDemand']['Partition']
 		list_regions=InputData[colregion].unique().tolist()
@@ -258,7 +258,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	listInvestedAssets=[]				  
 	
 	# seasonal storage mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['SS_SeasonalStorage']):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['SS_SeasonalStorage'])):
 		InputData=read_input_csv(cfg,'SS_SeasonalStorage')
 		listTechnosSS=InputData.Name.unique().tolist()
 		for techno in listTechnosSS:
@@ -275,7 +275,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosSS=[]	
 	
 	# thermal mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['TU_ThermalUnits']):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['TU_ThermalUnits'])):
 		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
 		listTechnosTU=InputTUData.Name.unique().tolist()
 		if isInvest:
@@ -302,7 +302,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosTU=[]
 		
 	# intermittent generation mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['RES_RenewableUnits']):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['RES_RenewableUnits'])):
 		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
 		listTechnosRES=InputData.Name.unique().tolist()
 		if isInvest:
@@ -323,7 +323,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosRES=[]	
 
 	# short term storage mix
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['STS_ShortTermStorage']):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['STS_ShortTermStorage'])):
 		InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
 		listTechnosSTS=InputData.Name.unique().tolist()
 		if isInvest:
@@ -354,13 +354,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				listaggrTechnosInDataset.append(aggrTech)
 
 	# interconnections
-	if os.path.isfile(cfg['inputpath']+cfg['csvfiles']['IN_Interconnections']):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['IN_Interconnections'])):
 		InputData=read_input_csv(cfg, 'IN_Interconnections')
 		if 'Name' in InputData.columns:
 			InputData=InputData.set_index('Name')
 		listLinesInDataset=InputData.index.tolist()
 		cfg['lines']=listLinesInDataset
-		LineCapacity=InputData[ ['MaxPowerFlow'] ]
+		LineCapacity=InputData[ ['MaxPowerFlow', 'MinPowerFlow'] ]
 		if isInvest:
 			IsInvestedLine=(InputData['MaxAddedCapacity']>0)+(InputData['MaxRetCapacity']>0)
 	else:
@@ -464,7 +464,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# update list of regions with reservoirs
 	toremove=[]
 	cfg['ReservoirRegions']=[]
-	if os.path.isfile(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+str(listscen[0])+'.csv'):
+	if os.path.isfile(os.path.join(cfg['dirSto'], cfg['PostTreat']['Volume']['Dir'], 'Volume'+str(listscen[0])+'.csv')):
 		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+str(listscen[0])+'.csv',index_col=0)
 		for elem in df.columns:
 			if 'Reservoir' in elem:
@@ -548,9 +548,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 		else:
 			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-			print(world.keys())
-			print(cfg.keys())
-			continent = world [ world['Continent'] == cfg['Continent'] ]
+			continent = world [ world['continent'].isin(cfg['partition']['continent'])]
 		continent['Aggr']=continent['name']
 		continent['country']=continent['name']
 		continent['index']=continent['name']
@@ -1249,7 +1247,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		var=vardict['Output']['Demand']
 		for reg in cfg['regionsANA']:
 			firstIAMC=True
-			logger.info('     creating pyam for demand in region ',reg)
+			logger.info('     creating pyam for demand in region '+reg)
 			treat=True
 			if 'regions' in cfg['PostTreat']['Demand']:
 				if reg not in cfg['PostTreat']['Demand']['regions']: 
@@ -1474,7 +1472,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		for reg in cfg['lines']:
 			firstIAMC=True
-			logger.info('     creating pyam for marginal costs of flows for line ',reg)
+			logger.info('     creating pyam for marginal costs of flows for line '+reg)
 		 
 			treat_reg=True
 			reg1=reg.split('>')[0]
