@@ -64,6 +64,10 @@ with open(os.path.join(path, settings_format),"r") as mysettings:
 	cfg3=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 cfg = {**cfg1, **cfg2, **cfg3}
+if 'partition' in cfg.keys():
+	if 'Continent' in cfg['partition'].keys():
+		cfg['partition']['continent'] = cfg['partition']['Continent']
+
 
 # replace name of current dataset by name given as input
 if nbargs>4:
@@ -235,8 +239,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# create list of regions
 	##########################################################
+	inputdata_save = dict()
 	logger.info('read regions')
-	if os.path.isfile(os.path.join(cfg['inputpath'],cfg['csvfiles']['ZP_ZonePartition'])):
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['ZP_ZonePartition'])):
 		InputData=read_input_csv(cfg, 'ZP_ZonePartition')
 		colregion=cfg['CouplingConstraints']['ActivePowerDemand']['Partition']
 		list_regions=InputData[colregion].unique().tolist()
@@ -260,6 +265,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# seasonal storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['SS_SeasonalStorage'])):
 		InputData=read_input_csv(cfg,'SS_SeasonalStorage')
+		inputdata_save['SS_SeasonalStorage'] = InputData
 		listTechnosSS=InputData.Name.unique().tolist()
 		for techno in listTechnosSS:
 			if techno not in listTechnosInDataset:
@@ -277,6 +283,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# thermal mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['TU_ThermalUnits'])):
 		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
+		inputdata_save['TU_ThermalUnits'] = InputTUData
 		listTechnosTU=InputTUData.Name.unique().tolist()
 		if isInvest:
 			for row in InputTUData.index:
@@ -304,6 +311,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# intermittent generation mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['RES_RenewableUnits'])):
 		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
+		inputdata_save['RES_RenewableUnits'] = InputData
 		listTechnosRES=InputData.Name.unique().tolist()
 		if isInvest:
 			for row in InputData.index:
@@ -325,6 +333,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# short term storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['STS_ShortTermStorage'])):
 		InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
+		inputdata_save['STS_ShortTermStorage'] = InputData
 		listTechnosSTS=InputData.Name.unique().tolist()
 		if isInvest:
 			for row in InputData.index:
@@ -356,6 +365,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# interconnections
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['IN_Interconnections'])):
 		InputData=read_input_csv(cfg, 'IN_Interconnections')
+		inputdata_save['IN_Interconnections'] = InputData
 		if 'Name' in InputData.columns:
 			InputData=InputData.set_index('Name')
 		listLinesInDataset=InputData.index.tolist()
@@ -404,6 +414,40 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	InputFixedCost.to_csv(cfg['dirOUT']+'InputFixedCost.csv')
 	InstalledCapacity.to_csv(cfg['dirOUT']+'InstalledCapacity.csv')
 	LineCapacity.to_csv(cfg['dirOUT']+'LineCapacity.csv')
+
+	# write csv_after_invest
+	if isInvest:
+		dir_csv_after_invest = os.path.join(cfg['dirOUT'], 'csv_after_invest')
+		if not os.path.isdir(dir_csv_after_invest):
+			os.makedirs(dir_csv_after_invest)
+		installed_capacity = InstalledCapacity.stack().swaplevel().sort_index()
+		for k in inputdata_save.keys():
+			path = os.path.join(dir_csv_after_invest, cfg['csvfiles'][k])
+			logger.info('Writing '+path)
+			if k == 'IN_Interconnections':
+				inputdata_save[k].set_index('Name', inplace=True)
+				inputdata_save[k].update(LineCapacity)
+			else:
+				inputdata_save[k].set_index(['Name', 'Zone'], inplace=True)
+				if k == 'TU_ThermalUnits':
+					inputdata_save[k]['Capacity'] = installed_capacity.loc[inputdata_save[k].index]
+					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index].divide(inputdata_save[k]['NumberUnits'])
+					if inputdata_save[k].index.names == ['Name', 'Zone']:
+						inputdata_save[k] = inputdata_save[k].swaplevel().sort_index(level=1)
+				elif k == 'RES_RenewableUnits':
+					inputdata_save[k]['Capacity'] = installed_capacity.loc[inputdata_save[k].index]
+					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
+				elif k == 'SS_SeasonalStorage':
+					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
+					unit_with_min_power = inputdata_save[k].index[inputdata_save[k]['MinPower'] < 0]
+					if len(unit_with_min_power) > 0:
+						inputdata_save[k].loc[unit_with_min_power, 'MinPower'] = -installed_capacity.loc[unit_with_min_power]
+				elif k == 'STS_ShortTermStorage':
+					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
+					unit_with_min_power = inputdata_save[k].index[inputdata_save[k]['MinPower'] < 0]
+					if len(unit_with_min_power) > 0:
+						inputdata_save[k].loc[unit_with_min_power, 'MinPower'] = -installed_capacity.loc[unit_with_min_power]
+			inputdata_save[k].to_csv(path)
 
 	# compute aggregated Installed capacity
 	AggrInstalledCapacity=pd.DataFrame(index=list_regions)
