@@ -380,6 +380,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	InstalledCapacity=InstalledCapacity.fillna(0)
 	
 	LineCapacity=LineCapacity.fillna(0)
+	invest_factor_by_asset = dict()
 	if isInvest:
 		InstalledCapacity.to_csv(cfg['dirOUT']+'InitialInstalledCapacity.csv')
 		LineCapacity.to_csv(cfg['dirOUT']+'InitialLineCapacity.csv')
@@ -391,16 +392,19 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		# get solution of capacity expansion
 		sol=check_and_read_csv(cfg, cfg['dir']+'Solution_OUT.csv',header=None)
+		
 		indexSol=0
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
+			invest_factor_by_asset[(region, asset)] = sol[0].loc[indexSol]
 			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
 			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
 			indexSol=indexSol+1
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
+				invest_factor_by_asset[line] = sol[0].loc[indexSol]
 				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])																										
 				indexSol=indexSol+1
 		InvestedLine=InvestedLine.fillna(0.0)
@@ -424,30 +428,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for k in inputdata_save.keys():
 			path = os.path.join(dir_csv_after_invest, cfg['csvfiles'][k])
 			logger.info('Writing '+path)
-			if k == 'IN_Interconnections':
-				inputdata_save[k].set_index('Name', inplace=True)
-				inputdata_save[k].update(LineCapacity)
-			else:
-				inputdata_save[k].set_index(['Name', 'Zone'], inplace=True)
-				if k == 'TU_ThermalUnits':
-					inputdata_save[k]['Capacity'] = installed_capacity.loc[inputdata_save[k].index]
-					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index].divide(inputdata_save[k]['NumberUnits'])
-					if inputdata_save[k].index.names == ['Name', 'Zone']:
-						inputdata_save[k] = inputdata_save[k].swaplevel().sort_index(level=1)
-				elif k == 'RES_RenewableUnits':
-					inputdata_save[k]['Capacity'] = installed_capacity.loc[inputdata_save[k].index]
-					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
-				elif k == 'SS_SeasonalStorage':
-					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
-					unit_with_min_power = inputdata_save[k].index[inputdata_save[k]['MinPower'] < 0]
-					if len(unit_with_min_power) > 0:
-						inputdata_save[k].loc[unit_with_min_power, 'MinPower'] = -installed_capacity.loc[unit_with_min_power]
-				elif k == 'STS_ShortTermStorage':
-					inputdata_save[k]['MaxPower'] = installed_capacity.loc[inputdata_save[k].index]
-					unit_with_min_power = inputdata_save[k].index[inputdata_save[k]['MinPower'] < 0]
-					if len(unit_with_min_power) > 0:
-						inputdata_save[k].loc[unit_with_min_power, 'MinPower'] = -installed_capacity.loc[unit_with_min_power]
-			inputdata_save[k].to_csv(path)
+			for c in ['MaxPower', 'MinPower', 'Capacity']:
+				if c in inputdata_save[k].columns:
+					for i in inputdata_save[k].index:
+						asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
+						if asset in invest_factor_by_asset.keys():
+							inputdata_save[k][c].loc[i, c] = np.round(inputdata_save[k][c].loc[i, c], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
+			inputdata_save[k].to_csv(path, index=None)
 
 	# compute aggregated Installed capacity
 	AggrInstalledCapacity=pd.DataFrame(index=list_regions)
