@@ -2133,7 +2133,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		logger.info('   Create graphs for Flows')
 		MeanFlows=pd.read_csv(cfg['dirOUT'] + 'MeanImportExport.csv',index_col=0).fillna(0.0)
 		if cfg['map']: namefigpng=FlowsMap(MeanFlows,'MeanFlows.jpeg')
-		del namefigpng
 		
 	# create flows chapter in latex report
 	if(cfg['PostTreat']['Flows']['latex']):

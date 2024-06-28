@@ -65,7 +65,7 @@ PostTreat:
         latex: yes
         iamc: no
         draw: yes
-        scenarios: [1] #subset of scenarios on which to perform detailed analysis on specific periods
+        scenarios: [0] #subset of scenarios on which to perform detailed analysis on specific periods
         periods:
             summerweek:       
                 begin: '04/08/2030 00:00'
@@ -78,26 +78,26 @@ PostTreat:
 Graphs:
     Volume: 
         nbcols: 2
-        nblines: 3
+        nblines: 2
         SizeCol: 50
         SizeRow: 50
         TitleSize: 50
         LabelSize: 40
     Power:
-        treat: ['Hydro','Geothermal','Biomass','WindPower','Nuclear','PV','Hydrogen','Coal','Gaz','Oil'] # use if only a sublist of technos are in the graphs
+        #treat: ['Hydro','Geothermal','Biomass','WindPower','Nuclear','PV','Hydrogen','Coal','Gaz','Oil'] # use if only a sublist of technos are in the graphs
         nbcols: 2
-        nblines: 3
+        nblines: 2
         SizeCol: 50
         SizeRow: 35
         TitleSize: 50
         LabelSize: 40
         ChloroGraph:
-            nbcols: 4
+            nbcols: 3
             nblines: 4
             dpi: 50
     MarginalCost: 
         nbcols: 2
-        nblines: 3
+        nblines: 2
         SizeCol: 50
         SizeRow: 35
         TitleSize: 50
@@ -107,19 +107,19 @@ Graphs:
         nblines: 5
     Demand:
         nbcols: 2
-        nblines: 3
+        nblines: 2
         SizeCol: 50
         SizeRow: 35
         TitleSize: 50
         LabelSize: 40
 
 # name of scenario for the IAMC file
-scenario: 'Fake Scenario'
+scenario: 'LoR_Madrid_Cooking'
 model: 'plan4res v1.0'  # name of the model
 
 # name and title of the latex report
-namereport: 'nameofthereport'
-titlereport: 'Title of the report'
+namereport: 'LoR_Madrid_Cooking'
+titlereport: 'The Middle Region in the OpenMod4Africa Madrid Workshop'
 
 # if bellman value is to be computed (file BellmanOUT.csv in inputs): yes, else: no
 usevu: no
@@ -136,40 +136,39 @@ pielimit: 0.001
 # cO2= cO2 cost per MWh for this technology
 # varcost= Variable cost Euro per MWh for this technology
 # startcost= Start-Up cost Euro
-
-Technos:
-    Geothermal:
-        color: '#8FA600'
+Technos:                     
     Hydro|Run of River: 
         color: '#74DBDA'
     Nuclear:
         color: '#FFAA00'
     Coal|Hard coal|w/o CCS:
-        color: '#0D0D0D'
-    Coal|Hard coal|w/ CCS:  
-        color: '#4D4F4F'
+        color: '#0D0D0D'                           
     Coal|Lignite|w/o CCS:
         color: '#2F3030'
-    Wind|Offshore:
+    Wind|Offshore|Deep:
         color: '#2BFF00'
-    Wind|Onshore:
+    Wind|Offshore|Shallow:
+        color: '#2BFF00'
+    Wind|Offshore|Transitional:
+        color: '#2BFF00'
+    Wind|Onshore|Avg:
+        color: '#22CC00'
+    Wind|Onshore|Opt:
         color: '#22CC00'
     Solar|PV:
         color: '#FFFF00'
-    Solar|PV|Utility:
+    Solar|PV|Utility|Average:
+        color: '#FFFF00'
+    Solar|PV|Utility|Inf:
+        color: '#FFFF00'
+    Solar|PV|Utility|Opt:
         color: '#FFFF00'
     Solar|PV|Rooftop|Commercial:
         color: '#FFFF00'
     Solar|PV|Rooftop|Residential:
-        color: '#FFFF00'
-    Biomass|w/ CCS:
-        color: '#608000'
+        color: '#FFFF00'                        
     Biomass|w/o CCS:
-        color: '#608000'
-    Hydrogen|OCGT:
-        color: '#DF785B'
-    Gas|CCGT|w/ CCS:
-        color: '#FF0000'
+        color: '#608000'                        
     Gas|CCGT|w/o CCS:
         color: '#B30000'
     Gas|OCGT|w/o CCS:
@@ -181,21 +180,13 @@ Technos:
     Hydro|Pumped Storage:
         color: '#3377FF'
     Battery|Lithium-Ion:
-        color: '#D75BE1'
-    Battery|Redox Flow:
-        color: '#D75BE1'
-    Compressed Air:
-        color: '#BB16C7'
+        color: '#D75BE1'                        
     SlackUnit:
         color: '#FFFFFF'
     Hydro|Pumped Storage_PUMP:
         color: '#3377FF'
     Battery|Lithium-Ion_PUMP:
         color: '#E68F67'
-    Battery|Redox Flow_PUMP:
-        color: '#E68F67'
-    Compressed Air_PUMP:
-        color: '#E6847A'
 
 # aggregated technologies (for aggregated graphs)
 # for each aggr techno: list of technos and color codes 
@@ -207,45 +198,37 @@ technosAggr:
     Hydro_PUMP:
         technos: ['Hydro|Pumped Storage_PUMP']
         color: blue
-        colors: Blues
-    Geothermal: 
-        technos: ['Geothermal']
-        color: olive
-        colors: Greens
-    WindPower:
-        technos: ['Wind|Offshore', 'Wind|Onshore']
+        colors: Blues                     
+    WindPower: 
+        technos: ['Wind|Onshore|Opt','Wind|Onshore|Avg','Wind|Offshore|Transitional','Wind|Offshore|Shallow', 'Wind|Offshore|Deep']
         color: green
         colors: Greens
     PV:
-        technos: ['Solar|PV','Solar|PV|Utility','Solar|PV|Rooftop|Commercial','Solar|PV|Rooftop|Residential']
+        technos: ['Wind|Onshore|Opt','Wind|Onshore|Avg','Wind|Offshore|Transitional','Wind|Offshore|Shallow', 'Wind|Offshore|Deep']
         color: yellow
         colors: YlOrRd
     Biomass: 
-        technos: ['Biomass|w/ CCS','Biomass|w/o CCS']
+        technos: ['Biomass|w/o CCS']
         color: darkkhaki
         colors: Greens
     Nuclear:
         technos: ['Nuclear']
         color: orange
-        colors: Oranges
-    Hydrogen:
-        technos: ['Hydrogen|OCGT']
-        color: salmon
-        colors: RdPu
+        colors: Oranges                    
     Coal:
-        technos: ['Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS']
+        technos: ['Coal|Hard coal|w/o CCS','Coal|Lignite|w/o CCS']
         color: black
         colors: Greys
     Gaz:
-        technos: ['Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS']
+        technos: ['Gas|CCGT|w/o CCS','Gas|OCGT|w/o CCS']
         color: firebrick
         colors: Reds
     Battery: 
-        technos: ['Compressed Air','Lithium-Ion','Redox Flow']
+        technos: ['Lithium-Ion']
         color: magenta
         colors: Purples
     Battery_PUMP: 
-        technos: ['Compressed Air_PUMP','Lithium-Ion_PUMP','Redox Flow_PUMP']
+        technos: ['Lithium-Ion_PUMP']
         color: magenta
         colors: Purples
     Oil:
@@ -260,7 +243,7 @@ technosAggr:
 # lists of storage units
 # pumping=list of units with pumping capacity
 # nopumping=list of units without pumping capacity
-pumping: [ 'Hydro|Pumped Storage', 'Compressed Air','Battery|Lithium-Ion','Battery|Redox Flow']
+pumping: [ 'Hydro|Pumped Storage', 'Battery|Lithium-Ion']
 nopumping: [ 'Hydro|Reservoir' ]
 
 # specification of deterministic graphics for storages
@@ -273,7 +256,7 @@ graphVolumes:
         Technos: ['Hydro|Pumped Storage']
     Battery: 
         Name: 'Batteries'
-        Technos: ['Compressed Air','Battery|Lithium-Ion','Battery|Redox Flow']
+        Technos: ['Battery|Lithium-Ion']
 
 #############################################
 #

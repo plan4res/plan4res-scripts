@@ -590,8 +590,7 @@ def create_demand_scenarios():
 				isDeterministic=False
 				TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
-				print(nameTS)
-				print(TS.index)
+				
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS,isEnergy)
 					

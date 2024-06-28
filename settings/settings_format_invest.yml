@@ -51,10 +51,10 @@ Calendar:
     BeginTimeSeries: '01/01/2050  00:00:00'   # timescale where timeseries are available
     EndTimeSeries: '31/12/2050  23:00:00'   # timescale where timeseries are available
     BeginDataset: '02/07/2030  00:00:00'
-    EndDataset: '31/12/2031  23:00:00'
+    EndDataset: '30/06/2031  23:00:00'
     SSVTimeStep:  # duration of a timeset for the SDDP = duration of a unit commitment problem
         Unit: hours
-        Duration: 672
+        Duration: 168
     TimeStep:  # duration of timesteps 
         Unit: hours
         Duration: 1
@@ -69,7 +69,7 @@ ParametersFormat:
     DownDeltaRampDownMultFactor: 100 # mult factor for computing the max ramp down of virtual downstream reservoir from ramp down of upstream reservoir
     NumberHoursInYear: 8760
     InertiaMultFactor: 1.2 # mult factor for computing inertia contributions
-    Scenarios: ['1982','1983'] # list of scenarios to include in the instance (names of scenarios)
+    Scenarios: ['Base','PVminus10','Demandplus10','PVminus10AndDemandplus10'] # list of scenarios to include in the instance (names of scenarios)
 
     # ScenarisedData contains the list of scenarised data, among 'ActivePowerDemand','Hydro:Inflows','Renewable:MaxPowerProfile' and 'Thermal:MaxPowerProfile'
     ScenarisedData: 

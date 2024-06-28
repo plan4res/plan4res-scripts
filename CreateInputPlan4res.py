@@ -640,25 +640,35 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 								MaxPowerFlow=0.0
 								InvCost=0.0
 								LossFactor=0.0
+								N=0
 								for reg1 in cfg['aggregateregions'][AggReg1]:
 									for reg2 in cfg['aggregateregions'][AggReg2]:
 										if (reg1+'>'+reg2) in IN.index:
+											N=N+1
 											MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][reg1+'>'+reg2]
 											InvCost=InvCost+IN['InvestmentCost'][reg1+'>'+reg2]
 											LossFactor=LossFactor+IN['LossFactor'][reg1+'>'+reg2]
 											DeleteLines.append(reg1+'>'+reg2) # delete individual line
+								if N==0: N=1
+								InvCost=InvCost/N
+								LossFactor=LossFactor/N
 								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 							else: 
 								# AggReg2 is not an aggregated region
 								MaxPowerFlow=0.0
 								InvCost=0.0
 								LossFactor=0.0
+								N=0
 								for reg1 in cfg['aggregateregions'][AggReg1]:
 									if (reg1+'>'+AggReg2) in IN.index:
+										N=N+1
 										LossFactor=LossFactor+IN['LossFactor'][reg1+'>'+AggReg2]
 										MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][reg1+'>'+AggReg2]
 										InvCost=InvCost+IN['InvestmentCost'][reg1+'>'+AggReg2]
 										DeleteLines.append(reg1+'>'+AggReg2) # delete individual line
+								if N==0: N=1
+								InvCost=InvCost/N
+								LossFactor=LossFactor/N
 								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 				else:
 					for AggReg2 in cfg['partition'][partitionDemand]:
@@ -667,12 +677,17 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 								MaxPowerFlow=0.0
 								InvCost=0.0
 								LossFactor=0.0
+								N=0
 								for reg2 in cfg['aggregateregions'][AggReg2]:
 									if (AggReg1+'>'+reg2) in IN.index:
+										N=N+1
 										InvCost=InvCost+IN['InvestmentCost'][AggReg1+'>'+reg2]
 										LossFactor=LossFactor+IN['LossFactor'][AggReg1+'>'+reg2]
 										MaxPowerFlow=MaxPowerFlow+IN['MaxPowerFlow'][AggReg1+'>'+reg2]
 										DeleteLines.append(AggReg1+'>'+reg2) # delete individual line
+								if N==0: N=1
+								InvCost=InvCost/N
+								LossFactor=LossFactor/N
 								IN = pd.concat([IN,pd.DataFrame(data=[[MaxPowerFlow,InvCost,LossFactor,AggReg1+'>'+AggReg2,AggReg1,AggReg2,AggReg1,AggReg2]],index=[AggReg1+'>'+AggReg2],columns=IN.columns)])
 		IN=IN.drop(DeleteLines )
 		RowsToDelete = IN[ IN['MaxPowerFlow'] == 0 ].index
@@ -1347,11 +1362,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# case where Maximum Power is not in the data
 			if isMaxVolume and not isMaxPower: 
-				STS['MaxPower']=STS['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio']['hydrostorage'][oetechno]
+				STS['MaxPower']=STS['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 				
 			# case where Maximum Storage is not in the data
 			if isMaxPower and not isMaxVolume: 
-				STS['MaxVolume']=STS['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio']['hydrostorage'][oetechno]
+				STS['MaxVolume']=STS['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 			
 			# treat additionnal pumped storage from SS
 			STS['AddPumpedStorage']=0
@@ -1450,7 +1465,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# replace low capacities with 0
 			if isMaxPower: BAT.loc[ BAT['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
-			if isMaxVolume: BAT.loc[ BAT['MaxVolume'] < cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio']['battery'][oetechno], 'MaxVolume' ]=0
+			if isMaxVolume: BAT.loc[ BAT['MaxVolume'] < cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno], 'MaxVolume' ]=0
 
 			# case where Maximum Discharge/Charge is not in the data
 			if not isMaxPower: 

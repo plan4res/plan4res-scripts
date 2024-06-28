@@ -559,15 +559,21 @@ if treatHourly:
 		logger.info('  sheet '+sheet)
 		df=pd.read_excel(os.path.join(cfg['genesys_inputpath'],cfg['genesys_timeseriesfiles']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
 		df=df.reset_index()
+		if sheetname in cfg['TimeSeriesFactor']:
+			multfactor=(1/cfg['TimeSeriesFactor'][sheetname])
+		else:
+			multfactor=1.0
+		logger.info('  sheetname '+str(sheetname)+' mult '+str(multfactor)) 
 		# create plan4res time series related to variable sheetname
 		for region in df.columns:
-			timeseries = pd.DataFrame({'Timestamp [UTC]': TimeSeriesTemplate['Timestamp [UTC]'],'Base':df[region]})
-			#timeseries=pd.DataFrame(TimeSeriesTemplate['Timestamp [UTC]'])
-			#timeseries['Base']=df[region]
-			for scenario in cfg['AdditionnalScenarios']:
-				if sheet in cfg['AdditionnalScenarios'][scenario]:
-					timeseries[scenario]=timeseries['Base']*cfg['AdditionnalScenarios'][scenario][sheet]
-				else:
-					timeseries[scenario]=timeseries['Base']
-			nameserie=sheetname+'_'+region+'.csv'
-			timeseries.to_csv(os.path.join(cfg['timeseriespath'],nameserie),index=False)
+			if not region=='HOUR':
+				timeseries = pd.DataFrame({'Timestamp [UTC]': TimeSeriesTemplate['Timestamp [UTC]'],'Base':df[region]*multfactor})
+				#timeseries=pd.DataFrame(TimeSeriesTemplate['Timestamp [UTC]'])
+				#timeseries['Base']=df[region]
+				for scenario in cfg['AdditionnalScenarios']:
+					if sheet in cfg['AdditionnalScenarios'][scenario]:
+						timeseries[scenario]=timeseries['Base']*cfg['AdditionnalScenarios'][scenario][sheet]
+					else:
+						timeseries[scenario]=timeseries['Base']
+				nameserie=sheetname+'_'+region+'.csv'
+				timeseries.to_csv(os.path.join(cfg['timeseriespath'],nameserie),index=False)

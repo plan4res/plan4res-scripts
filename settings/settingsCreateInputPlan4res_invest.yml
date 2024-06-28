@@ -4,7 +4,7 @@
 ##############################################################################
 # list of different scenarios and years (eg. from GENeSYS-MOD results) for which we want to create a dataset
 #scenarios: ['Techno-Friendly 2.0']
-scenarios: ['Gondor_globalLimit_364']
+scenarios: ['LoR_Madrid_Cooking']
 years: [2030]
 
 # if data are located within the plan4res container, use plan4res path
@@ -25,28 +25,27 @@ csvfiles: # list of csv files to create in the plan4res excel file (comment line
 # list of regions to get from data sources 
 listregionsGET: ['DolAmroth','Gondor','Harad','Mordor','Rohan','World']
 aggregateregions: # how to aggregate regions in plan4res dataset
-      #'AggReg1': ['DolAmroth','Gondor']
-      #'AggReg2': ['Harad','Mordor']
+    RoGonDor: ['Gondor','Mordor','Rohan']
 
 # regional partitions in plan4res (partitions are used for coupling constraints)
 partition:
-    Countries: ['DolAmroth','Gondor','Harad','Mordor','Rohan']
+    Countries: ['RoGonDor','DolAmroth','Harad']
     Continent: ['World']
 
 technos: # list of technologies and link to modelling in plan4res
 # thermal= modelled as ThermalUnit (TU), reservoir= modelled as HydroUnit (SS), 
 # hydrostorage/battery=modelled as ShortTermStorage (STS), res/runofriver=modelled as IntermittentUnit (RES)
-    thermal: ['Biomass|w/ CCS','Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Hard coal|w/ CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|CCGT|w/ CCS','Gas|OCGT|w/o CCS','Geothermal','Hydrogen|OCGT','Nuclear','Oil|w/o CCS']
+    thermal: ['Biomass|w/o CCS','Coal|Hard coal|w/o CCS','Coal|Lignite|w/o CCS','Gas|CCGT|w/o CCS','Gas|OCGT|w/o CCS','Nuclear','Oil|w/o CCS']
     reservoir: ['Hydro|Reservoir']
     hydrostorage: ['Hydro|Pumped Storage']
-    battery: ['Compressed Air','Battery|Lithium-Ion','Battery|Redox Flow']
-    res: ['Solar|PV|Rooftop|Commercial','Solar|PV|Rooftop|Residential','Solar|PV|Utility', 'Wind|Onshore', 'Wind|Offshore']
+    battery: ['Battery|Lithium-Ion']
+    res: ['Solar|PV|Rooftop|Commercial','Solar|PV|Utility|Average','Solar|PV|Utility|Inf','Solar|PV|Utility|Opt','Wind|Onshore|Avg','Wind|Onshore|Opt', 'Wind|Offshore|Deep','Wind|Offshore|Shallow','Wind|Offshore|Transitional']
     runofriver: ['Hydro|Run of River']
 
 # list of the names of the scenarised timeseries for scenarised data 
 # if using plan4res scenarised data, they are named from the meteorological year
 # that was used for their creation
-StochasticScenarios: [1982,1983,1984,1985,1986,1987,1988,1989,1990,1991,1992,1993,1994,1995,1996,1997,1998,1999,2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018]
+StochasticScenarios: ['Base','PVminus10','Demandplus10','PVminus10AndDemandplus10']
 
 CouplingConstraints: # MaxPower and variable cost to use for creating slack units (units for non served)
     # Coupling constraints which are not listed here will not be created in dataset
@@ -57,8 +56,8 @@ CouplingConstraints: # MaxPower and variable cost to use for creating slack unit
         Partition: 'Countries'
         MaxPower : 1500000
         Cost : 10000
-        #SumOf: ['ElecHeating','ElecVehicle','OtherExclHeatTransp']
-        SumOf: ['Total']
+        SumOf: ['Cooking','ElecHeating','ElecVehicle','OtherExclHeatTranspCooking']
+        #SumOf: ['Total']
     # PrimaryDemand : # optional - primary reserve constraint
         # Partition: 'Countries'
         # MaxPower : 1000
@@ -106,70 +105,27 @@ ParametersCreate:
         Hydro|Pumped Storage: 0.8
         Hydro|Reservoir: 0.8
     Volume2CapacityRatio :  # used to compute the MaxPower or MaxVolume of storage units
-        Compressed Air: 100
         Battery|Lithium-Ion: 4
-        Battery|Redox Flow: 4
         Hydro|Pumped Storage: 100
         Hydro|Reservoir: 2000
     CapacityExpansion: # define capacity expansion dataset - list of technos which can be invested
         thermal: 
-            Biomass|w/ CCS: 
-                MaxAdd: 1000
-                MaxRet: 0
-            Biomass|w/o CCS: 
-                MaxAdd: 1000
-                MaxRet: 0
-            Gas|CCGT|w/ CCS:  
-                MaxAdd: 1000
-                MaxRet: 0
-            Geothermal:  
-                MaxAdd: 1000
-                MaxRet: 0
-            Hydrogen|OCGT:  
-                MaxAdd: 1000
-                MaxRet: 0
-            Nuclear:  
-                MaxAdd: 1000
-                MaxRet: 0
-        hydrostorage:
-            Hydro|Pumped Storage:
-                MaxAdd: 1000
+            Gas|CCGT|w/o CCS:  
+                MaxAdd: 30000
                 MaxRet: 0
         battery:
-            Compressed Air:  
-                MaxAdd: 1000
-                MaxRet: 0
-                InvestmentCost: 5000
             Battery|Lithium-Ion:  
-                MaxAdd: 1000
-                MaxRet: 0
-                InvestmentCost: 100
-            Battery|Redox Flow:  
-                MaxAdd: 1000
+                MaxAdd: 15000
                 MaxRet: 0
                 InvestmentCost: 100
         res: 
             Solar|PV|Utility:  
-                MaxAdd: 1000
+                MaxAdd: 50000
                 MaxRet: 0
                 InvestmentCost: 290
-            Solar|PV|Rooftop|Commercial:  
-                MaxAdd: 300
-                MaxRet: 0
-                InvestmentCost: 290
-            Solar|PV|Rooftop|Residential:  
-                MaxAdd: 100
-                MaxRet: 0
-                InvestmentCost: 290
-            Wind|Onshore:  
-                MaxAdd: 1000
-                MaxRet: 0
-            Wind|Offshore:  
-                MaxAdd: 1000
-                MaxRet: 0
         interconnections: # either define the share of maxcapacity which can be added or a list of lines with max added capacity
             Share:  
-                MaxAdd: 0.2
+                MaxAdd: 2
                 MaxRet: 0 
             InvestmentCost: 100
     conversiondollar2010euro2020: 0.978  # should be the same value than the one used below
@@ -210,6 +166,14 @@ ParametersCreate:
             factor: 0.978
         'Mt CO2/yr':
             to: 't CO2/yr'
+        'million EUR/GW':
+            to: 'EUR/MW'
+        'EUR_2020/kW':
+            to: 'EUR/MW'
+            factor: 1000
+        'EUR_2020/kW/yr':
+            to: 'EUR/MW/yr'
+            factor: 1000
     MultFactor:  # list of technos where MaxPower is computed as energy/(mean load profile*8760)
         Hydro|Run of River : 8760
     thermal:
@@ -244,7 +208,7 @@ listdatagroups: ['genesys_jl']
 datagroups:
     genesys_jl:  # here the group with data from Open Entrance Scenario
         #inputdata: 'IAMC_Middleeast_Gondor.xlsx' 
-        model: 'GENeSYS-MOD.jl'
+        model: 'GENeSYS-MOD 3.2'
         regions:
             global: 'World'  # region to be used for global data
             local: []   # additional regions to include compared to general list
@@ -253,7 +217,7 @@ datagroups:
             coupling: 
                 #mean: ['Price|Carbon']
                 flow: ['Network|Electricity|Maximum Flow','Network|Electricity|Expansion Cost','Network|Electricity|Loss Factor']
-                add: ['Final Energy|Electricity','Final Energy|Electricity|Heat','Final Energy|Electricity|Transportation','Final Energy|Electricity|Other (excl. Heat, Transport)']
+                add: ['Final Energy|Electricity','Final Energy|Electricity|Cooking','Final Energy|Electricity|Heat','Final Energy|Electricity|Transportation','Final Energy|Electricity|Other (excl. Heat, Transport, Cooking)']
             techno:
                 thermal:
                     add: ['Capacity|Electricity|','Secondary Energy|Electricity|']

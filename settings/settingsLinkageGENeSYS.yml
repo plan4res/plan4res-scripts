@@ -6,19 +6,36 @@
 USEPLAN4RESROOT: True
 
 genesys_datafiles: 
-    input: 'inputdata_LOTR_joh_v01_04-03-2024.xlsx'
+    input: 'inputdata_LOTR_Cooking_v01_FINAL.xlsx'
     input_sheets: ['Sets','Par_TradeLossFactor','Par_EmissionActivityRatio','Par_EmissionContentPerFuel','Par_TechnologyToStorage','Par_TechnologyFromStorage','Par_TradeCapacityGrowthCosts','Par_InputActivityRatio','Par_OperationalLife','Par_OperationalLifeStorage']
-    capacity: 'output_capacity_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    exogenous_costs: 'output_exogenous_costs_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    production: 'output_production_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    annual_production: 'output_annual_production_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    technology_costs: 'output_technology_costs_detailed_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    exogenous_technology_costs: 'output_exogenous_costs_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    trade_capacity: 'output_trade_capacity_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
-    other: 'output_other_MiddleEarth_Gondor_globalLimit_364_dispatch.csv'
+    capacity: 'output_capacity_MiddleEarth_Gondor_1444_Cooking_.csv'
+    exogenous_costs: 'output_exogenous_costs_MiddleEarth_Gondor_1444_Cooking_.csv'
+    production: 'output_production_MiddleEarth_Gondor_1444_Cooking_.csv'
+    annual_production: 'output_annual_production_MiddleEarth_Gondor_1444_Cooking_.csv'
+    technology_costs: 'output_technology_costs_detailed_MiddleEarth_Gondor_1444_Cooking_.csv'
+    exogenous_technology_costs: 'output_exogenous_costs_MiddleEarth_Gondor_1444_Cooking_.csv'
+    trade_capacity: 'output_trade_capacity_MiddleEarth_Gondor_1444_Cooking_.csv'
+    other: 'output_other_MiddleEarth_Gondor_1444_Cooking_.csv'
+genesys_timeseriesfiles:     
+    xlsx: 'Hourly_Data_MiddleEarth_Cooking_v01.xlsx'
+    timeseries_sheets:
+        'Final Energy|Electricity|Heat': 'TS_HEAT_LOW'
+        'Final Energy|Electricity|Other (excl. Heat, Transport, Cooking)': 'TS_LOAD'
+        'Final Energy|Electricity|Transportation': 'TS_MOBILITY_PSNG'
+        'Final Energy|Electricity|Cooking': 'TS_COOKING'
+        'Electricity|Solar|PV|Rooftop|Commercial': 'TS_PV_AVG'
+        'Electricity|Solar|PV|Utility|Average': 'TS_PV_AVG'
+        'Electricity|Solar|PV|Utility|Inf': 'TS_PV_INF'
+        'Electricity|Solar|PV|Utility|Opt': 'TS_PV_OPT'
+        'Electricity|Wind|Offshore|Deep': 'TS_WIND_OFFSHORE_DEEP'
+        'Electricity|Wind|Offshore|Shallow': 'TS_WIND_OFFSHORE_SHALLOW'
+        'Electricity|Wind|Offshore|Transitional': 'TS_WIND_OFFSHORE'
+        'Electricity|Wind|Onshore|Avg': 'TS_WIND_ONSHORE_AVG'
+        'Electricity|Wind|Onshore|Opt': 'TS_WIND_ONSHORE_OPT'
+        'Electricity|Hydro|Run of River': 'TS_HYDRO_ROR'      
 defaultvalues:
-    Model: GENeSYS-MOD.jl
-    Scenario: Gondor_globalLimit_364
+    Model: GENeSYS-MOD 3.2
+    Scenario: LoR_Madrid_Cooking
 global_region: World
 # mappings for genesys-mod are
 mappings:
@@ -32,7 +49,7 @@ global_region: World
 variables: 
     Final Energy|:
         source: annual_production
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             select:
                 Fuel:
@@ -44,9 +61,9 @@ variables:
             apply_abs:
             complete_variable_name: '|Electricity'
     #Final Energy|Electricity|Other (excl. Heat, Cooling, Transport):
-    Final Energy|Electricity|Other (excl. Heat, Transport):
+    Final Energy|Electricity|Other (excl. Heat, Transport, Cooking): 
         source: annual_production
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             select:
                 Technology:
@@ -59,24 +76,31 @@ variables:
                 rule: sum
     Final Energy|Electricity|Heat:
         source: internal
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             compute:
                 ruleaggr: sum
                 from: ['Final Energy|Industry|Electricity','Final Energy|Residential and Commercial|Electricity']
     Final Energy|Electricity|Transportation:
         source: internal
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             compute: 
                 from: ['Final Energy|Transportation|Electricity']
                 ruleaggr: sum
-    Final Energy|Electricity:
+    Final Energy|Electricity|Cooking:
         source: internal
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             compute: 
-                from: ['Final Energy|Electricity|Other (excl. Heat, Cooling, Transport)','Final Energy|Electricity|Transportation','Final Energy|Electricity|Heat']
+                from: ['Final Energy|Cooking|Electricity']
+                ruleaggr: sum
+    Final Energy|Electricity:
+        source: internal
+        unit: 'PJ/yr'
+        rules:
+            compute: 
+                from: ['Final Energy|Electricity|Other (excl. Heat, Transport, Cooking)','Final Energy|Electricity|Transportation','Final Energy|Electricity|Heat','Final Energy|Electricity|Cooking']
                 ruleaggr: sum                                  
     Network|Electricity|Maximum Flow:
         source: trade_capacity
@@ -89,7 +113,7 @@ variables:
             addvariablecol:
     Network|Electricity|Expansion Cost:
         source: trade_capacity
-        unit: MEUR/GW
+        unit: 'million EUR/GW'
         rules:
             select:
                 Type:
@@ -99,20 +123,20 @@ variables:
     Network|Electricity|Loss Factor:
         source: input
         sheets: [Par_TradeLossFactor]
-        unit: ''
+        unit: '-'
         rules:
             global: True
             select:
                 Fuel:
                     values: ['Power']
             addvariablecol:
-    Capacity|:
+    New Capacity|:
         source: capacity
         unit: 'GW'
         rules:
             select:
                 Type:
-                    values: ['TotalCapacity']
+                    values: ['NewCapacity']
                 Sector:
                     values: ['Power','Storages']
             selectAndMap:
@@ -120,9 +144,31 @@ variables:
                 mappings: [technos]
                 rule: sum
             concatvariablename:
+    Residual Capacity|:
+        source: capacity
+        unit: 'GW'
+        rules:
+            select:
+                Type:
+                    values: ['ResidualCapacity']
+                Sector:
+                    values: ['Power','Storages']
+            selectAndMap:
+                column: Technology 
+                mappings: [technos]
+                rule: sum
+            concatvariablename:
+    Capacity|:
+        source: internal
+        unit: 'GW'
+        rules:
+            compute:
+                from: ['New Capacity|','Residual Capacity|']
+                mapping: technos
+                ruleaggr: sum 
     Secondary Energy|:
         source: annual_production
-        unit: 'PJ'
+        unit: 'PJ/yr'
         rules:
             select:
                 Fuel:
@@ -134,7 +180,7 @@ variables:
             concatvariablename:                   
     Variable Cost (incl. Fuel Cost)|:
         source: technology_costs
-        unit: MEUR/PJ
+        unit: 'million EUR/PJ'
         rules:
             select:
                 Type:
@@ -146,7 +192,7 @@ variables:
             concatvariablename:
     Fixed Cost|:
         sources: [technology_costs,exogenous_technology_costs]
-        unit: MEUR/GW
+        unit: 'million EUR_2020/GW/yr'
         rules:
             select:
                 Type:
@@ -158,7 +204,7 @@ variables:
             concatvariablename:
     Capital Cost|:
         sources: [technology_costs,exogenous_technology_costs]
-        unit: MEUR/GW
+        unit: 'million EUR_2020/GW'
         rules: 
             select:
                 Type:
@@ -170,7 +216,7 @@ variables:
             concatvariablename:
     Price|Carbon:
         source: technology_costs
-        unit: EUR_2020/t CO2
+        unit: 'EUR_2020/t CO2'
         rules: 
             select:
                 Type:
@@ -180,7 +226,7 @@ variables:
             addvariablecol::
     Lifetime|:
         source: input
-        unit: years
+        unit: '-'
         sheets: [Par_OperationalLife,Par_OperationalLifeStorage]
         rules:
             selectAndMap:
@@ -194,7 +240,7 @@ variables:
             addyear:
     Emission Rate|CO2|:
         source: input
-        unit: Mt CO2/PJ
+        unit: 'million tons/PJ'
         sheets: [Par_EmissionActivityRatio]
         rules:
             select:
@@ -233,7 +279,7 @@ variables:
                     rule: mean
     Maximum Storage|:
         source: internal
-        unit: GWh
+        unit: 'GWh'
         rules:
             compute:
                 mapping: storages_ratios
@@ -241,7 +287,7 @@ variables:
                 rulemap: mult
     Charging Efficiency|:
         source: input
-        unit: ''
+        unit: '-'
         sheets: [Par_TechnologyToStorage]
         rules:
             selectAndMap:
@@ -252,7 +298,7 @@ variables:
             concatvariablename:
     Discharging Efficiency|: 
         source: input
-        unit: ''
+        unit: '-'
         sheets: [Par_TechnologyFromStorage]
         rules: 
             selectAndMap:
@@ -267,7 +313,66 @@ nomenclatureDir: '/scripts/python/openentrance/definitions/'
 # path where config files are
 configDir: 'python/plan4res-scripts/'
 
-# optionnal data for using CreateInputPlan4res.py without LaunchCREATE
+conversions:
+    'MW':
+        to: 'GW'
+    'PJ/yr':
+        to: 'EJ/yr'
+        factor: 0.001
+    'million EUR/PJ' :  
+        to: 'EUR/MWh'
+    'million EUR_2020/GW/yr':   
+        to: 'EUR_2020/kW/yr'
+    'million EUR_2020/GW':
+        to: 'EUR_2020/kW'
+    'million tons/PJ':
+        to: 'tons/MWh'
+
+#removed_variables: ['Final Energy|Cooking|Electricity','Final Energy|Industry|Electricity','Final Energy|Residential and Commercial|Electricity','Final Energy|Transportation|Electricity','Secondary Energy|Heat|Industrial|Electricity','Secondary Energy|Heat|Residential and Commercial|Electricity','Secondary Energy|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Biomass','Fixed Cost|Heat|Industrial|Coal','Fixed Cost|Heat|Industrial|Electricity','Fixed Cost|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Geothermal','Fixed Cost|Heat|Industrial|Hydrogen','Fixed Cost|Heat|Industrial|Oil','Fixed Cost|Heat|Industrial|Solar','Fixed Cost|Heat|Residential and Commercial|Biomass','Fixed Cost|Heat|Residential and Commercial|Coal','Fixed Cost|Heat|Residential and Commercial|Electricity','Fixed Cost|Heat|Residential and Commercial|Gas','Fixed Cost|Heat|Residential and Commercial|Geothermal','Fixed Cost|Heat|Residential and Commercial|Oil','Fixed Cost|Heat|Residential and Commercial|Solar','Capital Cost|Heat|Industrial|Biomass','Capital Cost|Heat|Industrial|Coal','Capital Cost|Heat|Industrial|Electricity','Capital Cost|Heat|Industrial|Gas','Capital Cost|Heat|Industrial|Geothermal','Capital Cost|Heat|Industrial|Hydrogen','Capital Cost|Heat|Industrial|Oil','Capital Cost|Heat|Industrial|Solar','Capital Cost|Heat|Residential and Commercial|Biomass','Capital Cost|Heat|Residential and Commercial|Coal','Capital Cost|Heat|Residential and Commercial|Electricity','Capital Cost|Heat|Residential and Commercial|Gas','Capital Cost|Heat|Residential and Commercial|Geothermal','Capital Cost|Heat|Residential and Commercial|Oil','Capital Cost|Heat|Residential and Commercial|Solar','Lifetime|Electricity|Battery|Lithium-Ion','Lifetime|Electricity|Battery|Redox Flow','Lifetime|Electricity|Biomass|w/ CCS','Lifetime|Electricity|Biomass|w/o CCS','Lifetime|Electricity|Coal|Hard coal|w/ CCS','Lifetime|Electricity|Coal|Hard coal|w/o CCS','Lifetime|Electricity|Coal|Lignite|w/ CCS','Lifetime|Electricity|Coal|Lignite|w/o CCS','Lifetime|Electricity|Compressed Air','Lifetime|Electricity|Gas|CCGT|w/ CCS','Lifetime|Electricity|Gas|CCGT|w/o CCS','Lifetime|Electricity|Gas|Fossil|Gas Engines','Lifetime|Electricity|Gas|OCGT|w/o CCS','Lifetime|Electricity|Gas|Synthetic Methane|w/o CCS','Lifetime|Electricity|Geothermal','Lifetime|Electricity|Hydrogen|Fuel Cell','Lifetime|Electricity|Hydrogen|OCGT','Lifetime|Electricity|Hydro|Pumped Storage','Lifetime|Electricity|Hydro|Reservoir','Lifetime|Electricity|Hydro|Run of River','Lifetime|Electricity|Nuclear', 'Lifetime|Electricity|Ocean','Lifetime|Electricity|Oil|w/o CCS','Lifetime|Electricity|Solar|CSP','Lifetime|Electricity|Solar|PV|Rooftop|Commercial','Lifetime|Electricity|Solar|PV|Rooftop|Residential','Lifetime|Electricity|Solar|PV|Utility','Lifetime|Electricity|Wind|Offshore','Lifetime|Electricity|Wind|Onshore','Lifetime|Heat|Industrial|Biomass','Lifetime|Heat|Industrial|Coal','Lifetime|Heat|Industrial|Electricity','Lifetime|Heat|Industrial|Gas','Lifetime|Heat|Industrial|Geothermal','Lifetime|Heat|Industrial|Hydrogen','Lifetime|Heat|Industrial|Oil', 'Lifetime|Heat|Industrial|Solar','Lifetime|Heat|Residential and Commercial|Biomass','Lifetime|Heat|Residential and Commercial|Coal','Lifetime|Heat|Residential and Commercial|Electricity','Lifetime|Heat|Residential and Commercial|Gas','Lifetime|Heat|Residential and Commercial|Geothermal','Lifetime|Heat|Residential and Commercial|Oil','Lifetime|Heat|Residential and Commercial|Solar','Emission Rate|CO2|Heat|Industrial|Biomass','Emission Rate|CO2|Heat|Industrial|Coal','Emission Rate|CO2|Heat|Industrial|Gas','Emission Rate|CO2|Heat|Industrial|Oil','Emission Rate|CO2|Heat|Residential and Commercial|Coal','Emission Rate|CO2|Heat|Residential and Commercial|Gas','Emission Rate|CO2|Heat|Residential and Commercial|Oil']
+#removed_variables: ['Fixed Cost|Electricity|Battery|Lithium-Ion','Fixed Cost|Electricity|Battery|Redox Flow','Fixed Cost|Electricity|Compressed Air','Final Energy|Cooking|Electricity','Final Energy|Industry|Electricity','Final Energy|Residential and Commercial|Electricity','Final Energy|Transportation|Electricity','Secondary Energy|Heat|Industrial|Electricity','Secondary Energy|Heat|Residential and Commercial|Electricity','Secondary Energy|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Biomass','Fixed Cost|Heat|Industrial|Coal','Fixed Cost|Heat|Industrial|Electricity','Fixed Cost|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Geothermal','Fixed Cost|Heat|Industrial|Hydrogen','Fixed Cost|Heat|Industrial|Oil','Fixed Cost|Heat|Industrial|Solar','Fixed Cost|Heat|Residential and Commercial|Biomass','Fixed Cost|Heat|Residential and Commercial|Coal','Fixed Cost|Heat|Residential and Commercial|Electricity','Fixed Cost|Heat|Residential and Commercial|Gas','Fixed Cost|Heat|Residential and Commercial|Geothermal','Fixed Cost|Heat|Residential and Commercial|Oil','Fixed Cost|Heat|Residential and Commercial|Solar','Capital Cost|Heat|Industrial|Biomass','Capital Cost|Heat|Industrial|Coal','Capital Cost|Heat|Industrial|Electricity','Capital Cost|Heat|Industrial|Gas','Capital Cost|Heat|Industrial|Geothermal','Capital Cost|Heat|Industrial|Hydrogen','Capital Cost|Heat|Industrial|Oil','Capital Cost|Heat|Industrial|Solar','Capital Cost|Heat|Residential and Commercial|Biomass','Capital Cost|Heat|Residential and Commercial|Coal','Capital Cost|Heat|Residential and Commercial|Electricity','Capital Cost|Heat|Residential and Commercial|Gas','Capital Cost|Heat|Residential and Commercial|Geothermal','Capital Cost|Heat|Residential and Commercial|Oil','Capital Cost|Heat|Residential and Commercial|Solar','Lifetime|Electricity|Battery|Lithium-Ion','Lifetime|Electricity|Battery|Redox Flow','Lifetime|Electricity|Biomass|w/ CCS','Lifetime|Electricity|Biomass|w/o CCS','Lifetime|Electricity|Coal|Hard coal|w/ CCS','Lifetime|Electricity|Coal|Hard coal|w/o CCS','Lifetime|Electricity|Coal|Lignite|w/ CCS','Lifetime|Electricity|Coal|Lignite|w/o CCS','Lifetime|Electricity|Compressed Air','Lifetime|Electricity|Gas|CCGT|w/ CCS','Lifetime|Electricity|Gas|CCGT|w/o CCS','Lifetime|Electricity|Gas|Fossil|Gas Engines','Lifetime|Electricity|Gas|OCGT|w/o CCS','Lifetime|Electricity|Gas|Synthetic Methane|w/o CCS','Lifetime|Electricity|Geothermal','Lifetime|Electricity|Hydrogen|Fuel Cell','Lifetime|Electricity|Hydrogen|OCGT','Lifetime|Electricity|Hydro|Pumped Storage','Lifetime|Electricity|Hydro|Reservoir','Lifetime|Electricity|Hydro|Run of River','Lifetime|Electricity|Nuclear', 'Lifetime|Electricity|Ocean','Lifetime|Electricity|Oil|w/o CCS','Lifetime|Electricity|Solar|CSP','Lifetime|Electricity|Solar|PV|Rooftop|Commercial','Lifetime|Electricity|Solar|PV|Rooftop|Residential','Lifetime|Electricity|Solar|PV|Utility','Lifetime|Electricity|Wind|Offshore','Lifetime|Electricity|Wind|Onshore','Lifetime|Heat|Industrial|Biomass','Lifetime|Heat|Industrial|Coal','Lifetime|Heat|Industrial|Electricity','Lifetime|Heat|Industrial|Gas','Lifetime|Heat|Industrial|Geothermal','Lifetime|Heat|Industrial|Hydrogen','Lifetime|Heat|Industrial|Oil', 'Lifetime|Heat|Industrial|Solar','Lifetime|Heat|Residential and Commercial|Biomass','Lifetime|Heat|Residential and Commercial|Coal','Lifetime|Heat|Residential and Commercial|Electricity','Lifetime|Heat|Residential and Commercial|Gas','Lifetime|Heat|Residential and Commercial|Geothermal','Lifetime|Heat|Residential and Commercial|Oil','Lifetime|Heat|Residential and Commercial|Solar','Emission Rate|CO2|Heat|Industrial|Biomass','Emission Rate|CO2|Heat|Industrial|Coal','Emission Rate|CO2|Heat|Industrial|Gas','Emission Rate|CO2|Heat|Industrial|Oil','Emission Rate|CO2|Heat|Residential and Commercial|Coal','Emission Rate|CO2|Heat|Residential and Commercial|Gas','Emission Rate|CO2|Heat|Residential and Commercial|Oil']
+removed_variables: ['Final Energy|Cooking|Electricity','Final Energy|Industry|Electricity','Final Energy|Residential and Commercial|Electricity','Final Energy|Transportation|Electricity','Secondary Energy|Heat|Industrial|Electricity','Secondary Energy|Heat|Residential and Commercial|Electricity','Secondary Energy|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Biomass','Fixed Cost|Heat|Industrial|Coal','Fixed Cost|Heat|Industrial|Electricity','Fixed Cost|Heat|Industrial|Gas','Fixed Cost|Heat|Industrial|Geothermal','Fixed Cost|Heat|Industrial|Hydrogen','Fixed Cost|Heat|Industrial|Oil','Fixed Cost|Heat|Industrial|Solar','Fixed Cost|Heat|Residential and Commercial|Biomass','Fixed Cost|Heat|Residential and Commercial|Coal','Fixed Cost|Heat|Residential and Commercial|Electricity','Fixed Cost|Heat|Residential and Commercial|Gas','Fixed Cost|Heat|Residential and Commercial|Geothermal','Fixed Cost|Heat|Residential and Commercial|Oil','Fixed Cost|Heat|Residential and Commercial|Solar','Capital Cost|Heat|Industrial|Biomass','Capital Cost|Heat|Industrial|Coal','Capital Cost|Heat|Industrial|Electricity','Capital Cost|Heat|Industrial|Gas','Capital Cost|Heat|Industrial|Geothermal','Capital Cost|Heat|Industrial|Hydrogen','Capital Cost|Heat|Industrial|Oil','Capital Cost|Heat|Industrial|Solar','Capital Cost|Heat|Residential and Commercial|Biomass','Capital Cost|Heat|Residential and Commercial|Coal','Capital Cost|Heat|Residential and Commercial|Electricity','Capital Cost|Heat|Residential and Commercial|Gas','Capital Cost|Heat|Residential and Commercial|Geothermal','Capital Cost|Heat|Residential and Commercial|Oil','Capital Cost|Heat|Residential and Commercial|Solar','Lifetime|Electricity|Battery|Lithium-Ion','Lifetime|Electricity|Battery|Redox Flow','Lifetime|Electricity|Biomass|w/ CCS','Lifetime|Electricity|Biomass|w/o CCS','Lifetime|Electricity|Coal|Hard coal|w/ CCS','Lifetime|Electricity|Coal|Hard coal|w/o CCS','Lifetime|Electricity|Coal|Lignite|w/ CCS','Lifetime|Electricity|Coal|Lignite|w/o CCS','Lifetime|Electricity|Compressed Air','Lifetime|Electricity|Gas|CCGT|w/ CCS','Lifetime|Electricity|Gas|CCGT|w/o CCS','Lifetime|Electricity|Gas|Fossil|Gas Engines','Lifetime|Electricity|Gas|OCGT|w/o CCS','Lifetime|Electricity|Gas|Synthetic Methane|w/o CCS','Lifetime|Electricity|Geothermal','Lifetime|Electricity|Hydrogen|Fuel Cell','Lifetime|Electricity|Hydrogen|OCGT','Lifetime|Electricity|Hydro|Pumped Storage','Lifetime|Electricity|Hydro|Reservoir','Lifetime|Electricity|Hydro|Run of River','Lifetime|Electricity|Nuclear', 'Lifetime|Electricity|Ocean','Lifetime|Electricity|Oil|w/o CCS','Lifetime|Electricity|Solar|CSP','Lifetime|Electricity|Solar|PV|Rooftop|Commercial','Lifetime|Electricity|Solar|PV|Rooftop|Residential','Lifetime|Electricity|Solar|PV|Utility','Lifetime|Electricity|Wind|Offshore','Lifetime|Electricity|Wind|Onshore','Lifetime|Heat|Industrial|Biomass','Lifetime|Heat|Industrial|Coal','Lifetime|Heat|Industrial|Electricity','Lifetime|Heat|Industrial|Gas','Lifetime|Heat|Industrial|Geothermal','Lifetime|Heat|Industrial|Hydrogen','Lifetime|Heat|Industrial|Oil', 'Lifetime|Heat|Industrial|Solar','Lifetime|Heat|Residential and Commercial|Biomass','Lifetime|Heat|Residential and Commercial|Coal','Lifetime|Heat|Residential and Commercial|Electricity','Lifetime|Heat|Residential and Commercial|Gas','Lifetime|Heat|Residential and Commercial|Geothermal','Lifetime|Heat|Residential and Commercial|Oil','Lifetime|Heat|Residential and Commercial|Solar','Emission Rate|CO2|Heat|Industrial|Biomass','Emission Rate|CO2|Heat|Industrial|Coal','Emission Rate|CO2|Heat|Industrial|Gas','Emission Rate|CO2|Heat|Industrial|Oil','Emission Rate|CO2|Heat|Residential and Commercial|Coal','Emission Rate|CO2|Heat|Residential and Commercial|Gas','Emission Rate|CO2|Heat|Residential and Commercial|Oil']
+
+treat:
+    fixed_data: no
+    hourly_data: yes
+    
+Calendar:
+    dayfirst: True 
+    BeginTimeSeries: '01/01/2050  00:00:00'   # timescale where timeseries are available
+    EndTimeSeries: '31/12/2050  23:00:00'   # timescale where timeseries are available
+    TimeStep:  # duration of timesteps 
+        Unit: hours
+        Duration: 1
+TimeSeriesFactor: 
+    TS_MOBILITY_PSNG: 8760
+    TS_COOKING: 8760
+    TS_HEAT_LOW: 8760
+    TS_LOAD: 8760
+    TS_HYDRO_ROR: 8760
+
+AdditionnalScenarios:
+    PVminus10:
+        'Electricity|Solar|PV|Rooftop|Commercial': 0.9
+        'Electricity|Solar|PV|Utility|Average': 0.9
+        'Electricity|Solar|PV|Utility|Inf': 0.9
+        'Electricity|Solar|PV|Utility|Opt': 0.9 
+    Demandplus10:
+        'Final Energy|Electricity|Heat': 1.1
+        'Final Energy|Electricity|Other (excl. Heat, Transport)': 1.1
+        'Final Energy|Electricity|Transportation': 1.1
+        'Final Energy|Electricity|Cooking': 1.1
+    PVminus10AndDemandplus10:
+        'Electricity|Solar|PV|Rooftop|Commercial': 0.9
+        'Electricity|Solar|PV|Utility|Average': 0.9
+        'Electricity|Solar|PV|Utility|Inf': 0.9
+        'Electricity|Solar|PV|Utility|Opt': 0.9
+        'Final Energy|Electricity|Heat': 1.1
+        'Final Energy|Electricity|Other (excl. Heat, Transport)': 1.1
+        'Final Energy|Electricity|Transportation': 1.1
+        'Final Energy|Electricity|Cooking': 1.1
+
+
+# optionnal data for using LinkageGenesys.py without LaunchLinkGenesys
 # path where to output the IAMC file
 #path: '/data/local/OM4A-Training/'
 #configDir: '/data/settings/'
