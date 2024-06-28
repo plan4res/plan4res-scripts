@@ -82,11 +82,12 @@ if format=='excel':
 else:
 	sheets=cfg['csvfiles']
 
-def read_input_timeseries(cfg, ts_name, **kwargs):
-	file = os.path.join(cfg['timeseriespath'], ts_name)
+def read_input_timeseries(cfg, ts_name, which_path='timeseriespath', **kwargs):
+	file = os.path.join(cfg[which_path], ts_name)
 	if not os.path.isfile(file):
-		logger.error('File '+file+' does not exist. Use key timeseriespath in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
+		logger.error('File '+file+' does not exist. Use key '+which_path+' in configuration file '+settings_format+(' or configuration file '+settings_create if settings_create is not None else '')+' to specify input directory.')
 		log_and_exit(2, cfg['path'])
+	logger.info('Read '+file)
 	return pd.read_csv(file, **kwargs)
 
 #################################################################################################################################################
@@ -699,7 +700,7 @@ def create_thermal_scenarios():
 				
 				# read timeserie 
 				if '.csv' in nameTS:  # stochastic series
-					TS=read_input_timeseries(cfg['timeseriespath'], nameTS,skiprows=0,index_col=0)
+					TS=read_input_timeseries(cfg, nameTS,skiprows=0,index_col=0)
 					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 					TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
@@ -719,7 +720,7 @@ def create_thermal_scenarios():
 			
 			# read timeserie 
 			if '.csv' in nameTS:  # stochastic series
-				TS=read_input_timeseries(cfg['timeseriespath'],nameTS,skiprows=0,index_col=0)
+				TS=read_input_timeseries(cfg,nameTS,skiprows=0,index_col=0)
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS)
 				
@@ -1104,7 +1105,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					
 					BVfile=HSSS.loc[hydrosystem]['WaterValues'][hydrounit]
 					if BVfile!='':
-						BVdata=read_input_timeseries(cfg['inputpath'],BVfile,index_col=0,skiprows=skip)
+						BVdata=read_input_timeseries(cfg,BVfile,'inputpath',index_col=0,skiprows=skip)
 						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
 						BVdata=BVdata[ (BVdata.index >=start) & (BVdata.index <=end)   ]
@@ -1151,7 +1152,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
-				WVdata=read_input_timeseries(cfg['inputpath'],WVfile,index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
