@@ -1150,6 +1150,13 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
 				WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				# keep only data included in the period of the block
+				WVdata=WVdata[ WVdata.index < NumberSSVTimeSteps  ]
+				
+				# replace index column by start dates of SSV stages
+				WVdata['new_index'] = datesSSV['start'].iloc[WVdata.index].values
+				WVdata.set_index('new_index', inplace=True)
+							
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
