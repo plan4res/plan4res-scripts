@@ -740,7 +740,7 @@ def create_thermal_scenarios():
 #																																				#
 #################################################################################################################################################
 # create the HydroUnitBlocks
-def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
+def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 	for hydrosystem in range(NumberHydroSystems):
 		# create all hydrosystems
 		HSBlock=Block.createGroup('UnitBlock_'+str(indexUnitBlock))
@@ -937,7 +937,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 							elif NumberArcs==2:
 								MinPower[:]=[max(0,MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep]
 								MinFlow[:]=[max(0,(1/TurbineEfficiency)*MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep]
-						
+								
 				# create ramping constraints
 				if 'DeltaRampUp' in SS.columns:
 					DeltaRampUpData=HSSS.loc[hydrosystem]['DeltaRampUp'][hydrounit]
@@ -1093,7 +1093,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 		PolyhedralFunctionBlock.createDimension("PolyFunction_NumVar", NumVar)
 		
 		# create polyhedral function only when requested
-		if ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and indexUnitBlock==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+		if ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
 			indexReservoir=0;
 			NumberReservoirsInHydroSystem=HSSS.loc[hydrosystem]['NumberReservoirs'].sum()
 			# water values are given per each reservoir
@@ -1142,7 +1142,11 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				PolyFunction_A[row,:]=Data_A[row]
 				PolyFunction_b[row]=Data_B[row]
 					
-		elif ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='Polyhedral') and ((cfg['IncludeVU']=='Last' and indexUnitBlock==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+		# cases polyhedral water values
+		###############################
+		
+		# case with a cuts file
+		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' in SS.columns) and ( (cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' ):
 			# water values are given once for the hydrosystem
 			
 			# find file
@@ -1151,12 +1155,12 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				WVfile=ListWVfile[0]
 				WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
-				WVdata=WVdata[ WVdata.index < NumberSSVTimeSteps  ]
-				
+				WVdata= WVdata[WVdata.index < NumberSSVTimeSteps]
+
 				# replace index column by start dates of SSV stages
 				WVdata['new_index'] = datesSSV['start'].iloc[WVdata.index].values
 				WVdata.set_index('new_index', inplace=True)
-							
+								
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
@@ -1164,29 +1168,37 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				WVdata=WVdata[ WVdata.index == WVdata.index.max() ]
 				WVsize=len(WVdata.index)
 				
-				if WVsize>0:
-					PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", WVsize)
+				if WVsize>0: 
+					NumRowPolyFunction=WvSize
+				else:
+					NumRowPolyFunction=1
+				PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", NumRowPolyFunction)
+				PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
+				PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+				
+				if WVsize>0: 
 					Data_A=np.array( WVdata[ [elem for elem in WVdata.columns if 'a_' in elem  ] ] )
 					Data_B=np.array( WVdata[ [elem for elem in WVdata.columns if elem=='b' ] ] )
-
-					PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
-					PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+				elif ('LastStepPolyFunctionB' in cfg['ParametersFormat'] and 'LastStepPolyFunctionA' in cfg['ParametersFormat']):
+					Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
+					Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
 				else:
-					PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
 					Data_A=np.zeros(shape=(1,NumberReservoirsInHydroSystem))
 					Data_B=np.zeros(shape=1)
-			else:
-				PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
-				#Data_A=np.zeros(shape=(1,NumberReservoirsInHydroSystem))
-				#Data_B=np.zeros(shape=1)
-				Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
-				Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
-				
-			for row in range(WVsize):
-				PolyFunction_A[row,:]=Data_A[row]
-				PolyFunction_b[row]=Data_B[row]
-
-
+					
+				for row in range(NumRowPolyFunction):
+					PolyFunction_A[row,:]=Data_A[row]
+					PolyFunction_b[row]=Data_B[row]
+		
+		# case without a cuts file
+		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' not in SS.columns) and ( cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1 ):
+			PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
+			PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
+			PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+			Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
+			Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
+			PolyFunction_A[0,:]=Data_A[0]
+			PolyFunction_b[0]=Data_B[0]
 
 		indexUnitBlock=indexUnitBlock+1
 	return indexUnitBlock
@@ -2057,7 +2069,7 @@ def createUCBlock(filename,id,scenario,start,end):
 		
 	indexUnitBlock=0
 	if NumberHydroSystems>0:
-		indexUnitBlock=addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end)
+		indexUnitBlock=addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id)
 	if NumberThermalUnits>0:
 		indexUnitBlock=addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end)
 	if NumberIntermittentUnits>0:
