@@ -433,7 +433,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					for i in inputdata_save[k].index:
 						asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
 						if asset in invest_factor_by_asset.keys():
-							inputdata_save[k][c].loc[i, c] = np.round(inputdata_save[k][c].loc[i, c], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
+							inputdata_save[k][c].loc[i] = np.round(inputdata_save[k][c].loc[i], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
 			inputdata_save[k].to_csv(path, index=None)
 
 	# compute aggregated Installed capacity
