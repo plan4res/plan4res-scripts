@@ -17,7 +17,7 @@ path = os.environ.get("PLAN4RESROOT")
 logger.info('path='+path)
 
 def abspath_to_relpath(path, basepath):
-		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+	return os.path.relpath(path, basepath) if os.path.abspath(path) else path
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -227,6 +227,21 @@ while start<=dates['UCEndData']:
 	start=start+durationUCTimeStep
 	i=i+1
 
+# check if csv files have to be modified to include results of investment_solver
+CreateDataPostInvest=False # True if csv files are to be re-created former computation of investments
+if 'RecomputeCSV' in cfg['ParametersFormat']:
+	if cfg['ParametersFormat']['RecomputeCSV'] and os.path.isfile(cfg['path']+'results_invest/Solution_OUT.csv'):
+		CreateDataPostInvest=True
+		solInvest=check_and_read_csv(cfg, cfg['path']+'results_invest/Solution_OUT.csv',header=None)
+		#listInvestedAssets=[]
+		if 'newInputDir' not in cfg: cfg['newInputDir']='csv_postInvest/'
+		dir_csv_after_invest = os.path.join(cfg['path'], 'csv_after_invest')
+		if not os.path.isdir(dir_csv_after_invest):
+			os.makedirs(dir_csv_after_invest)
+		#inputdata_save = dict()
+		#listLinesInDataset=[]
+		indexSolInvest=0
+			
 # Read sheet ZP_ZonePartition
 #################################################################################################################################################
 if 'ZP_ZonePartition' in sheets:
@@ -267,26 +282,6 @@ else:
 	logger.error('ZP_Partition missing')
 	log_and_exit(2, cfg['path'])
 
-# Read sheet IN_Interconnections
-#################################################################################################################################################
-if 'IN_Interconnections' in sheets:
-	if format=='excel':
-		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
-	else:
-		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
-	IN=IN.drop_duplicates()
-	NumberLines=len(IN.index)
-	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
-		NumberInvestedLines=len(IN[ (IN['MaxRetCapacity']>0) | (IN['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in IN.columns:
-		NumberInvestedLines=len(IN[ IN['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in IN.columns:
-		NumberInvestedLines=len(IN[ IN['MaxRetCapacity']>0 ])
-	else:
-		NumberInvestedLines=0
-else: 
-	logger.warning('No interconnections in this dataset')
-	NumberLines=0
 
 # Read sheet ZV_ZoneValues
 #################################################################################################################################################
@@ -306,29 +301,7 @@ else:
 	logger.error('ZV_ZoneValues missing')
 	log_and_exit(1, cfg['path'])
 
-# Read sheet TU_ThermalUnits
-#################################################################################################################################################
-if 'TU_ThermalUnits' in sheets:
-	if format=='excel':
-		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=None)
-	else:
-		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=None)
-	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
-	TU=TU.drop_duplicates()
-	TU=TU.set_index(['Name','Zone'])
-	NumberThermalUnits=TU['NumberUnits'].sum()
-	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
-		NumberInvestedThermalUnits=len(TU[ (TU['MaxRetCapacity']>0) | (TU['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in TU.columns:
-		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in TU.columns:
-		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
-	else:
-		NumberInvestedThermalUnits=0
-else: 
-	logger.warning('No thermal mix in this dataset')
-	NumberThermalUnits=0
-
+InstalledCapacity=pd.DataFrame(index=Nodes)
 # Read sheet SS_SeasonalStorage
 #################################################################################################################################################if 'TU_ThermalUnits' in sheets:
 if 'SS_SeasonalStorage' in sheets:
@@ -366,29 +339,42 @@ if 'SS_SeasonalStorage' in sheets:
 else: 
 	logger.warning('No seasonal storage mix in this dataset')
 	NumberHydroSystems=0
-	
-# Read sheet STS_ShortTermStorage
+
+# Read sheet TU_ThermalUnits
 #################################################################################################################################################
-if 'STS_ShortTermStorage' in sheets:
+if 'TU_ThermalUnits' in sheets:
 	if format=='excel':
-		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
+		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=None)
 	else:
-		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
-	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
-	STS=STS.drop_duplicates()
-	STS=STS.set_index(['Name','Zone'])
-	NumberBatteryUnits=STS['NumberUnits'].sum()
-	if ('MaxAddedCapacity' in STS.columns and 'MaxRetCapacity' in STS.columns):
-		NumberInvestedBatteryUnits=len(STS[ (STS['MaxRetCapacity']>0) | (STS['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in STS.columns:
-		NumberInvestedBatteryUnits=len(STS[ STS['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in STS.columns:
-		NumberInvestedBatteryUnits=len(STS[ STS['MaxRetCapacity']>0 ])
+		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=None)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'TU_ThermalUnits',TU)
+		for row in TU.index:
+			if (TU.loc[row,'MaxAddedCapacity']>0)+(TU.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					TU.loc[row,'MaxAddedCapacity']=TU.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*TU.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					TU.loc[row,'MaxRetCapacity']=TU.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*TU.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in TU.columns:
+						TU.loc[row,c] = np.round(TU.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'TU_ThermalUnits',TU)
+	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
+	TU=TU.drop_duplicates()
+	TU=TU.set_index(['Name','Zone'])
+	NumberThermalUnits=TU['NumberUnits'].sum()
+	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
+		NumberInvestedThermalUnits=len(TU[ (TU['MaxRetCapacity']>0) | (TU['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in TU.columns:
+		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in TU.columns:
+		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
 	else:
-		NumberInvestedBatteryUnits=0
+		NumberInvestedThermalUnits=0
 else: 
-	logger.warning('No short term storage mix in this dataset')
-	NumberBatteryUnits=0
+	logger.warning('No thermal mix in this dataset')
+	NumberThermalUnits=0
 
 # Read sheet RES_RenewableUnits
 #################################################################################################################################################
@@ -397,6 +383,20 @@ if 'RES_RenewableUnits' in sheets:
 		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=None)
 	else:
 		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=None)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'RES_RenewableUnits',RES)
+		for row in RES.index:
+			if (RES.loc[row,'MaxAddedCapacity']>0)+(RES.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					RES.loc[row,'MaxAddedCapacity']=RES.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*RES.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					RES.loc[row,'MaxRetCapacity']=RES.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*RES.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in RES.columns:
+						RES.loc[row,c] = np.round(RES.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'RES_RenewableUnits',RES)
+		
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
 	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
@@ -418,6 +418,43 @@ else:
 	logger.warning('No intermittent generation mix in this dataset')
 	NumberIntermittentUnits=0
 
+# Read sheet STS_ShortTermStorage
+#################################################################################################################################################
+if 'STS_ShortTermStorage' in sheets:
+	if format=='excel':
+		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
+	else:
+		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'STS_ShortTermStorage',STS)
+		for row in STS.index:
+			if (STS.loc[row,'MaxAddedCapacity']>0)+(STS.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					STS.loc[row,'MaxAddedCapacity']=STS.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*STS.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					STS.loc[row,'MaxRetCapacity']=STS.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*STS.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in STS.columns:
+						STS.loc[row,c] = np.round(STS.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'STS_ShortTermStorage',STS)
+
+	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
+	STS=STS.drop_duplicates()
+	STS=STS.set_index(['Name','Zone'])
+	NumberBatteryUnits=STS['NumberUnits'].sum()
+	if ('MaxAddedCapacity' in STS.columns and 'MaxRetCapacity' in STS.columns):
+		NumberInvestedBatteryUnits=len(STS[ (STS['MaxRetCapacity']>0) | (STS['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in STS.columns:
+		NumberInvestedBatteryUnits=len(STS[ STS['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in STS.columns:
+		NumberInvestedBatteryUnits=len(STS[ STS['MaxRetCapacity']>0 ])
+	else:
+		NumberInvestedBatteryUnits=0
+else: 
+	logger.warning('No short term storage mix in this dataset')
+	NumberBatteryUnits=0
+
 # Read sheet SYN SynchCond
 #################################################################################################################################################
 if 'SYN_SynchCond' in sheets:
@@ -434,7 +471,41 @@ else:
 	logger.warning('No synchronous condensers mix in this dataset')
 	NumberSyncUnits=0
 
-
+# Read sheet IN_Interconnections
+#################################################################################################################################################
+if 'IN_Interconnections' in sheets:
+	if format=='excel':
+		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
+	else:
+		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'IN_Interconnections',IN)
+		for row in IN.index:
+			if (IN.loc[row,'MaxAddedCapacity']>0)+(IN.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					IN.loc[row,'MaxAddedCapacity']=IN.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*IN.loc[row,'MaxPowerFlow']
+				if solInvest[0].loc[indexSolInvest]<1:
+					IN.loc[row,'MaxRetCapacity']=IN.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*IN.loc[row,'MaxPowerFlow']
+				for c in ['MaxPowerFlow', 'MinPowerFlow']:
+					if c in IN.columns:
+						IN.loc[row,c] = np.round(IN.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'IN_Interconnections',IN)
+	
+	IN=IN.drop_duplicates()
+	NumberLines=len(IN.index)
+	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
+		NumberInvestedLines=len(IN[ (IN['MaxRetCapacity']>0) | (IN['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in IN.columns:
+		NumberInvestedLines=len(IN[ IN['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in IN.columns:
+		NumberInvestedLines=len(IN[ IN['MaxRetCapacity']>0 ])
+	else:
+		NumberInvestedLines=0
+else: 
+	logger.warning('No interconnections in this dataset')
+	NumberLines=0
+	
 #################################################################################################################################################
 #																																				#
 #											Compute data																						#
@@ -2693,5 +2764,3 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 log_and_exit(0, cfg['path'])
-
-
