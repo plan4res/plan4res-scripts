@@ -397,7 +397,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
-			invest_factor_by_asset[(region, asset)] = sol[0].loc[indexSol]
+			invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
 			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
 			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
 			indexSol=indexSol+1
