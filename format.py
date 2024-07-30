@@ -135,6 +135,7 @@ for coupling_constraint in cfg['CouplingConstraints']:
 		Coupling.loc[coupling_constraint,'Partition']=cfg['CouplingConstraints'][coupling_constraint]['Partition']
 logger.info('Coupling constraints:'+', '.join(ListCouplingConstraints))
 logger.info('Emissions constraints:'+', '.join(ListPollutants))
+
 # get dates
 dates=pd.Series()
 beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
@@ -233,13 +234,6 @@ if 'RecomputeCSV' in cfg['ParametersFormat']:
 	if cfg['ParametersFormat']['RecomputeCSV'] and os.path.isfile(cfg['path']+'results_invest/Solution_OUT.csv'):
 		CreateDataPostInvest=True
 		solInvest=check_and_read_csv(cfg, cfg['path']+'results_invest/Solution_OUT.csv',header=None)
-		#listInvestedAssets=[]
-		if 'newInputDir' not in cfg: cfg['newInputDir']='csv_postInvest/'
-		dir_csv_after_invest = os.path.join(cfg['path'], 'csv_after_invest')
-		if not os.path.isdir(dir_csv_after_invest):
-			os.makedirs(dir_csv_after_invest)
-		#inputdata_save = dict()
-		#listLinesInDataset=[]
 		indexSolInvest=0
 			
 # Read sheet ZP_ZonePartition
