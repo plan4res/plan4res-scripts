@@ -717,10 +717,14 @@ def create_res_scenarios():
 		nameTS=RES.loc[res]['MaxPowerProfile']
 		valTS=RES.loc[res]['MaxPower']
 		nameAsset=res[0]
+		technoAsset = None
 		for namekind in cfg['technos']:
 			for nametechno in cfg['technos'][namekind]:
 				if nametechno in nameAsset:
 					technoAsset=namekind
+		if technoAsset is None:
+			logger.error('The techno for '+str(res)+' described in file RES_RenewableUnits.csv could not be identified. Check the data listed under the "technos" key in the configuration files.')
+			log_and_exit(2, cfg['path'])
 		
 		isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Renewable:MaxPowerProfile']['MultiplyTimeSerieBy'][technoAsset]=='Energy')
 					
