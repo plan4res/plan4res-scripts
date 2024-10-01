@@ -290,6 +290,7 @@ if 'ZV_ZoneValues' in sheets:
 		ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')
 	else:
 		ZV['Profile_Timeserie']=''
+	ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')														   
 	ZV=ZV.fillna(0)
 else: 
 	logger.error('ZV_ZoneValues missing')
@@ -356,6 +357,8 @@ if 'TU_ThermalUnits' in sheets:
 		write_input_csv(cfg, 'TU_ThermalUnits',TU)
 	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
 	TU=TU.drop_duplicates()
+	if 'MaxPowerProfile' in TU.columns:
+		TU['MaxPowerProfile']=TU['MaxPowerProfile'].fillna('')
 	TU=TU.set_index(['Name','Zone'])
 	NumberThermalUnits=TU['NumberUnits'].sum()
 	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
@@ -1238,7 +1241,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 				WVsize=len(WVdata.index)
 				
 				if WVsize>0: 
-					NumRowPolyFunction=WvSize
+					NumRowPolyFunction=WVsize
 				else:
 					NumRowPolyFunction=1
 				PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", NumRowPolyFunction)
