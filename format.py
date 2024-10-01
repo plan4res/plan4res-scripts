@@ -243,6 +243,7 @@ if 'ZP_ZonePartition' in sheets:
 		ZP=pd.read_excel(p4r_excel,sheet_name='ZP_ZonePartition',skiprows=0,index_col=None)
 	else:
 		ZP=read_input_csv(cfg, 'ZP_ZonePartition', skiprows=0, index_col=None)
+	ZP=ZP.drop_duplicates()					
 	Nodes=ZP[Coupling['Partition'].loc['ActivePowerDemand']]
 	NumberNodes=len(Nodes)
 	NumberSlackUnits=len(Nodes)  # there is one slack unit per node
@@ -281,6 +282,7 @@ if 'ZV_ZoneValues' in sheets:
 		ZV=pd.read_excel(p4r_excel,sheet_name='ZV_ZoneValues',skiprows=0,index_col=['Type', 'Zone'])
 	else:
 		ZV=read_input_csv(cfg, 'ZV_ZoneValues',skiprows=0,index_col=['Type', 'Zone'])
+	ZV=ZV.drop_duplicates()					
 	if 'Profile_Timeserie' in ZV.columns:
 		ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')
 	else:
@@ -301,6 +303,7 @@ if 'SS_SeasonalStorage' in sheets:
 	else:
 		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=['Name','Zone'])
 	if not SS.empty:
+		SS=SS.drop_duplicates()				 
 		SS=SS.drop( SS[ SS['NumberUnits']==0 ].index )
 		SS=SS.drop( SS[ SS['MaxPower']==0.0 ].index )
 		SS['InflowsProfile']=SS['InflowsProfile'].fillna('')
@@ -339,7 +342,7 @@ if 'TU_ThermalUnits' in sheets:
 		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
 		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
-  TU=TU[TU['NumberUnits'] != 0]
+	TU=TU[TU['NumberUnits'] != 0]
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'TU_ThermalUnits',TU)
 		for row in TU.index:
@@ -393,6 +396,7 @@ if 'RES_RenewableUnits' in sheets:
 		write_input_csv(cfg, 'RES_RenewableUnits',RES)
 
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
+	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
 		RES['EnergyMaxPower']=RES.apply(lambda x: x.Energy if x.Name=="Hydro|Run of River" else x.Energy_Timeserie*x.MaxPower,axis=1)
 	RES['MaxPowerProfile']=RES['MaxPowerProfile'].fillna('')
@@ -1223,7 +1227,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
 				logger.info('Add Bellman values from file')
-        WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata= WVdata[WVdata.index < NumberSSVTimeSteps]
 
