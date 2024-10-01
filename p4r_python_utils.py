@@ -27,7 +27,15 @@ def read_input_csv(cfg, file_name_key, **kwargs):
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
 	logger.info('Read file '+file)
-	return pd.read_csv(file, **kwargs)
+	data = pd.read_csv(file, **kwargs)
+	if data.index.has_duplicates:
+		msg = 'Error: input csv '+file+' has some duplicated names '
+		if 'index_col' in kwargs.keys():
+			msg += 'in columns ['+', '.join(kwargs['index_col'])+']'
+		msg += '. Duplicates are '+'\n\t'.join(str(i) for i in data.index[data.index.duplicated()])
+		logger.error(msg)
+		log_and_exit(3, cfg['path'])
+	return data
 
 def save_input_csv(cfg, file_name_key,data, index=False, **kwargs):
 	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])

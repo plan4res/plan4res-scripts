@@ -243,8 +243,6 @@ if 'ZP_ZonePartition' in sheets:
 		ZP=pd.read_excel(p4r_excel,sheet_name='ZP_ZonePartition',skiprows=0,index_col=None)
 	else:
 		ZP=read_input_csv(cfg, 'ZP_ZonePartition', skiprows=0, index_col=None)
-	
-	ZP=ZP.drop_duplicates()
 	Nodes=ZP[Coupling['Partition'].loc['ActivePowerDemand']]
 	NumberNodes=len(Nodes)
 	NumberSlackUnits=len(Nodes)  # there is one slack unit per node
@@ -276,16 +274,13 @@ else:
 	logger.error('ZP_Partition missing')
 	log_and_exit(2, cfg['path'])
 
-
 # Read sheet ZV_ZoneValues
 #################################################################################################################################################
 if 'ZV_ZoneValues' in sheets:
 	if format=='excel':
-		ZV=pd.read_excel(p4r_excel,sheet_name='ZV_ZoneValues',skiprows=0,index_col=None)
+		ZV=pd.read_excel(p4r_excel,sheet_name='ZV_ZoneValues',skiprows=0,index_col=['Type', 'Zone'])
 	else:
-		ZV=read_input_csv(cfg, 'ZV_ZoneValues',skiprows=0,index_col=None)
-	ZV=ZV.drop_duplicates()
-	ZV=ZV.set_index(['Type','Zone'])
+		ZV=read_input_csv(cfg, 'ZV_ZoneValues',skiprows=0,index_col=['Type', 'Zone'])
 	if 'Profile_Timeserie' in ZV.columns:
 		ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')
 	else:
@@ -297,18 +292,17 @@ else:
 	log_and_exit(1, cfg['path'])
 
 InstalledCapacity=pd.DataFrame(index=Nodes)
+
 # Read sheet SS_SeasonalStorage
 #################################################################################################################################################if 'TU_ThermalUnits' in sheets:
 if 'SS_SeasonalStorage' in sheets:
 	if format=='excel':
-		SS=pd.read_excel(p4r_excel,sheet_name='SS_SeasonalStorage',skiprows=skip,index_col=None)
+		SS=pd.read_excel(p4r_excel,sheet_name='SS_SeasonalStorage',skiprows=skip,index_col=['Name','Zone'])
 	else:
-		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=None)
-	if len(SS.index)>0:
-		SS=SS.drop_duplicates()
+		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=['Name','Zone'])
+	if not SS.empty:
 		SS=SS.drop( SS[ SS['NumberUnits']==0 ].index )
 		SS=SS.drop( SS[ SS['MaxPower']==0.0 ].index )
-		SS=SS.set_index(['Name','Zone'])
 		SS['InflowsProfile']=SS['InflowsProfile'].fillna('')
 		if 'WaterValues' in SS:
 			SS['WaterValues']=SS['WaterValues'].fillna('')
@@ -335,13 +329,17 @@ else:
 	logger.warning('No seasonal storage mix in this dataset')
 	NumberHydroSystems=0
 
+  
+  
+  
 # Read sheet TU_ThermalUnits
 #################################################################################################################################################
 if 'TU_ThermalUnits' in sheets:
 	if format=='excel':
-		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=None)
+		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
-		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=None)
+		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
+  TU=TU[TU['NumberUnits'] != 0]
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'TU_ThermalUnits',TU)
 		for row in TU.index:
@@ -359,7 +357,6 @@ if 'TU_ThermalUnits' in sheets:
 	TU=TU.drop_duplicates()
 	if 'MaxPowerProfile' in TU.columns:
 		TU['MaxPowerProfile']=TU['MaxPowerProfile'].fillna('')
-	TU=TU.set_index(['Name','Zone'])
 	NumberThermalUnits=TU['NumberUnits'].sum()
 	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
 		NumberInvestedThermalUnits=len(TU[ (TU['MaxRetCapacity']>0) | (TU['MaxAddedCapacity']>0) ])
@@ -367,6 +364,7 @@ if 'TU_ThermalUnits' in sheets:
 		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
 	elif 'MaxRetCapacity' in TU.columns:
 		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
+
 	else:
 		NumberInvestedThermalUnits=0
 else: 
@@ -377,9 +375,9 @@ else:
 #################################################################################################################################################
 if 'RES_RenewableUnits' in sheets:
 	if format=='excel':
-		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=None)
+		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
-		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=None)
+		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'RES_RenewableUnits',RES)
 		for row in RES.index:
@@ -393,13 +391,10 @@ if 'RES_RenewableUnits' in sheets:
 						RES.loc[row,c] = np.round(RES.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
 				indexSolInvest=indexSolInvest+1
 		write_input_csv(cfg, 'RES_RenewableUnits',RES)
-		
+
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
-	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
 		RES['EnergyMaxPower']=RES.apply(lambda x: x.Energy if x.Name=="Hydro|Run of River" else x.Energy_Timeserie*x.MaxPower,axis=1)
-	
-	RES=RES.set_index(['Name','Zone'])
 	RES['MaxPowerProfile']=RES['MaxPowerProfile'].fillna('')
 	NumberIntermittentUnits=RES['NumberUnits'].sum()
 	if ('MaxAddedCapacity' in RES.columns and 'MaxRetCapacity' in RES.columns):
@@ -656,7 +651,7 @@ def create_demand_scenarios():
 				isDeterministic=False
 				TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
-				
+					
 				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
@@ -1166,6 +1161,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 		
 		# create polyhedral function only when requested
 		if ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+
 			indexReservoir=0;
 			NumberReservoirsInHydroSystem=HSSS.loc[hydrosystem]['NumberReservoirs'].sum()
 			# water values are given per each reservoir
@@ -1174,6 +1170,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 					
 					BVfile=HSSS.loc[hydrosystem]['WaterValues'][hydrounit]
 					if BVfile!='':
+						logger.info('Add Bellman values from file')
 						BVdata=read_input_timeseries(cfg,BVfile,'inputpath',index_col=0,skiprows=skip)
 						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
@@ -1225,7 +1222,8 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
-				WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				logger.info('Add Bellman values from file')
+        WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata= WVdata[WVdata.index < NumberSSVTimeSteps]
 
