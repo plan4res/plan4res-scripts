@@ -349,14 +349,26 @@ if 'TU_ThermalUnits' in sheets:
 			if (TU.loc[row,'MaxAddedCapacity']>0)+(TU.loc[row,'MaxRetCapacity']>0):
 				if solInvest[0].loc[indexSolInvest]>1:
 					TU.loc[row,'MaxAddedCapacity']=TU.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*TU.loc[row,'MaxPower']
+					if TU.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						TU.loc[row,'MaxAddedCapacity']=0
 				if solInvest[0].loc[indexSolInvest]<1:
 					TU.loc[row,'MaxRetCapacity']=TU.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*TU.loc[row,'MaxPower']
+					if TU.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						TU.loc[row,'MaxRetCapacity']=0
+				logger.info('Added Capacity to TU '+str(row)+' :'+str(TU.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-TU.loc[row,'MaxPower']))
 				for c in ['MaxPower', 'MinPower', 'Capacity']:
 					if c in TU.columns:
 						TU.loc[row,c] = np.round(TU.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
 				indexSolInvest=indexSolInvest+1
 		write_input_csv(cfg, 'TU_ThermalUnits',TU)
 	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
+	if ('MaxAddedCapacity' not in TU.columns and 'MaxRetCapacity' not in TU.columns):
+		TU=TU.drop( TU[ TU['MaxPower']<=cfg['ParametersCreate']['zerocapacity'] ].index )
+	else:
+		TU=TU.drop( TU[ ( TU['MaxPower']        <=cfg['ParametersCreate']['zerocapacity'] )    \
+			&           ( TU['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity'] )    \
+			&           ( TU['MaxRetCapacity']  <=cfg['ParametersCreate']['zerocapacity'] ) ].index )
+
 	TU=TU.drop_duplicates()
 	if 'MaxPowerProfile' in TU.columns:
 		TU['MaxPowerProfile']=TU['MaxPowerProfile'].fillna('')
@@ -387,8 +399,14 @@ if 'RES_RenewableUnits' in sheets:
 			if (RES.loc[row,'MaxAddedCapacity']>0)+(RES.loc[row,'MaxRetCapacity']>0):
 				if solInvest[0].loc[indexSolInvest]>1:
 					RES.loc[row,'MaxAddedCapacity']=RES.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*RES.loc[row,'MaxPower']
+					if RES.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						RES.loc[row,'MaxAddedCapacity']=0
 				if solInvest[0].loc[indexSolInvest]<1:
 					RES.loc[row,'MaxRetCapacity']=RES.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*RES.loc[row,'MaxPower']
+					if RES.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						RES.loc[row,'MaxRetCapacity']=0
+				logger.info('Added Capacity to RES '+str(row)+' :'+str(RES.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-RES.loc[row,'MaxPower']))
+
 				for c in ['MaxPower', 'MinPower', 'Capacity']:
 					if c in RES.columns:
 						RES.loc[row,c] = np.round(RES.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
@@ -396,6 +414,11 @@ if 'RES_RenewableUnits' in sheets:
 		write_input_csv(cfg, 'RES_RenewableUnits',RES)
 
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
+	if ('MaxAddedCapacity' not in RES.columns and 'MaxRetCapacity' not in RES.columns):
+		RES=RES.drop( RES[ RES['MaxPower']<=cfg['ParametersCreate']['zerocapacity'] ].index )
+	else:
+		RES=RES.drop( RES[ (RES['MaxPower']<=cfg['ParametersCreate']['zerocapacity']) & ( RES['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']) & (RES['MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity'] ) ].index )
+
 	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
 		RES['EnergyMaxPower']=RES.apply(lambda x: x.Energy if x.Name=="Hydro|Run of River" else x.Energy_Timeserie*x.MaxPower,axis=1)
@@ -427,15 +450,26 @@ if 'STS_ShortTermStorage' in sheets:
 			if (STS.loc[row,'MaxAddedCapacity']>0)+(STS.loc[row,'MaxRetCapacity']>0):
 				if solInvest[0].loc[indexSolInvest]>1:
 					STS.loc[row,'MaxAddedCapacity']=STS.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*STS.loc[row,'MaxPower']
+					if STS.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						STS.loc[row,'MaxAddedCapacity']=0
 				if solInvest[0].loc[indexSolInvest]<1:
 					STS.loc[row,'MaxRetCapacity']=STS.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*STS.loc[row,'MaxPower']
-				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if STS.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						STS.loc[row,'MaxRetCapacity']=0
+				logger.info('Added Capacity to STS '+str(row)+' :'+str(STS.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-STS.loc[row,'MaxPower']))
+
+				for c in ['MaxPower', 'MinPower', 'Capacity','MaxVolume','MinVolume']:
 					if c in STS.columns:
 						STS.loc[row,c] = np.round(STS.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
 				indexSolInvest=indexSolInvest+1
 		write_input_csv(cfg, 'STS_ShortTermStorage',STS)
 
 	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
+	if ('MaxAddedCapacity' not in STS.columns and 'MaxRetCapacity' not in STS.columns):
+		STS=STS.drop( STS[ STS['MaxPower']<=cfg['ParametersCreate']['zerocapacity'] ].index )
+	else:
+		STS=STS.drop( STS[ (STS['MaxPower']<=cfg['ParametersCreate']['zerocapacity']) & (STS['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']) & (STS['MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity'] ) ].index )
+
 	STS=STS.drop_duplicates()
 	STS=STS.set_index(['Name','Zone'])
 	NumberBatteryUnits=STS['NumberUnits'].sum()
@@ -475,19 +509,30 @@ if 'IN_Interconnections' in sheets:
 	else:
 		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
 	if CreateDataPostInvest:
-		save_input_csv(cfg, 'IN_Interconnections',IN)
+		save_input_csv(cfg, 'IN_Interconnections',IN,index=True)
 		for row in IN.index:
 			if (IN.loc[row,'MaxAddedCapacity']>0)+(IN.loc[row,'MaxRetCapacity']>0):
 				if solInvest[0].loc[indexSolInvest]>1:
 					IN.loc[row,'MaxAddedCapacity']=IN.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*IN.loc[row,'MaxPowerFlow']
+					if IN.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						IN.loc[row,'MaxAddedCapacity']=0
 				if solInvest[0].loc[indexSolInvest]<1:
 					IN.loc[row,'MaxRetCapacity']=IN.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*IN.loc[row,'MaxPowerFlow']
+					if IN.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						IN.loc[row,'MaxRetCapacity']=0
+				logger.info('Added Capacity to IN '+str(row)+' :'+str(IN.loc[row,'MaxPowerFlow']*solInvest[0].loc[indexSolInvest]-IN.loc[row,'MaxPowerFlow']))
+
 				for c in ['MaxPowerFlow', 'MinPowerFlow']:
 					if c in IN.columns:
 						IN.loc[row,c] = np.round(IN.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
 				indexSolInvest=indexSolInvest+1
-		write_input_csv(cfg, 'IN_Interconnections',IN)
+		write_input_csv(cfg, 'IN_Interconnections',IN,index=True)
 	
+	if ('MaxAddedCapacity' not in IN.columns and 'MaxRetCapacity' not in IN.columns):
+		IN=IN.drop( IN[ (IN['MaxPowerFlow']<=cfg['ParametersCreate']['zerocapacity']) & (IN['MinPowerFlow']>=(-1)*cfg['ParametersCreate']['zerocapacity'])  ].index )
+	else:
+		IN=IN.drop( IN[ (IN['MaxPowerFlow']<=cfg['ParametersCreate']['zerocapacity']) & (IN['MinPowerFlow']>=(-1)*cfg['ParametersCreate']['zerocapacity']) & (IN['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']) & (IN['MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity'])  ].index )
+
 	IN=IN.drop_duplicates()
 	NumberLines=len(IN.index)
 	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
