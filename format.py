@@ -17,7 +17,7 @@ path = os.environ.get("PLAN4RESROOT")
 logger.info('path='+path)
 
 def abspath_to_relpath(path, basepath):
-		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+	return os.path.relpath(path, basepath) if os.path.abspath(path) else path
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -135,6 +135,7 @@ for coupling_constraint in cfg['CouplingConstraints']:
 		Coupling.loc[coupling_constraint,'Partition']=cfg['CouplingConstraints'][coupling_constraint]['Partition']
 logger.info('Coupling constraints:'+', '.join(ListCouplingConstraints))
 logger.info('Emissions constraints:'+', '.join(ListPollutants))
+
 # get dates
 dates=pd.Series()
 beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
@@ -227,6 +228,14 @@ while start<=dates['UCEndData']:
 	start=start+durationUCTimeStep
 	i=i+1
 
+# check if csv files have to be modified to include results of investment_solver
+CreateDataPostInvest=False # True if csv files are to be re-created former computation of investments
+if 'RecomputeCSV' in cfg['ParametersFormat']:
+	if cfg['ParametersFormat']['RecomputeCSV'] and os.path.isfile(cfg['path']+'results_invest/Solution_OUT.csv'):
+		CreateDataPostInvest=True
+		solInvest=check_and_read_csv(cfg, cfg['path']+'results_invest/Solution_OUT.csv',header=None)
+		indexSolInvest=0
+			
 # Read sheet ZP_ZonePartition
 #################################################################################################################################################
 if 'ZP_ZonePartition' in sheets:
@@ -265,26 +274,6 @@ else:
 	logger.error('ZP_Partition missing')
 	log_and_exit(2, cfg['path'])
 
-# Read sheet IN_Interconnections
-#################################################################################################################################################
-if 'IN_Interconnections' in sheets:
-	if format=='excel':
-		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
-	else:
-		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
-	NumberLines=len(IN.index)
-	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
-		NumberInvestedLines=len(IN[ (IN['MaxRetCapacity']>0) | (IN['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in IN.columns:
-		NumberInvestedLines=len(IN[ IN['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in IN.columns:
-		NumberInvestedLines=len(IN[ IN['MaxRetCapacity']>0 ])
-	else:
-		NumberInvestedLines=0
-else: 
-	logger.warning('No interconnections in this dataset')
-	NumberLines=0
-
 # Read sheet ZV_ZoneValues
 #################################################################################################################################################
 if 'ZV_ZoneValues' in sheets:
@@ -296,31 +285,13 @@ if 'ZV_ZoneValues' in sheets:
 		ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')
 	else:
 		ZV['Profile_Timeserie']=''
+	ZV['Profile_Timeserie']=ZV['Profile_Timeserie'].fillna('')														   
 	ZV=ZV.fillna(0)
 else: 
 	logger.error('ZV_ZoneValues missing')
 	log_and_exit(1, cfg['path'])
 
-# Read sheet TU_ThermalUnits
-#################################################################################################################################################
-if 'TU_ThermalUnits' in sheets:
-	if format=='excel':
-		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=['Name','Zone'])
-	else:
-		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
-	TU=TU[TU['NumberUnits'] != 0]
-	NumberThermalUnits=TU['NumberUnits'].sum()
-	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
-		NumberInvestedThermalUnits=len(TU[ (TU['MaxRetCapacity']>0) | (TU['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in TU.columns:
-		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in TU.columns:
-		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
-	else:
-		NumberInvestedThermalUnits=0
-else: 
-	logger.warning('No thermal mix in this dataset')
-	NumberThermalUnits=0
+InstalledCapacity=pd.DataFrame(index=Nodes)
 
 # Read sheet SS_SeasonalStorage
 #################################################################################################################################################if 'TU_ThermalUnits' in sheets:
@@ -342,11 +313,11 @@ if 'SS_SeasonalStorage' in sheets:
 		else:
 			NumberHydroSystems=1
 		SS['NumberReservoirs']=1
-		SS['NumberArcs']=2
+		SS['NumberArcs']=1
 		for reservoir in SS.index:
 			if 'MinPower' in SS.columns and SS['MinPower'][reservoir]<0:
 				SS.loc[reservoir]['NumberReservoirs']=2
-				SS.loc[reservoir]['NumberArcs']=3
+				SS.loc[reservoir]['NumberArcs']=2
 		TotalNumberReservoirs=SS['NumberReservoirs'].sum()
 		HSSS=pd.Series(dtype=object)
 		for hs in range(NumberHydroSystems):
@@ -357,27 +328,48 @@ if 'SS_SeasonalStorage' in sheets:
 else: 
 	logger.warning('No seasonal storage mix in this dataset')
 	NumberHydroSystems=0
-	
-# Read sheet STS_ShortTermStorage
+
+  
+  
+  
+# Read sheet TU_ThermalUnits
 #################################################################################################################################################
-if 'STS_ShortTermStorage' in sheets:
+if 'TU_ThermalUnits' in sheets:
 	if format=='excel':
-		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
+		TU=pd.read_excel(p4r_excel,sheet_name='TU_ThermalUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
-		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=['Name','Zone'])
-	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
-	NumberBatteryUnits=STS['NumberUnits'].sum()
-	if ('MaxAddedCapacity' in STS.columns and 'MaxRetCapacity' in STS.columns):
-		NumberInvestedBatteryUnits=len(STS[ (STS['MaxRetCapacity']>0) | (STS['MaxAddedCapacity']>0) ])
-	elif 'MaxAddedCapacity' in STS.columns:
-		NumberInvestedBatteryUnits=len(STS[ STS['MaxAddedCapacity']>0 ])
-	elif 'MaxRetCapacity' in STS.columns:
-		NumberInvestedBatteryUnits=len(STS[ STS['MaxRetCapacity']>0 ])
+		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
+  TU=TU[TU['NumberUnits'] != 0]
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'TU_ThermalUnits',TU)
+		for row in TU.index:
+			if (TU.loc[row,'MaxAddedCapacity']>0)+(TU.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					TU.loc[row,'MaxAddedCapacity']=TU.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*TU.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					TU.loc[row,'MaxRetCapacity']=TU.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*TU.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in TU.columns:
+						TU.loc[row,c] = np.round(TU.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'TU_ThermalUnits',TU)
+	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
+	TU=TU.drop_duplicates()
+	if 'MaxPowerProfile' in TU.columns:
+		TU['MaxPowerProfile']=TU['MaxPowerProfile'].fillna('')
+	NumberThermalUnits=TU['NumberUnits'].sum()
+	if ('MaxAddedCapacity' in TU.columns and 'MaxRetCapacity' in TU.columns):
+		NumberInvestedThermalUnits=len(TU[ (TU['MaxRetCapacity']>0) | (TU['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in TU.columns:
+		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in TU.columns:
+		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
+
 	else:
-		NumberInvestedBatteryUnits=0
+		NumberInvestedThermalUnits=0
 else: 
-	logger.warning('No short term storage mix in this dataset')
-	NumberBatteryUnits=0
+	logger.warning('No thermal mix in this dataset')
+	NumberThermalUnits=0
 
 # Read sheet RES_RenewableUnits
 #################################################################################################################################################
@@ -386,6 +378,20 @@ if 'RES_RenewableUnits' in sheets:
 		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
 		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'RES_RenewableUnits',RES)
+		for row in RES.index:
+			if (RES.loc[row,'MaxAddedCapacity']>0)+(RES.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					RES.loc[row,'MaxAddedCapacity']=RES.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*RES.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					RES.loc[row,'MaxRetCapacity']=RES.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*RES.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in RES.columns:
+						RES.loc[row,c] = np.round(RES.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'RES_RenewableUnits',RES)
+
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
 		RES['EnergyMaxPower']=RES.apply(lambda x: x.Energy if x.Name=="Hydro|Run of River" else x.Energy_Timeserie*x.MaxPower,axis=1)
@@ -404,6 +410,43 @@ else:
 	logger.warning('No intermittent generation mix in this dataset')
 	NumberIntermittentUnits=0
 
+# Read sheet STS_ShortTermStorage
+#################################################################################################################################################
+if 'STS_ShortTermStorage' in sheets:
+	if format=='excel':
+		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
+	else:
+		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'STS_ShortTermStorage',STS)
+		for row in STS.index:
+			if (STS.loc[row,'MaxAddedCapacity']>0)+(STS.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					STS.loc[row,'MaxAddedCapacity']=STS.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*STS.loc[row,'MaxPower']
+				if solInvest[0].loc[indexSolInvest]<1:
+					STS.loc[row,'MaxRetCapacity']=STS.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*STS.loc[row,'MaxPower']
+				for c in ['MaxPower', 'MinPower', 'Capacity']:
+					if c in STS.columns:
+						STS.loc[row,c] = np.round(STS.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'STS_ShortTermStorage',STS)
+
+	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
+	STS=STS.drop_duplicates()
+	STS=STS.set_index(['Name','Zone'])
+	NumberBatteryUnits=STS['NumberUnits'].sum()
+	if ('MaxAddedCapacity' in STS.columns and 'MaxRetCapacity' in STS.columns):
+		NumberInvestedBatteryUnits=len(STS[ (STS['MaxRetCapacity']>0) | (STS['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in STS.columns:
+		NumberInvestedBatteryUnits=len(STS[ STS['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in STS.columns:
+		NumberInvestedBatteryUnits=len(STS[ STS['MaxRetCapacity']>0 ])
+	else:
+		NumberInvestedBatteryUnits=0
+else: 
+	logger.warning('No short term storage mix in this dataset')
+	NumberBatteryUnits=0
+
 # Read sheet SYN SynchCond
 #################################################################################################################################################
 if 'SYN_SynchCond' in sheets:
@@ -420,7 +463,41 @@ else:
 	logger.warning('No synchronous condensers mix in this dataset')
 	NumberSyncUnits=0
 
-
+# Read sheet IN_Interconnections
+#################################################################################################################################################
+if 'IN_Interconnections' in sheets:
+	if format=='excel':
+		IN=pd.read_excel(p4r_excel,sheet_name='IN_Interconnections',skiprows=skip,index_col=0)
+	else:
+		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
+	if CreateDataPostInvest:
+		save_input_csv(cfg, 'IN_Interconnections',IN)
+		for row in IN.index:
+			if (IN.loc[row,'MaxAddedCapacity']>0)+(IN.loc[row,'MaxRetCapacity']>0):
+				if solInvest[0].loc[indexSolInvest]>1:
+					IN.loc[row,'MaxAddedCapacity']=IN.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*IN.loc[row,'MaxPowerFlow']
+				if solInvest[0].loc[indexSolInvest]<1:
+					IN.loc[row,'MaxRetCapacity']=IN.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*IN.loc[row,'MaxPowerFlow']
+				for c in ['MaxPowerFlow', 'MinPowerFlow']:
+					if c in IN.columns:
+						IN.loc[row,c] = np.round(IN.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'IN_Interconnections',IN)
+	
+	IN=IN.drop_duplicates()
+	NumberLines=len(IN.index)
+	if ('MaxAddedCapacity' in IN.columns and 'MaxRetCapacity' in IN.columns):
+		NumberInvestedLines=len(IN[ (IN['MaxRetCapacity']>0) | (IN['MaxAddedCapacity']>0) ])
+	elif 'MaxAddedCapacity' in IN.columns:
+		NumberInvestedLines=len(IN[ IN['MaxAddedCapacity']>0 ])
+	elif 'MaxRetCapacity' in IN.columns:
+		NumberInvestedLines=len(IN[ IN['MaxRetCapacity']>0 ])
+	else:
+		NumberInvestedLines=0
+else: 
+	logger.warning('No interconnections in this dataset')
+	NumberLines=0
+	
 #################################################################################################################################################
 #																																				#
 #											Compute data																						#
@@ -451,7 +528,6 @@ logger.info(str(NumberUnits)+' units, '+str(NumberElectricalGenerators)+' genera
 #																																				#
 #################################################################################################################################################
 def ExtendAndResample(name,TS,isEnergy=True):
-	#print(name)
 	# change timeindex to adapt to dataset calendarb
 	beginSerie=TS.index[0]
 	if beginSerie>dates['UCBeginDataYearP4R']:
@@ -562,7 +638,6 @@ def create_demand_scenarios():
 		for component in Coupling.loc['ActivePowerDemand']['Sum']:
 			nameTS=ZV.loc[component,node]['Profile_Timeserie']
 			valTS=ZV.loc[component,node]['value']
-			
 			# case without a profile
 			if nameTS=='':
 				if firstPart:
@@ -640,10 +715,14 @@ def create_res_scenarios():
 		nameTS=RES.loc[res]['MaxPowerProfile']
 		valTS=RES.loc[res]['MaxPower']
 		nameAsset=res[0]
+		technoAsset = None
 		for namekind in cfg['technos']:
 			for nametechno in cfg['technos'][namekind]:
 				if nametechno in nameAsset:
 					technoAsset=namekind
+		if technoAsset is None:
+			logger.error('The techno for '+str(res)+' described in file RES_RenewableUnits.csv could not be identified. Check the data listed under the "technos" key in the configuration files.')
+			log_and_exit(2, cfg['path'])
 		
 		isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Renewable:MaxPowerProfile']['MultiplyTimeSerieBy'][technoAsset]=='Energy')
 					
@@ -728,7 +807,7 @@ def create_thermal_scenarios():
 #																																				#
 #################################################################################################################################################
 # create the HydroUnitBlocks
-def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
+def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 	for hydrosystem in range(NumberHydroSystems):
 		# create all hydrosystems
 		HSBlock=Block.createGroup('UnitBlock_'+str(indexUnitBlock))
@@ -753,12 +832,12 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				# create arcs
 				StartArc=HBlock.createVariable("StartArc","u4",("NumberArcs"))
 				EndArc=HBlock.createVariable("EndArc","u4",("NumberArcs"))
-				if NumberArcs ==2:
-					StartArc[:]=[0,0]
-					EndArc[:]=[1,1]
-				elif NumberArcs ==3:
-					StartArc[:]=[0,1,0]
-					EndArc[:]=[1,0,1]
+				if NumberArcs ==1:
+					StartArc[:]=[0]
+					EndArc[:]=[1]
+				elif NumberArcs ==2:
+					StartArc[:]=[0,1]
+					EndArc[:]=[1,0]
 				
 				# create min and max volume
 				MaxVolumeData=HSSS.loc[hydrosystem]['MaxVolume'][hydrounit]
@@ -850,19 +929,19 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 					MaxPower=HBlock.createVariable("MaxPower",np.double,("NumberIntervals","NumberArcs"))
 					pmax=DeterministicTimeSeries[MaxPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 					Pmax=pd.DataFrame(pmax)
-					if NumberArcs==2: 
+					if NumberArcs==1: 
 						Pmax['Spillage']=CoeffSpillage*pmax
 						Pmax=Pmax.transpose()
-						Flow=(1/TurbineEfficiency)*Pmax
+						Flow=(1+CoeffSpillage)*(1/TurbineEfficiency)*Pmax
 						Pmax['Spillage']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 						for t in range(NumberIntervals): 
 							MaxPower[t,:]=np.array(Pmax[t])
 							MaxFlow[t,:]=np.array(Flow[t])
-					elif NumberArcs==3:
+					elif NumberArcs==2:
 						Pmax['zero']=0.0
 						Pmax['Spillage']=CoeffSpillage*pmax
 						Pmax=Pmax.transpose()
-						Flow=(1/TurbineEfficiency)*Pmax
+						Flow=(1+CoeffSpillage)*(1/TurbineEfficiency)*Pmax
 						Pmax['Spillage']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 						for t in range(NumberIntervals): 
 							MaxPower[t,:]=np.array(Pmax[t])
@@ -870,12 +949,12 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				else:
 					MaxFlow=HBlock.createVariable("MaxFlow",np.double,("NumberArcs"))
 					MaxPower=HBlock.createVariable("MaxPower",np.double,("NumberArcs"))
-					if NumberArcs==2: 
+					if NumberArcs==1: 
+						MaxPower[:]=[MaxPowerData*UCTimeStep]
+						MaxFlow[:]=[(1+CoeffSpillage)*(1/TurbineEfficiency)*MaxPowerData*UCTimeStep]
+					elif NumberArcs==2:
 						MaxPower[:]=[MaxPowerData*UCTimeStep,0]
-						MaxFlow[:]=[(1/TurbineEfficiency)*MaxPowerData*UCTimeStep,(1/TurbineEfficiency)*CoeffSpillage*MaxPowerData*UCTimeStep]
-					elif NumberArcs==3:
-						MaxPower[:]=[MaxPowerData*UCTimeStep,0,0]
-						MaxFlow[:]=[(1/TurbineEfficiency)*MaxPowerData*UCTimeStep,0,(1/TurbineEfficiency)*CoeffSpillage*MaxPowerData*UCTimeStep]
+						MaxFlow[:]=[(1+CoeffSpillage)*(1/TurbineEfficiency)*MaxPowerData*UCTimeStep,(1/TurbineEfficiency)*CoeffSpillage*MaxPowerData*UCTimeStep]
 					pmax=MaxPowerData*UCTimeStep*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 				if 'MinPower' in SS.columns:
 					MinPowerData=HSSS.loc[hydrosystem]['MinPower'][hydrounit]
@@ -884,13 +963,13 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						MinPower=HBlock.createVariable("MinPower",np.double,("NumberIntervals","NumberArcs"))
 						pmin=np.maximum(DeterministicTimeSeries['Zero'],np.minimum(pmax,DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]))
 						Pmin=pd.DataFrame(pmin)
-						if NumberArcs==2: 
+						if NumberArcs==1: 
 							Pmin['Zero']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 							Pmin=Pmin.transpose()
 							for t in range(NumberIntervals): 
 								MinPower[t,:]=np.array(Pmin[t])
 								MinFlow[t,:]=np.array((1/PumpingEfficiency)*Pmin[t])
-						elif NumberArcs==3:
+						elif NumberArcs==2:
 							Pmin['Min']=np.minimum(DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ],DeterministicTimeSeries[MinPowerData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 							Pmin['Zero']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 							Pmin=Pmin.transpose()
@@ -904,12 +983,12 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 							# case where MaxPower may go under MinPower
 							pmin=np.minimum(pmax,MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 							Pmin=pd.DataFrame(pmin)
-							if NumberArcs==2: 
+							if NumberArcs==1: 
 								Pmin['Zero']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 								for t in range(NumberIntervals): 
 									MinPower[t,:]=np.array(Pmin[t])
 									MinFlow[t,:]=np.array((1/PumpingEfficiency)*Pmin[t])
-							elif NumberArcs==3:
+							elif NumberArcs==2:
 								Pmin['Min']=MinPowerData*DeterministicTimeSeries['One'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 								Pmin['Zero']=DeterministicTimeSeries['Zero'][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 								Pmin=Pmin.transpose()
@@ -919,13 +998,13 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						else:
 							MinFlow=HBlock.createVariable("MinFlow",np.double,("NumberArcs"))
 							MinPower=HBlock.createVariable("MinPower",np.double,("NumberArcs"))
-							if NumberArcs==2: 
-								MinPower[:]=[max(0,MinPowerData*UCTimeStep),0]
-								MinFlow[:]=[(1/TurbineEfficiency)*max(0,MinPowerData*UCTimeStep),0]
-							elif NumberArcs==3:
-								MinPower[:]=[max(0,MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep,0]
-								MinFlow[:]=[max(0,(1/TurbineEfficiency)*MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep,0]
-						
+							if NumberArcs==1: 
+								MinPower[:]=[max(0,MinPowerData*UCTimeStep)]
+								MinFlow[:]=[(1/TurbineEfficiency)*max(0,MinPowerData*UCTimeStep)]
+							elif NumberArcs==2:
+								MinPower[:]=[max(0,MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep]
+								MinFlow[:]=[max(0,(1/TurbineEfficiency)*MinPowerData*UCTimeStep),(1/PumpingEfficiency)*MinPowerData*UCTimeStep]
+								
 				# create ramping constraints
 				if 'DeltaRampUp' in SS.columns:
 					DeltaRampUpData=HSSS.loc[hydrosystem]['DeltaRampUp'][hydrounit]
@@ -937,18 +1016,18 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						if NumberReservoirs==1:
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampUp[t,:]=[Ramp[t],Ramp[t]]
+								DeltaRampUp[t,:]=[Ramp[t]]
 						elif NumberReservoirs==2:
 							Ramp['zero2']=0.0
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampUp[t,:]=[Ramp[t],Ramp[t],cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*Ramp[t]]
+								DeltaRampUp[t,:]=[Ramp[t],cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*Ramp[t]]
 					else:
 						DeltaRampUp=HBlock.createVariable("DeltaRampUp",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,DeltaRampUpData*UCTimeStep]
+							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep]
 						elif NumberReservoirs==2:
-							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,DeltaRampUpData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*DeltaRampUpData*UCTimeStep]
+							DeltaRampUp[:]=[DeltaRampUpData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampUpMultFactor']*DeltaRampUpData*UCTimeStep]
 				if 'DeltaRampDown' in SS.columns:
 					DeltaRampDownData=HSSS.loc[hydrosystem]['DeltaRampUp'][hydrounit]
 					if type(DeltaRampDownData)==str:
@@ -959,18 +1038,18 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						if NumberReservoirs==1:
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampDown[t,:]=[Ramp[t],Ramp[t]]
+								DeltaRampDown[t,:]=[Ramp[t]]
 						elif NumberReservoirs==2:
 							Ramp['zero2']=0.0
 							Ramp=Ramp.transpose()
 							for t in range(NumberIntervals):
-								DeltaRampDown[t,:]=[Ramp[t],Ramp[t],cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*Ramp[t]]
+								DeltaRampDown[t,:]=[Ramp[t],cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*Ramp[t]]
 					else:
 						DeltaRampDown=HBlock.createVariable("DeltaRampDown",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,DeltaRampDownData*UCTimeStep]
+							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep]
 						elif NumberReservoirs==2:
-							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,DeltaRampDownData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*DeltaRampDownData*UCTimeStep]					
+							DeltaRampDown[:]=[DeltaRampDownData*UCTimeStep,cfg['ParametersFormat']['DownDeltaRampDownMultFactor']*DeltaRampDownData*UCTimeStep]					
 				
 				# create primary and secondary rho
 				if 'PrimaryRho' in SS.columns:
@@ -983,16 +1062,16 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						Ramp=Ramp.transpose()
 						if NumberReservoirs==1:
 							for t in range(NumberIntervals):
-								PrimaryRho[t,:]=[Ramp[t],0]
+								PrimaryRho[t,:]=[Ramp[t]]
 						elif NumberReservoirs==2:
 							for t in range(NumberIntervals):
-								PrimaryRho[t,:]=[Ramp[t],0,0]
+								PrimaryRho[t,:]=[Ramp[t],0]
 					else:
 						PrimaryRho=HBlock.createVariable("PrimaryRho",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							PrimaryRho[:]=[PrimaryRhoData,0]
+							PrimaryRho[:]=[PrimaryRhoData]
 						elif NumberReservoirs==2:
-							PrimaryRho[:]=[PrimaryRhoData,0,0]		
+							PrimaryRho[:]=[PrimaryRhoData,0]		
 				if 'SecondaryRho' in SS.columns:
 					SecondaryRhoData=HSSS.loc[hydrosystem]['SecondaryRho'][hydrounit]
 					if type(SecondaryRhoData)==str:
@@ -1003,35 +1082,35 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						Ramp=Ramp.transpose()
 						if NumberReservoirs==1:
 							for t in range(NumberIntervals):
-								SecondaryRho[t,:]=[Ramp[t],0]
+								SecondaryRho[t,:]=[Ramp[t]]
 						elif NumberReservoirs==2:
 							for t in range(NumberIntervals):
-								SecondaryRho[t,:]=[Ramp[t],0,0]
+								SecondaryRho[t,:]=[Ramp[t],0]
 					else:
 						SecondaryRho=HBlock.createVariable("SecondaryRho",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							SecondaryRho[:]=[SecondaryRhoData,0]
+							SecondaryRho[:]=[SecondaryRhoData]
 						elif NumberReservoirs==2:
-							SecondaryRho[:]=[SecondaryRhoData,0,0]
+							SecondaryRho[:]=[SecondaryRhoData,0]
 				
 				# create efficiency data : piecewise linear function (with only 1 piece)
 				NumberPieces=HBlock.createVariable("NumberPieces","u4",("NumberArcs"))
 				if NumberReservoirs==1:
+					NumberPieces[:]=[1]
+					TotalNumberPieces=1
+				elif NumberReservoirs==2:
 					NumberPieces[:]=[1,1]
 					TotalNumberPieces=2
-				elif NumberReservoirs==2:
-					NumberPieces[:]=[1,1,1]
-					TotalNumberPieces=3
 				LinearTerm=HBlock.createVariable("LinearTerm",np.double,("NumberArcs"))
 				if NumberReservoirs==1:
-					LinearTerm[:]=[TurbineEfficiency,0]
+					LinearTerm[:]=[TurbineEfficiency]
 				elif NumberReservoirs==2:
-					LinearTerm[:]=[TurbineEfficiency,PumpingEfficiency,0]
+					LinearTerm[:]=[TurbineEfficiency,PumpingEfficiency]
 				ConstantTerm=HBlock.createVariable("ConstantTerm",np.double,("NumberArcs"))
 				if NumberReservoirs==1:
-					ConstantTerm[:]=[0,0]
+					ConstantTerm[:]=[0]
 				elif NumberReservoirs==2:
-					ConstantTerm[:]=[0,0,0]
+					ConstantTerm[:]=[0,0]
 					
 				# create inertia data
 				if 'Inertia' in SS.columns:
@@ -1041,16 +1120,16 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 						inertia=cfg['ParametersFormat']['InertiaMultFactor']*DeterministicTimeSeries[InertiaData][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ]
 						if NumberReservoirs==1:
 							for t in range(NumberIntervals):
-								InertiaPower[t,:]=[Inertia[t],0]
+								InertiaPower[t,:]=[Inertia[t]]
 						elif NumberReservoirs==2:
 							for t in range(NumberIntervals):
-								InertiaPower[t,:]=[Inertia[t],Inertia[t],0]
+								InertiaPower[t,:]=[Inertia[t],0]
 					else:
 						InertiaPower=HBlock.createVariable("InertiaPower",np.double,("NumberArcs"))
 						if NumberReservoirs==1:
-							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,0]
+							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData]
 						elif NumberReservoirs==2:
-							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,0]
+							InertiaPower[:]=[cfg['ParametersFormat']['InertiaMultFactor']*InertiaData,0]
 					
 				# create initial conditions
 				InitialVolumetric=HBlock.createVariable("InitialVolumetric",np.double,("NumberReservoirs"))
@@ -1067,9 +1146,9 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				else:
 					InitialFlowRateData=0.0
 				if NumberReservoirs==1:
-					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,0]
+					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep]
 				elif NumberReservoirs==2:
-					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,InitialFlowRateData*UCTimeStep,0]
+					InitialFlowRate[:]=[InitialFlowRateData*UCTimeStep,0]
 									
 				indexHU=indexHU+1
 		# add polyhedral function for water values
@@ -1081,7 +1160,8 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 		PolyhedralFunctionBlock.createDimension("PolyFunction_NumVar", NumVar)
 		
 		# create polyhedral function only when requested
-		if  ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and indexUnitBlock==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+		if ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+
 			indexReservoir=0;
 			NumberReservoirsInHydroSystem=HSSS.loc[hydrosystem]['NumberReservoirs'].sum()
 			# water values are given per each reservoir
@@ -1131,7 +1211,11 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				PolyFunction_A[row,:]=Data_A[row]
 				PolyFunction_b[row]=Data_B[row]
 					
-		elif ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='Polyhedral') and ((cfg['IncludeVU']=='Last' and indexUnitBlock==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
+		# cases polyhedral water values
+		###############################
+		
+		# case with a cuts file
+		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' in SS.columns) and ( (cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' ):
 			# water values are given once for the hydrosystem
 			
 			# find file
@@ -1139,7 +1223,14 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
 				logger.info('Add Bellman values from file')
-				WVdata=read_input_timeseries(cfg,WVfile,'inputpath',index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+        WVdata=read_input_timeseries(cfg,WVfile,'inputpath', index_col=0,skiprows=0,dayfirst=cfg['Calendar']['dayfirst'])
+				# keep only data included in the period of the block
+				WVdata= WVdata[WVdata.index < NumberSSVTimeSteps]
+
+				# replace index column by start dates of SSV stages
+				WVdata['new_index'] = datesSSV['start'].iloc[WVdata.index].values
+				WVdata.set_index('new_index', inplace=True)
+								
 				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
@@ -1147,27 +1238,37 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end):
 				WVdata=WVdata[ WVdata.index == WVdata.index.max() ]
 				WVsize=len(WVdata.index)
 				
-				if WVsize>0:
-					PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", WVsize)
+				if WVsize>0: 
+					NumRowPolyFunction=WVsize
+				else:
+					NumRowPolyFunction=1
+				PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", NumRowPolyFunction)
+				PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
+				PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+				
+				if WVsize>0: 
 					Data_A=np.array( WVdata[ [elem for elem in WVdata.columns if 'a_' in elem  ] ] )
 					Data_B=np.array( WVdata[ [elem for elem in WVdata.columns if elem=='b' ] ] )
-
-					PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
-					PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+				elif ('LastStepPolyFunctionB' in cfg['ParametersFormat'] and 'LastStepPolyFunctionA' in cfg['ParametersFormat']):
+					Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
+					Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
 				else:
-					PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
 					Data_A=np.zeros(shape=(1,NumberReservoirsInHydroSystem))
 					Data_B=np.zeros(shape=1)
-			else:
-				PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
-				Data_A=np.zeros(shape=(1,NumberReservoirsInHydroSystem))
-				Data_B=np.zeros(shape=1)
-				
-			for row in range(WVsize):
-				PolyFunction_A[row,:]=Data_A[row]
-				PolyFunction_b[row]=Data_B[row]
-
-
+					
+				for row in range(NumRowPolyFunction):
+					PolyFunction_A[row,:]=Data_A[row]
+					PolyFunction_b[row]=Data_B[row]
+		
+		# case without a cuts file
+		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' not in SS.columns) and ( cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1 ):
+			PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
+			PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
+			PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
+			Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
+			Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
+			PolyFunction_A[0,:]=Data_A[0]
+			PolyFunction_b[0]=Data_B[0]
 
 		indexUnitBlock=indexUnitBlock+1
 	return indexUnitBlock
@@ -1861,11 +1962,11 @@ def createUCBlock(filename,id,scenario,start,end):
 							GeneratorNodeData[indexGen]=int(Node_index)
 							GeneratorNodeData[indexGen+1]=int(Node_index)
 							GeneratorNodeData[indexGen+2]=int(Node_index)
-							indexGen=indexGen+3
+							indexGen=indexGen+2
 						else:
 							GeneratorNodeData[indexGen]=int(Node_index)
 							GeneratorNodeData[indexGen+1]=int(Node_index)
-							indexGen=indexGen+2
+							indexGen=indexGen+1
 			else:
 				for unit in data[0].index:
 					NbUnits=data[0]['NumberUnits'][unit]
@@ -2038,7 +2139,7 @@ def createUCBlock(filename,id,scenario,start,end):
 		
 	indexUnitBlock=0
 	if NumberHydroSystems>0:
-		indexUnitBlock=addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end)
+		indexUnitBlock=addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id)
 	if NumberThermalUnits>0:
 		indexUnitBlock=addThermalUnitBlocks(Block,indexUnitBlock,scenario,start,end)
 	if NumberIntermittentUnits>0:
@@ -2662,5 +2763,3 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 log_and_exit(0, cfg['path'])
-
-

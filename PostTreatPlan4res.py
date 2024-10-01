@@ -397,7 +397,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
-			invest_factor_by_asset[(region, asset)] = sol[0].loc[indexSol]
+			invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
 			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
 			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
 			indexSol=indexSol+1
@@ -433,7 +433,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					for i in inputdata_save[k].index:
 						asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
 						if asset in invest_factor_by_asset.keys():
-							inputdata_save[k][c].loc[i, c] = np.round(inputdata_save[k][c].loc[i, c], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
+							inputdata_save[k][c].loc[i] = np.round(inputdata_save[k][c].loc[i], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
 			inputdata_save[k].to_csv(path, index=None)
 
 	# compute aggregated Installed capacity
