@@ -83,11 +83,18 @@ TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 cfg['dir']=cfg['path']+cfg['Resultsdir']
 cfg['inputpath']=cfg['path']+cfg['inputDir']
 if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
+if 'nomenclatureDir' not in cfg: 
+	if cfg['USEPLAN4RESROOT']: 
+		cfg['nomenclatureDir']='/scripts/python/openentrance/definitions/'
+	else:
+		logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
+		log_and_exit(1, cfg['path'])
 if cfg['USEPLAN4RESROOT']:
 	path = os.environ.get("PLAN4RESROOT")
 	cfg['dir']=path+cfg['dir']
 	cfg['inputpath']=path+cfg['inputpath']
 	cfg['path']=path+cfg['path']
+	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
 cfg['dayfirst']=cfg['Calendar']['dayfirst']
 cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
 if 'pythonDir' not in cfg: 
@@ -159,6 +166,31 @@ if cfg['geopandas']:
 	import geopandas as gpd
 	from shapely.geometry import Polygon, LineString, Point
 
+with open(os.path.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
+	countries=yaml.safe_load(nutsreg)
+with open(os.path.join(cfg['nomenclatureDir'], "region/nuts3.yaml"),"r",encoding='UTF-8') as nutsreg:
+	nuts3=yaml.safe_load(nutsreg)
+with open(os.path.join(cfg['nomenclatureDir'], "region/nuts2.yaml"),"r",encoding='UTF-8') as nutsreg:
+	nuts2=yaml.safe_load(nutsreg)
+with open(os.path.join(cfg['nomenclatureDir'], "region/nuts1.yaml"),"r",encoding='UTF-8') as nutsreg:
+	nuts1=yaml.safe_load(nutsreg)
+
+countryFromCode={}
+codeFromCountry={}
+list_nuts1=[]
+list_nuts2=[]
+list_nuts3=[]
+for elem in countries[0]['Countries']:
+	current_country=next(iter(elem))
+	current_code=elem[current_country]['iso2']
+	countryFromCode[current_code]=current_country
+	codeFromCountry[current_country]=current_code
+for elem in nuts1[0]['NUTS1']:
+	list_nuts1.append(next(iter(elem)))
+for elem in nuts2[0]['NUTS2']:
+	list_nuts2.append(next(iter(elem)))
+for elem in nuts3[0]['NUTS3']:
+	list_nuts3.append(next(iter(elem)))
 # loop on scenarios, years, options => post-treat and create outputs for each (scenario,year,option) triplet
 if 'variants' not in cfg: cfg['variants']=['']
 if 'option' not in cfg: cfg['option']=['']
@@ -279,6 +311,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		if isInvest:
 			IsInvestedTechno[techno]=False
 	else: listTechnosSS=[]	
+	logger.info('Seasonal storage technos: '+str(listTechnosSS))
 	
 	# thermal mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['TU_ThermalUnits'])):
@@ -307,6 +340,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if isInvest:
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosTU=[]
+	logger.info('Thermal technos: '+str(listTechnosTU))	
 		
 	# intermittent generation mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['RES_RenewableUnits'])):
@@ -316,7 +350,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		if isInvest:
 			for row in InputData.index:
 				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	  
+					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	
 		for techno in listTechnosRES:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -329,6 +363,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if isInvest:
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosRES=[]	
+	logger.info('Variable renewable technos: '+str(listTechnosRES))	
+
 
 	# short term storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['STS_ShortTermStorage'])):
@@ -352,6 +388,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if isInvest:
 				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
 	else: listTechnosSTS=[]
+	logger.info('Short term storage technos: '+str(listTechnosSTS))	
+
 
 	listTechnosInDataset.append('SlackUnit')
 	
@@ -420,21 +458,21 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	LineCapacity.to_csv(cfg['dirOUT']+'LineCapacity.csv')
 
 	# write csv_after_invest
-	if isInvest:
-		dir_csv_after_invest = os.path.join(cfg['dirOUT'], 'csv_after_invest')
-		if not os.path.isdir(dir_csv_after_invest):
-			os.makedirs(dir_csv_after_invest)
-		installed_capacity = InstalledCapacity.stack().swaplevel().sort_index()
-		for k in inputdata_save.keys():
-			path = os.path.join(dir_csv_after_invest, cfg['csvfiles'][k])
-			logger.info('Writing '+path)
-			for c in ['MaxPower', 'MinPower', 'Capacity']:
-				if c in inputdata_save[k].columns:
-					for i in inputdata_save[k].index:
-						asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
-						if asset in invest_factor_by_asset.keys():
-							inputdata_save[k][c].loc[i] = np.round(inputdata_save[k][c].loc[i], invest_factor_by_asset[asset],decimals=cfg['arrondi'])
-			inputdata_save[k].to_csv(path, index=None)
+	# if isInvest:
+		# dir_csv_after_invest = cfg['inputpath']
+		# if not os.path.isdir(dir_csv_after_invest):
+			# os.makedirs(dir_csv_after_invest)
+		# installed_capacity = InstalledCapacity.stack().swaplevel().sort_index()
+		# for k in inputdata_save.keys():
+			# path_cs_save = os.path.join(dir_csv_after_invest, cfg['csvfiles'][k])
+			# logger.info('Writing '+path_cs_save)
+			# for c in ['MaxPower', 'MinPower', 'Capacity']:
+				# if c in inputdata_save[k].columns:
+					# for i in inputdata_save[k].index:
+						# asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
+						# if asset in invest_factor_by_asset.keys():
+							# inputdata_save[k][c].loc[i] = np.round(inputdata_save[k][c].loc[i]*invest_factor_by_asset[asset],decimals=cfg['arrondi'])
+			# inputdata_save[k].to_csv(path_cs_save, index=None)
 
 	# compute aggregated Installed capacity
 	AggrInstalledCapacity=pd.DataFrame(index=list_regions)
@@ -562,7 +600,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 	
 	world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-	world.to_csv('world.csv')
+	#world.to_csv('world.csv')
 	if cfg['map']:
 		####################################################################################################
 		# Create map of selected regions
@@ -574,9 +612,17 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if 'private_map' in cfg:
 			logger.info('use private map')
-			df_continent = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
-			df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
-			continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
+			file_extension = os.path.splitext(cfg['private_map'])[1] 
+			if file_extension == '.csv':
+				df_continent = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
+				df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
+				continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
+			elif file_extension == '.geojson':
+				continent = gpd.read_file(cfg['path']+cfg['private_map'])
+			else:
+				logger.info('unrecognised map file')
+				logger.info('maps will not be created')
+				cfg['map']=False													 
 		else:
 			world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
 			continent = world [ world['continent'].isin(cfg['partition']['continent'])]
@@ -608,7 +654,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				mycountries.append(country)
 		# keep only country names and geometry
 		continent['name']=continent['Aggr']
-		continent = continent[ ['continent','name','Aggr','country','geometry','pop_est'] ]
+		
+		#continent = continent[ ['continent','name','Aggr','country','geometry','pop_est'] ]
+		continent = continent[ ['continent','name','Aggr','country','geometry'] ]																		   
 		continent['isin']=0
 		for i in continent.index:
 			if continent.loc[i,'country'] in mycountries: 

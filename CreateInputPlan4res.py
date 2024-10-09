@@ -137,9 +137,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	cfg['scenario']=current_scenario
 	cfg['year']=current_year
 	if current_option != "None":
-		logger.info('create dataset for '+current_scenario+', '+str(current_year)+' and '+current_option)
+		logger.info('create dataset for scenario '+current_scenario+', year '+str(current_year)+' and option '+current_option)
 	else:
-		logger.info('create dataset for '+current_scenario+', '+str(current_year))
+		logger.info('create dataset for scenario '+current_scenario+', year '+str(current_year))
 	
 	if len(cfg['scenarios'])==1 and len(cfg['years'])==1 and len(cfg['options'])<2:
 		outputdir=cfg['outputpath']
@@ -260,7 +260,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	# loop on all different data sources
 		if 'scenario' in cfg['datagroups'][datagroup]: scenget=cfg['datagroups'][datagroup]['scenario']
 		else: scenget=cfg['scenario']
-		logger.info('reading '+datagroup)
+		if cfg['ParametersCreate']['debug']: logger.info('reading '+datagroup)
 		
 		listvardatagroup=[]
 		listlocalvar=[] # list of variables which are not 'global'
@@ -307,7 +307,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		
 		if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='platform') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='platform'):
-			logger.info('download data from platform')
+			if cfg['ParametersCreate']['debug']: logger.info('download data from platform')
 			
 			groupdf=pyam.read_iiasa('openentrance',model=cfg['datagroups'][datagroup]['model'],
 				variable=listvardatagroup,
@@ -337,10 +337,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				
 		if not (cfg['mode_annual']=='platform' and cfg['mode_subannual']=='platform'):
 			# load data from files per data source (previously uploaded from platform)
-			logger.info('open data files')
+			if cfg['ParametersCreate']['debug']: logger.info('open data files')
 		
 			if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='files') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='files'):
-				logger.info('reading '+datagroup)
+				logger.info('reading datagroup '+datagroup+' from '+os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata']))
 														
 				if 'Start' in cfg['datagroups'][datagroup]['inputdata']:
 					file=os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata']['Start'], str(cfg['variant']), cfg['datagroups'][datagroup]['inputdata']['End'])
@@ -353,8 +353,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				SubAdfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
 				
 				# read data as a IAMDataFrame
-				logger.info('read file '+file)
-				logger.info('read as df')
+				if cfg['ParametersCreate']['debug']: logger.info('read file '+file)
 				if not os.path.isfile(file):
 					logger.error('\nError: '+file+' does not exist.') 
 					logger.error('Check file '+settings_create+'. You can specify the input data repository using key inputdatapath (default=IAMC) and file name using key inputdata (default=name of the study+.xlsx).')
@@ -369,16 +368,16 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				dfdatagroup=pyam.IamDataFrame(data=df)
 
 				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:
-					logger.info('renaming ISO3')
+					if cfg['ParametersCreate']['debug']: logger.info('renaming ISO3')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso3)
 				if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['local']:
-					logger.info('renaming ISO2')
+					if cfg['ParametersCreate']['debug']: logger.info('renaming ISO2')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso2)
 				
-				logger.info('change country names')
+				if cfg['ParametersCreate']['debug']: logger.info('change country names')
 				dfdatagroup=dfdatagroup.filter(region=listRegGet)
 				
-				logger.info('filter countries')
+				if cfg['ParametersCreate']['debug']: logger.info('filter countries')
 				# if there are data at lower granularity than country or cluster (only country until now), aggregate
 				firstcountry=1
 				if cfg['ParametersCreate']['ExistsNuts']:
@@ -393,7 +392,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
 						
 						if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
-							logger.info('aggregating nuts')
+							if cfg['ParametersCreate']['debug']: logger.info('aggregating nuts')
 							dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
 
 				dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
@@ -482,8 +481,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 											listvarmean.append(newvar)
 	if(cfg['aggregateregions']!=None):
 		for reg in cfg['aggregateregions'].keys():
-			logger.info('aggregating ' +reg+' for subregions:')
-			logger.info(cfg['aggregateregions'][reg])
+			if cfg['ParametersCreate']['debug']: logger.info('aggregating ' +reg+' for subregions:')
+			if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'][reg])
 			# creation of aggregated timeseries
 			listTypes={'ZV': cfg['CouplingConstraints']['ActivePowerDemand']['SumOf'],'RES':cfg['technos']['res']+cfg['technos']['runofriver'],'SS':['Inflows']}
 			for typeData in listTypes:
@@ -575,13 +574,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	for partition in list(cfg['partition'].keys()):
 		listregions=listregions+cfg['partition'][partition]
 	listregions = list(set(listregions))
-	logger.info('regions in dataset:')
-	logger.info(listregions)
+	logger.info('regions in dataset:'+str(listregions))
 
 	# create file ZP_ZonePartition
 	#############################################################
 	if cfg['csvfiles']['ZP_ZonePartition']:
-		logger.info('Treating ZonePartition')
+		logger.info('Creating ZP_ZonePartition')
 		nbreg=len(cfg['partition'][ partitionDemand  ])
 		nbpartition=len(cfg['partition'])
 
@@ -597,7 +595,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	###############################################################
 	if cfg['csvfiles']['IN_Interconnections']:
 		IN = pd.DataFrame()
-		logger.info('Treating Interconnections')
+		logger.info('Creating IN_Interconnections')
 		for variable in vardict['Input']['VarIN']:
 			varname=vardict['Input']['VarIN'][variable]
 			vardf=bigdata.filter(variable=varname).as_pandas(meta_cols=False)
@@ -608,7 +606,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN.fillna(value=0.0)
 		
 		# delete lines which start/end in same aggregated
-		logger.info('deleting lines which start and end in same aggregated region')
+		if cfg['ParametersCreate']['debug']: logger.info('deleting lines which start and end in same aggregated region')
 		IN['Name']=IN.index
 		IN['StartLine']=IN['Name'].str.split('>',expand=True)[0]
 		IN['EndLine']=IN['Name'].str.split('>',expand=True)[1]
@@ -628,8 +626,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		DeleteLines=[]
 		# sum lines with start in same aggregated region AND end in same other aggregated region
-		logger.info('aggregate lines which start or end in same aggregated region')
-		logger.info(cfg['aggregateregions'])
+		if cfg['ParametersCreate']['debug']: logger.info('aggregate lines which start or end in same aggregated region')
+		if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'])
 		if(cfg['aggregateregions']!=None):
 			for AggReg1 in cfg['partition'][ partitionDemand ]:
 				if AggReg1 in cfg['aggregateregions'].keys(): # AggReg1 is an aggregated region
@@ -694,7 +692,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN.drop(RowsToDelete )
 
 		# merge lines reg1>reg2 reg2>reg1
-		logger.info('merging symetric lines')
+		if cfg['ParametersCreate']['debug']: logger.info('merging symetric lines')
 		IN['MinPowerFlow']=0
 		NewLines=[]
 		LinesToDelete=[]
@@ -736,7 +734,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN[ listcols ]
 		
 		# delete lines which do not start and end in a zone in partition
-		logger.info('delete lines which are not in partition')
+		if cfg['ParametersCreate']['debug']: logger.info('delete lines which are not in partition')
 		LinesToDelete=[]
 		for line in IN.index:
 			regstart=line.split('>')[0]
@@ -752,7 +750,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	###############################################################
 	numserie=0
 	if cfg['csvfiles']['ZV_ZoneValues']:
-		logger.info('Treating ZoneValues')
+		logger.info('Creating ZV_ZoneValues')
 		
 		ListTypesZV=[]
 		for coupling_constraint in cfg['CouplingConstraints']:
@@ -797,13 +795,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		else: isInertia=False
 			
 		# compute missing global values
-		logger.info('compute missing Coupling constraints')
+		if cfg['ParametersCreate']['debug']: logger.info('compute missing Coupling constraints')
 		isTotalEnergy=False
-		isOtherExclHeatTransp=False
-		isOtherExclHeatTranspCool=False
-		isOtherExclHeatTranspCooking=False
 		
-		isHeat=False
+		
+		
+		isHeating=False
 		isTransport=False
 		isCooling=False
 		isShareCooling=False
@@ -812,94 +809,59 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		if 'Cooking' in datapartition.Type.unique(): isCooking=True
 		if 'ElecVehicle' in datapartition.Type.unique(): isTransport=True
-		if 'ElecHeating'  in datapartition.Type.unique(): isHeat=True
-		if 'OtherExclHeatTransp' in datapartition.Type.unique(): isOtherExclHeatTransp=True
-		if 'OtherExclHeatTranspCool' in datapartition.Type.unique(): isOtherExclHeatTranspCool=True
-		if 'OtherExclHeatTranspCooking' in datapartition.Type.unique(): isOtherExclHeatTranspCooking=True
+		if 'ElecHeating'  in datapartition.Type.unique(): isHeating=True
 		if 'Total' in datapartition.Type.unique() : isTotalEnergy=True
 		if 'AirCondition' in datapartition.Type.unique(): isCooling=True
+		if 'Electrolyzer' in datapartition.Type.unique(): isElectrolyzer=True
 		if 'Share|Final Energy|Electricity|Cooling' in bigdata.variable : isShareCooling=True
 		for region in cfg['partition'][partitionDemand]:			
+			if isTotalEnergy: 
+				TotalEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Total') ]['value'].mean()
+				if math.isnan(TotalEnergy): TotalEnergy=0
+			else:
+				logger.info('missing variable for total electricity demand')
+				exit(0)
 			if isCooking: 
 				CookingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Cooking') ]['value'].mean()
 				if math.isnan(CookingEnergy): CookingEnergy=0
 			else: CookingEnergy=0
-			
-			if isHeat: 
-				HeatEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'ElecHeating') ]['value'].mean()
-				if math.isnan(HeatEnergy): HeatEnergy=0
-			else: HeatEnergy=0
+			if isElectrolyzer: 
+				ElectrolyzerEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Electrolyzer') ]['value'].mean()
+				if math.isnan(ElectrolyzerEnergy): ElectrolyzerEnergy=0
+			else: ElectrolyzerEnergy=0
+			if isHeating: 
+				HeatingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'ElecHeating') ]['value'].mean()
+				if math.isnan(HeatingEnergy): HeatingEnergy=0
+			else: HeatingEnergy=0
 		
-			# TransportEnergy is used only if the demand from EV is not coming from elsewhere; in this case it has to be in the data
+			
 			if isTransport: 
 				TransportEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'ElecVehicle') ]['value'].mean()
 				if math.isnan(TransportEnergy): TransportEnergy=0
 			else: TransportEnergy=0
-			
-			if isOtherExclHeatTransp: 
-				OtherExclHeatTranspEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'OtherExclHeatTransp') ]['value'].mean()
-				if math.isnan(OtherExclHeatTranspEnergy): OtherExclHeatTranspEnergy=0
-				TotalEnergy=OtherExclHeatTranspEnergy+HeatEnergy+TransportEnergy
-			
-			if isOtherExclHeatTranspCool: 
-				OtherExclHeatTranspCoolEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'OtherExclHeatTranspCool') ]['value'].mean()
-				if math.isnan(OtherExclHeatTranspCoolEnergy): OtherExclHeatTranspCoolEnergy=0
-			else: OtherExclHeatTranspCoolEnergy=0
-			
-			if isOtherExclHeatTranspCooking: 
-				OtherExclHeatTranspCookingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'OtherExclHeatTranspCooking') ]['value'].mean()
-				if math.isnan(OtherExclHeatTranspCookingEnergy): OtherExclHeatTranspCookingEnergy=0
-			else: OtherExclHeatTranspCookingEnergy=0
-			
-			if isTotalEnergy: 
-				TotalEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'Total') ]['value'].mean()
-				if math.isnan(TotalEnergy): TotalEnergy=0
-				
+					
 			if isCooling: 
 				CoolingEnergy=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'AirCondition') ]['value'].mean()
 				if math.isnan(CoolingEnergy): CoolingEnergy=0 
 			elif isShareCooling:
-				ShareCooling=bigdata.filter(region=region,variable='Share|Final Energy|Electricity|Cooling').as_pandas(meta_cols=False)['value'].mean().fillna(0)
+				ShareCooling=bigdata.filter(region=region,variable='Share|Final Energy|Electricity|Cooling').as_pandas(meta_cols=False)['value'].fillna(0).mean()
 				if isTotalEnergy : 
 					CoolingEnergy=TotalEnergy*(ShareCooling/100)
-					if not isOtherExclHeatTranspCoolEnergy: OtherExclHeatTranspCoolEnergy=TotalEnergy-HeatEnergy-TransportEnergy-CoolingEnergy
-				elif isOtherExclHeatTranspEnergy: 
-					CoolingEnergy=(HeatEnergy+TransportEnergy+OtherExclHeatTranspEnergy)*(ShareCooling/100)
-					if not isOtherExclHeatTranspCool: OtherExclHeatTranspCoolEnergy=OtherExclHeatTranspEnergy-CoolingEnergy
 				else : CoolingEnergy=0
 			else : CoolingEnergy=0
 			
-			# Total Energy is computed if not present
-			if not isTotalEnergy:
-				if isOtherExclHeatTransp: 
-					TotalEnergy=HeatEnergy+OtherExclHeatTranspEnergy+TransportEnergy
-				elif isOtherExclHeatTranspCool:
-					TotalEnergy=HeatEnergy+CoolingEnergy+CoolingEnergy+OtherExclHeatTranspCoolEnergy+TransportEnergy
-				elif isOtherExclHeatTranspCooking:
-					TotalEnergy=HeatEnergy+CookingEnergy+OtherExclHeatTranspCookingEnergy+TransportEnergy
-				else:
-					logger.info('missing variable for electricity demand')
-					exit(0)
-					
-			if isPrimary:
-				Primary=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'PrimaryDemand') ]['value'].mean()
-			if isSecondary:
-				Secondary=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'SecondaryDemand') ]['value'].mean()			
+			OtherEnergy=TotalEnergy-CoolingEnergy-TransportEnergy-HeatingEnergy-ElectrolyzerEnergy-CookingEnergy
+																									   					
 
-			if (isCooling) and ('AirCondition' in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']):
+			if (isShareCooling) and ('AirCondition' in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']):
 				newdata=pd.DataFrame({'Type':['AirCondition'],'Unit':['MWh/yr'],\
 					'Zone':[region],'model':['Recalculated'],'scenario':[cfg['listdatagroups'][0]],\
 					'value':[CoolingEnergy],'year':[cfg['year']]})
 				datapartition=pd.concat([datapartition,newdata],ignore_index=True)
-			if (isOtherExclHeatTranspCool) and ('OtherExclHeatTranspCool' in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']):
-				newdata=pd.DataFrame({'Type':['OtherExclHeatTranspCool'],'Unit':['MWh/yr'],\
+			if ('Other' in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']):
+				newdata=pd.DataFrame({'Type':['Other'],'Unit':['MWh/yr'],\
 					'Zone':[region],'model':['Recalculated'],'scenario':[cfg['listdatagroups'][0]],\
-					'value':[OtherExclHeatTranspCoolEnergy],'year':[cfg['year']]})
-				datapartition=pd.concat([datapartition,newdata],ignore_index=True)
-			if (isOtherExclHeatTransp) and ('OtherExclHeatTransp' in cfg['CouplingConstraints']['ActivePowerDemand']['SumOf']):
-				newdata=pd.DataFrame({'Type':['OtherExclHeatTransp'],'Unit':['MWh/yr'],\
-					'Zone':[region],'model':['Recalculated'],'scenario':[cfg['listdatagroups'][0]],\
-					'value':[OtherExclHeatTranspEnergy],'year':[cfg['year']]})
+					'value':[OtherEnergy],'year':[cfg['year']]})
 				datapartition=pd.concat([datapartition,newdata],ignore_index=True)
 			
 			newdata=pd.DataFrame({'Type':['MaxActivePowerDemand','CostActivePowerDemand'],\
@@ -909,6 +871,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				'value':[MaxDemand,CostDemand],\
 				'year':[cfg['year'],cfg['year']]})
 			datapartition=pd.concat([datapartition,newdata],ignore_index=True)
+
+			if isPrimary:
+				Primary=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'PrimaryDemand') ]['value'].mean()
+			if isSecondary:
+				Secondary=datapartition[ (datapartition.Zone==region) & (datapartition.Type == 'SecondaryDemand') ]['value'].mean()			
+
 
 			if isPrimary:
 				newdata=pd.DataFrame({'Type':['MaxPrimaryDemand','CostPrimaryDemand'],\
@@ -936,7 +904,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					'value':[Inertia,MaxInertia,CostInertia],'year':[cfg['year'],cfg['year'],cfg['year']]})
 
 		# include timeseries names from TimeSeries dictionnary and compute scaling coefficient
-		logger.info('include time series and compute scaling coefficients')
+		if cfg['ParametersCreate']['debug']: logger.info('include time series and compute scaling coefficients')
 		for row in datapartition.index:
 			mytype=datapartition.loc[row,'Type']
 			if mytype in ListTypesZV:
@@ -949,13 +917,14 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		datapartition.to_csv(os.path.join(outputdir, cfg['csvfiles']['ZV_ZoneValues']), index=False)
 
 	# treat global variables
+	logger.info('treat global variables ')
 	globalvars=pd.Series(str)
 	for datagroup in cfg['listdatagroups']:
-		logger.info('treat datagroup '+datagroup)
+		if cfg['ParametersCreate']['debug']: logger.info('treat datagroup '+datagroup)
 		if 'techno' in cfg['datagroups'][datagroup]['listvariables'].keys():
 			for techno in cfg['datagroups'][datagroup]['listvariables']['techno'].keys():
 				if 'global' in cfg['datagroups'][datagroup]['listvariables']['techno'][techno].keys():
-					logger.info('there are global vars for:'+datagroup+',techno:'+techno)
+					if cfg['ParametersCreate']['debug']: logger.info('there are global vars for:'+datagroup+',techno:'+techno)
 					if type(cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global'])==list:
 						for var in cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global']:
 							for fuel in cfg['technos'][techno]:
@@ -975,7 +944,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	###############################################################
 
 	if cfg['csvfiles']['TU_ThermalUnits']:
-		logger.info('Treating ThermalUnits')
+		logger.info('Creating TU_ThermalUnits')
 		listvar=[]
 		isCO2=False
 		isDynamic=cfg['ParametersCreate']['DynamicConstraints']
@@ -990,7 +959,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		v=0
 		# loop on technos 
 		for oetechno in cfg['technos']['thermal']:
-			logger.info('treat '+oetechno)
+			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			TU=pd.DataFrame({'Name':oetechno,'region':listregions})
 			TU=TU.set_index('region')
 			for variable in vardict['Input']['VarTU']:
@@ -1010,7 +979,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					varname=vardict['Input']['VarTU'][variable]+oetechno
 				
 				if varname not in bigdata['variable'].unique():
-					logger.info('variable '+varname+' not in dataset')
+					if cfg['ParametersCreate']['debug']: logger.info('variable '+varname+' not in dataset')
 					if not isMainVar:
 						TreatVar=False
 					TreatVar=False
@@ -1025,12 +994,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					isGlobal=False
 					Global=0
 					if vardict['Input']['VarTU'][variable]+oetechno in globalvars.index:
-						logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+oetechno]+' techno '+oetechno)
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+oetechno]+' techno '+oetechno)
 						isGlobal=True
 						Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+oetechno] ]
 					if isFuel:
 						if vardict['Input']['VarTU'][variable]+fuel in globalvars.index:
-							logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
+							if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
 							isGlobal=True
 							Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+fuel] ]
 						
@@ -1151,10 +1120,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	############################################################
 	AddedCapa=pd.DataFrame()
 	if cfg['csvfiles']['SS_SeasonalStorage']:
-		logger.info('Treating SeasonalStorage')
+		logger.info('Creating SS_SeasonalStorage')
 		v=0
 		for oetechno in	cfg['technos']['reservoir']:
-			logger.info('treat '+oetechno)
+			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			SS=pd.DataFrame({'Name':oetechno,'region':listregions})
 			SS=SS.set_index('region')
 			
@@ -1169,7 +1138,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					
 					Global=data[variable][globalvars[varname] ]
@@ -1284,15 +1253,16 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	###############################################################	
 
 	if cfg['csvfiles']['STS_ShortTermStorage']:	
-		logger.info('Treating Short Term Storage')
+		logger.info('Creating STS_ShortTermStorage')
 		v=0
 		STS=pd.DataFrame({'region':listregions})
 		STS=STS.set_index('region')
 		
 		# treat short term hydro storage
+		logger.info('     Treating Hydro Pumped Storage')
 		isVarHydroStorage=pd.Series()
 		for oetechno in	cfg['technos']['hydrostorage']:
-			logger.info('treat '+oetechno)
+			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			for variable in vardict['Input']['VarSTS|Hydro']:
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
@@ -1308,7 +1278,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				Global=0
 				# treat global variables
 				if varname in globalvars.index:
-					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname] ]
@@ -1402,13 +1372,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			else:
 				BigSTS=pd.concat([BigSTS,STS])
 
-		logger.info(' ')
-		logger.info('BATTERIES')
+		logger.info('     Treating Batteries')
 
 		# treat batteries
 		isVarBattery=pd.Series()
 		for oetechno in	cfg['technos']['battery']:
-			logger.info('treat '+oetechno)
+			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			BAT=pd.DataFrame({'region':listregions})
 			BAT=BAT.set_index('region')
 			for variable in vardict['Input']['VarSTS|Battery']:
@@ -1426,7 +1395,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname] ]
@@ -1461,7 +1430,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isMaxPower=True
 			if 'MaxVolume' in BAT.columns and not (BAT==0).all()['MaxVolume']: 
 				isMaxVolume=True
-			if 'MaxPower' not in BAT.columns and 'MaxVolume' not in BAT.columns: logger.info('no data')
+			if 'MaxPower' not in BAT.columns and 'MaxVolume' not in BAT.columns: logger.info('no data for techno '+oetechno)
 			
 			# replace low capacities with 0
 			if isMaxPower: BAT.loc[ BAT['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
@@ -1532,7 +1501,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		# treat demand response 'load shifting'
 		if 'demandresponseloadshifting' in cfg['technos'].keys():
-			logger.info('treat demand response load shifting')
+			logger.info('     Treating Load shifting')			
 			DRTimeSeries=pd.DataFrame()
 			
 			ParticipationRate=pd.read_csv(cfg['ParametersCreate']['DemandResponseLoadShifting']['participationRateData'])
@@ -1543,7 +1512,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# loop on appliances
 			for appliance in cfg['technos']['demandresponseloadshifting']:
-				logger.info('treat '+appliance)
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+appliance)
 				DRLS=pd.DataFrame({'region':cfg['partition'][partitionDemand]})
 				DRLS=DRLS.set_index('region')
 				EMminusE=pd.Series(index={'region':cfg['partition'][partitionDemand]})
@@ -1664,10 +1633,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	# treating res
 	if cfg['csvfiles']['RES_RenewableUnits']:
 		v=0
-		logger.info('Treating Renewable units')
+		logger.info('Creating RES_RenewableUnits')
 		isVarRes=pd.Series()
 		for oetechno in	cfg['technos']['res']+cfg['technos']['runofriver']:
-			logger.info('treat '+oetechno)
+			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			RES=pd.DataFrame({'Name':oetechno,'region':listregions})
 			RES=RES.set_index('region')
 			for variable in vardict['Input']['VarRES']:
@@ -1685,7 +1654,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					logger.info(str(varname)+' is global')
+					if cfg['ParametersCreate']['debug']: logger.info(str(varname)+' is global')
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname]]

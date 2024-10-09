@@ -37,7 +37,7 @@ def read_input_csv(cfg, file_name_key, **kwargs):
 		log_and_exit(3, cfg['path'])
 	return data
 
-def save_input_csv(cfg, file_name_key,data, index=False, **kwargs):
+def save_input_csv(cfg, file_name_key,data, index=True, **kwargs):
 	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
 	indexSave=0
 	while os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key]+'.save_'+str(indexSave)+'.csv')):
@@ -48,7 +48,7 @@ def save_input_csv(cfg, file_name_key,data, index=False, **kwargs):
 	#data.to_csv(fileSave,**kwargs)
 	data.to_csv(fileSave,index=index, **kwargs)
 	
-def write_input_csv(cfg, file_name_key,data, index=False, **kwargs):
+def write_input_csv(cfg, file_name_key,data, index=True, **kwargs):
 	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
 	indexSave=0
 	if 'csv_delim' in cfg.keys():

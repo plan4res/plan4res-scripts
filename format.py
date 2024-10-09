@@ -303,10 +303,10 @@ if 'SS_SeasonalStorage' in sheets:
 	else:
 		SS=read_input_csv(cfg, 'SS_SeasonalStorage',skiprows=skip,index_col=['Name','Zone'])
 	if not SS.empty:
-		SS=SS.drop_duplicates()				 
 		SS=SS.drop( SS[ SS['NumberUnits']==0 ].index )
 		SS=SS.drop( SS[ SS['MaxPower']==0.0 ].index )
 		SS['InflowsProfile']=SS['InflowsProfile'].fillna('')
+		SS=SS.reset_index().drop_duplicates().set_index(['Name','Zone'])
 		if 'WaterValues' in SS:
 			SS['WaterValues']=SS['WaterValues'].fillna('')
 		TotalNumberHydroUnits=SS['NumberUnits'].sum()
@@ -343,6 +343,7 @@ if 'TU_ThermalUnits' in sheets:
 	else:
 		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
 	TU=TU[TU['NumberUnits'] != 0]
+	TU=TU.reset_index().drop_duplicates().set_index(['Name','Zone'])
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'TU_ThermalUnits',TU)
 		for row in TU.index:
@@ -369,7 +370,6 @@ if 'TU_ThermalUnits' in sheets:
 			&           ( TU['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity'] )    \
 			&           ( TU['MaxRetCapacity']  <=cfg['ParametersCreate']['zerocapacity'] ) ].index )
 
-	TU=TU.drop_duplicates()
 	if 'MaxPowerProfile' in TU.columns:
 		TU['MaxPowerProfile']=TU['MaxPowerProfile'].fillna('')
 	NumberThermalUnits=TU['NumberUnits'].sum()
@@ -379,7 +379,6 @@ if 'TU_ThermalUnits' in sheets:
 		NumberInvestedThermalUnits=len(TU[ TU['MaxAddedCapacity']>0 ])
 	elif 'MaxRetCapacity' in TU.columns:
 		NumberInvestedThermalUnits=len(TU[ TU['MaxRetCapacity']>0 ])
-
 	else:
 		NumberInvestedThermalUnits=0
 else: 
@@ -393,6 +392,7 @@ if 'RES_RenewableUnits' in sheets:
 		RES=pd.read_excel(p4r_excel,sheet_name='RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
 	else:
 		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
+	RES=RES.reset_index().drop_duplicates().set_index(['Name','Zone'])
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'RES_RenewableUnits',RES)
 		for row in RES.index:
@@ -419,7 +419,6 @@ if 'RES_RenewableUnits' in sheets:
 	else:
 		RES=RES.drop( RES[ (RES['MaxPower']<=cfg['ParametersCreate']['zerocapacity']) & ( RES['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']) & (RES['MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity'] ) ].index )
 
-	RES=RES.drop_duplicates()
 	if 'Energy_Timeserie' in RES.columns and 'Energy' in RES.columns:
 		RES['EnergyMaxPower']=RES.apply(lambda x: x.Energy if x.Name=="Hydro|Run of River" else x.Energy_Timeserie*x.MaxPower,axis=1)
 	RES['MaxPowerProfile']=RES['MaxPowerProfile'].fillna('')
@@ -441,9 +440,10 @@ else:
 #################################################################################################################################################
 if 'STS_ShortTermStorage' in sheets:
 	if format=='excel':
-		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=None)
+		STS=pd.read_excel(p4r_excel,sheet_name='STS_ShortTermStorage',skiprows=skip,index_col=['Name','Zone'])
 	else:
-		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=None)
+		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=['Name','Zone'])
+	STS=STS.reset_index().drop_duplicates().set_index(['Name','Zone'])
 	if CreateDataPostInvest:
 		save_input_csv(cfg, 'STS_ShortTermStorage',STS)
 		for row in STS.index:
@@ -470,8 +470,6 @@ if 'STS_ShortTermStorage' in sheets:
 	else:
 		STS=STS.drop( STS[ (STS['MaxPower']<=cfg['ParametersCreate']['zerocapacity']) & (STS['MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']) & (STS['MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity'] ) ].index )
 
-	STS=STS.drop_duplicates()
-	STS=STS.set_index(['Name','Zone'])
 	NumberBatteryUnits=STS['NumberUnits'].sum()
 	if ('MaxAddedCapacity' in STS.columns and 'MaxRetCapacity' in STS.columns):
 		NumberInvestedBatteryUnits=len(STS[ (STS['MaxRetCapacity']>0) | (STS['MaxAddedCapacity']>0) ])
