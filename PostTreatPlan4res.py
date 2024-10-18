@@ -1203,7 +1203,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		# treat scenarised results for Volume
 		for scen in listscen:
 			logger.info('     opening file Volumes for scenario '+str(scen))
-			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',usecols=usecols,index_col=0)
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				
+			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',usecols=usecols,index_col=0)
 			df.index=TimeIndex
 			
 			if scen==listscen[0]:
@@ -1301,7 +1307,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			regions=[]
 			for reg in list_regions:
 				regions.append(reg+'-'+str(scen))
-			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',index_col=0)
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',index_col=0)
 			df.index=TimeIndex
 			
 			df.columns=regions
@@ -1362,7 +1373,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			regions=[]
 			for reg in cfg['regionsANA']:
 				regions.append(reg+'-'+str(scen))
-			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+str(scen)+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+ScenIndex+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			df.index=TimeIndex
 			df.columns=regions
 			if i==0:
@@ -1526,8 +1542,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		i=0
 		for scen in listscen:
 			logger.info('     opening file MarginalCost for scenario '+str(scen))
-			
-			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+str(scen)+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+ScenIndex+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			df.index=TimeIndex
 			lines=df.columns.tolist()
 			for line in lines:
@@ -1590,7 +1610,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			newzones=[]
 			for zone in cfg['regionsANA']:
 				newzones.append(zone+'-'+str(scen))
-			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir']+'Flows'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir']+'Flows'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			Fulldf.index=TimeIndex
 			i=0
 			
@@ -1671,7 +1696,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		for scen in listscen:
 			logger.info('     opening file Activepower for scenario '+str(scen))
-			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'ActivePower'+str(scen)+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg:
+				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+			if 'FileNumScenPostfix' in cfg:
+				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'ActivePower'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			
 			# separate pumping from turbining for _PUMP technos
 			for col in Fulldf.columns:
