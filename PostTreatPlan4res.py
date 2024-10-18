@@ -507,8 +507,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if os.path.isdir(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']):
 		listFiles=os.listdir(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir'])
 		listscen=[]
+		if 'FileNumScenPrefix' in cfg: 
+			lenpre=len(cfg['FileNumScenPrefix'])
+		else:
+			lenpre=0
+		if 'FileNumScenPostfix' in cfg: 
+			lenpost=len(cfg['FileNumScenPostfix'])
+		else:
+			lenpost=0
 		for elem in listFiles:
-			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")))
+			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")[lenpre:][:-lenpost]))
 		listscen=list(range(len(listscen)))
 	else:
 		logger.error('missing Demand in results')
@@ -533,8 +541,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# update list of regions with reservoirs
 	toremove=[]
 	cfg['ReservoirRegions']=[]
-	if os.path.isfile(os.path.join(cfg['dirSto'], cfg['PostTreat']['Volume']['Dir'], 'Volume'+str(listscen[0])+'.csv')):
-		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+str(listscen[0])+'.csv',index_col=0)
+	ScenIndex=str(listscen[0])
+	if 'FileNumScenPrefix' in cfg: ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
+	if 'FileNumScenPostfix' in cfg: ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
+	if os.path.isfile(os.path.join(cfg['dirSto'], cfg['PostTreat']['Volume']['Dir'], 'Volume'+ScenIndex+'.csv')):
+		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+ScenIndex+'.csv',index_col=0)
 		for elem in df.columns:
 			if 'Reservoir' in elem:
 				cfg['ReservoirRegions'].append(elem.split('_')[1])
@@ -555,10 +566,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	elif cfg['Calendar']['TimeStep']['Unit']!='hours': 
 		logger.error('only hours, days, weeks possible as timestep unit')
 		log_and_exit(2, cfg['path'])
+	print("BeginDataset",BeginDataset)	
 	EndDataset=BeginDataset+number_timesteps*pd.Timedelta(str(TimeStepHours)+' hours')-pd.Timedelta('1 hours')
 	BeginTreat=pd.Timestamp(pd.to_datetime(cfg['BeginTreatData'],dayfirst=cfg['dayfirst']))
 	EndTreat=pd.Timestamp(pd.to_datetime(cfg['EndTreatData'],dayfirst=cfg['dayfirst']))
 	
+	print("BeginTreat",BeginTreat)	
+	print("EndTreat",EndTreat)
+
 	if BeginTreat>EndDataset:
 		logger.error('Treatment start date is after end of available data')
 		log_and_exit(2, cfg['path'])
@@ -589,7 +604,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	dateend=cfg['plot_end']
 	start=pd.to_datetime(datestart,dayfirst=cfg['dayfirst'])
 	end=pd.to_datetime(dateend,dayfirst=cfg['dayfirst'])
-	TimeIndex=pd.date_range(start=start,end=end, freq=str(TimeStepHours)+'h')	
+	TimeIndex=pd.date_range(start=start,end=end, freq=str(TimeStepHours)+'h')
 	MonthIndex=pd.to_datetime(TimeIndex,format ='%Y-%m-%d %H%M%s+01:00').strftime('%Y-%m')
 	NbTimeSteps=len(TimeIndex)	
 	
@@ -1204,11 +1219,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for scen in listscen:
 			logger.info('     opening file Volumes for scenario '+str(scen))
 			ScenIndex=str(scen)
-			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
-			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
-				
+			if 'FileNumScenPrefix' in cfg.keys():  
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
+			if 'FileNumScenPostfix' in cfg.keys():
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',usecols=usecols,index_col=0)
 			df.index=TimeIndex
 			
@@ -1309,10 +1323,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				regions.append(reg+'-'+str(scen))
 			ScenIndex=str(scen)
 			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']+'Demand'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python',index_col=0)
+
 			df.index=TimeIndex
 			
 			df.columns=regions
@@ -1375,9 +1390,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				regions.append(reg+'-'+str(scen))
 			ScenIndex=str(scen)
 			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+ScenIndex+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			df.index=TimeIndex
 			df.columns=regions
@@ -1544,9 +1559,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			logger.info('     opening file MarginalCost for scenario '+str(scen))
 			ScenIndex=str(scen)
 			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+ScenIndex+'.csv',index_col=0,skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			df.index=TimeIndex
 			lines=df.columns.tolist()
@@ -1612,9 +1627,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				newzones.append(zone+'-'+str(scen))
 			ScenIndex=str(scen)
 			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir']+'Flows'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			Fulldf.index=TimeIndex
 			i=0
@@ -1698,9 +1713,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			logger.info('     opening file Activepower for scenario '+str(scen))
 			ScenIndex=str(scen)
 			if 'FileNumScenPrefix' in cfg:
-				ScenIndex=cfg[FileNumScenPrefix]+ScenIndex
+				ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg:
-				ScenIndex=ScenIndex+cfg[FileNumScenPostfix]
+				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'ActivePower'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			
 			# separate pumping from turbining for _PUMP technos
@@ -2263,10 +2278,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			cfg['dirOUTScen']=cfg['dirOUTScenario'][indexScen]
 			if(cfg['PostTreat']['SpecificPeriods']['latex']): bodylatex_Det=bodylatex_Det+"\\chapter{Detailed Results on Scenario "+str(NumScen)+"}\n"
 		
+			
+			ScenIndex=str(scen)
+			if 'FileNumScenPrefix' in cfg: ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
+			if 'FileNumScenPostfix' in cfg: ScenIndex=ScenIndex+cfg['FileNumScenPostfix']			
+			
 			# Read Generation schedule
 			##########################
 			logger.info('   reading ActivePowerOUT.csv')
-			SMSPower=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir'] +'ActivePower'+str(NumScen)+'.csv')
+			
+			SMSPower=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir'] +'ActivePower'+str(ScenIndex)+'.csv')
 			SMSPower.drop(['Timestep'], axis='columns', inplace=True)
 
 			SMSPower['Time']=cfg['Tp4r']
@@ -2276,7 +2297,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 			# reading Demand
 			logger.info('   reading DemandOUT.csv')
-			SMSDemand=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir'] +'Demand' +str(NumScen)+'.csv')
+			SMSDemand=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir'] +'Demand' +str(ScenIndex)+'.csv')
 			SMSDemand.drop(['Timestep'], axis='columns', inplace=True)
 			SMSDemand['Time']=cfg['Tp4r']
 			SMSDemand=SMSDemand.set_index('Time')
@@ -2285,7 +2306,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 			# reading marginal costs
 			logger.info('   reading MarginalCostActivePowerDemandOUT.csv')
-			SMSCMarAPD=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+str(NumScen)+'.csv')
+			SMSCMarAPD=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand'+str(ScenIndex)+'.csv')
 			SMSCMarAPD.drop(['Timestep'], axis='columns', inplace=True)
 			SMSCMarAPD['Time']=cfg['Tp4r']
 			SMSCMarAPD=SMSCMarAPD.set_index('Time')
@@ -2293,7 +2314,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSCMarAPD=SMSCMarAPD[ (SMSCMarAPD.index>=datestart) & (SMSCMarAPD.index<=dateend) ]
 
 			logger.info('   reading MarginalCostFlowsOUT.csv')
-			SMSCMarFlo=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+str(NumScen)+'.csv')
+			SMSCMarFlo=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostFlows'+str(ScenIndex)+'.csv')
 			SMSCMarFlo.drop(['Timestep'], axis='columns', inplace=True)
 			SMSCMarFlo['Time']=cfg['Tp4r']
 			SMSCMarFlo=SMSCMarFlo.set_index('Time')
@@ -2307,7 +2328,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 			# reading Volumes
 			logger.info('   reading VolumeOUT.csv')
-			SMSVolume=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['Volume']['Dir']+'Volume'+str(NumScen)+'.csv')
+			SMSVolume=pd.read_csv(cfg['dirSto'] +cfg['PostTreat']['Volume']['Dir']+'Volume'+str(ScenIndex)+'.csv')
 			SMSVolume.drop(['Timestep'], axis='columns', inplace=True)
 			SMSVolume['Time']=cfg['Tp4r']
 			SMSVolume=SMSVolume.set_index('Time')
@@ -2316,7 +2337,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 			# reading Flows
 			logger.info('   reading FlowsOUT.csv')
-			SMSFlows=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir'] +'Flows'+str(NumScen)+'.csv')
+			SMSFlows=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir'] +'Flows'+str(ScenIndex)+'.csv')
 			SMSFlows.drop(['Timestep'], axis='columns', inplace=True)
 			SMSFlows['Time']=cfg['Tp4r']
 			SMSFlows=SMSFlows.set_index('Time')
