@@ -19,8 +19,6 @@ from p4r_python_utils import *
 
 OE_SUBANNUAL_FORMAT = lambda x: x.strftime("%m-%d %H:%M%z").replace("+0100", "+01:00") 
 
-
-
 # definition of seasons - this is used to aggregate variables per seasons
 spring = range(80, 172)
 summer = range(172, 264)
@@ -34,24 +32,32 @@ def season(x):
 		return 'Autumn'
 	else :
 		return 'Winter'
-path = os.environ.get("PLAN4RESROOT")
+p4rpath = os.environ.get("PLAN4RESROOT")
+print('p4rpath',p4rpath)
+path = get_path()
+logger.info('path='+path)
 
 def abspath_to_relpath(path, basepath):
 		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
 
 nbargs=len(sys.argv)
 if nbargs>1: 
-	settings_posttreat=abspath_to_relpath(sys.argv[1], path)
+	#settings_posttreat=abspath_to_relpath(sys.argv[1], path)
+	settings_posttreat=sys.argv[1]
 	if nbargs>2:
-		settings_format=abspath_to_relpath(sys.argv[2], path)
+		settings_format=sys.argv[2]		
+		#settings_format=abspath_to_relpath(sys.argv[2], path)
 		if nbargs>3:
-			settings_create=abspath_to_relpath(sys.argv[3], path)
+			settings_create=sys.argv[3]			
+			#settings_create=abspath_to_relpath(sys.argv[3], path)
 		else:
 			settings_create="settingsCreateInputPlan4res.yml"
 	else:
 		settings_format="settings_format.yml"
 else:
 	settings_posttreat="settingsPostTreatPlan4res.yml"
+print("settings_posttreat",settings_posttreat)
+print("settings_posttreat",os.path.join(path,settings_posttreat))
 
 # read config file
 cfg={}
@@ -75,35 +81,45 @@ if nbargs>4:
 	if 'path' in cfg:
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 	else:
-		cfg['path']='/data/local/'+namedataset+'/'
+		#cfg['path']='/data/local/'+namedataset+'/'
+		cfg['path']=os.path.join(path, 'data/local', namedataset)
+
 	logger.info('posttreat '+namedataset)
 
 TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 
-cfg['dir']=cfg['path']+cfg['Resultsdir']
-cfg['inputpath']=cfg['path']+cfg['inputDir']
-if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
+#cfg['dir']=cfg['path']+cfg['Resultsdir']
+cfg['dir']=os.path.join(cfg['path'], cfg['Resultsdir'])
+#cfg['inputpath']=cfg['path']+cfg['inputDir']
+cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
+#if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
 if 'nomenclatureDir' not in cfg: 
-	if cfg['USEPLAN4RESROOT']: 
-		cfg['nomenclatureDir']='/scripts/python/openentrance/definitions/'
-	else:
-		logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
-		log_and_exit(1, cfg['path'])
-if cfg['USEPLAN4RESROOT']:
-	path = os.environ.get("PLAN4RESROOT")
-	cfg['dir']=path+cfg['dir']
-	cfg['inputpath']=path+cfg['inputpath']
-	cfg['path']=path+cfg['path']
-	cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
+	cfg['nomenclatureDir']='scripts/python/openentrance/definitions/'
+	# if cfg['USEPLAN4RESROOT']: 
+		# cfg['nomenclatureDir']='/scripts/python/openentrance/definitions/'
+	# else:
+		# logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
+		# log_and_exit(1, cfg['path'])
+print("cfg[nomenclatureDir]",cfg['nomenclatureDir'])
+print("p4rpath=",p4rpath)
+cfg['nomenclatureDir']=os.path.join(p4rpath, cfg['nomenclatureDir'])
+print("cfg[nomenclatureDir]",cfg['nomenclatureDir'])
+# if cfg['USEPLAN4RESROOT']:
+	# path = os.environ.get("PLAN4RESROOT")
+	# cfg['dir']=path+cfg['dir']
+	# cfg['inputpath']=path+cfg['inputpath']
+	# cfg['path']=path+cfg['path']
+	# cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
 cfg['dayfirst']=cfg['Calendar']['dayfirst']
 cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
-if 'pythonDir' not in cfg: 
-	if cfg['USEPLAN4RESROOT']: 
-		cfg['pythonDir']='/scripts/python/plan4res-scripts/settings/'
-	else:
-		logger.error('pythonDir missing in settingsCreateInputPlan4res')
-		log_and_exit(1, cfg['path'])
-
+#if 'pythonDir' not in cfg: 
+#	if cfg['USEPLAN4RESROOT']: 
+#		cfg['pythonDir']='/scripts/python/plan4res-scripts/settings/'
+#	else:
+#		logger.error('pythonDir missing in settingsCreateInputPlan4res')
+#		log_and_exit(1, cfg['path'])
+cfg['pythonDir']=os.path.join(p4rpath,'scripts/python/plan4res-scripts/settings/')
+print('pythondir=',cfg['pythonDir'])
 logger.info('results in:'+cfg['dir'])
 logger.info('dataset in:'+cfg['inputpath'])
 # define latex functions
@@ -158,7 +174,7 @@ if isLatex:
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open(path+cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
+with open(cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 # it may be difficult to install geopandas, this allows to skip it (not install, not use)
@@ -516,6 +532,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		else:
 			lenpost=0
 		for elem in listFiles:
+			print(elem)
+			print(lenpre,lenpost)
 			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")[lenpre:][:-lenpost]))
 		listscen=list(range(len(listscen)))
 	else:
@@ -566,13 +584,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	elif cfg['Calendar']['TimeStep']['Unit']!='hours': 
 		logger.error('only hours, days, weeks possible as timestep unit')
 		log_and_exit(2, cfg['path'])
-	print("BeginDataset",BeginDataset)	
 	EndDataset=BeginDataset+number_timesteps*pd.Timedelta(str(TimeStepHours)+' hours')-pd.Timedelta('1 hours')
 	BeginTreat=pd.Timestamp(pd.to_datetime(cfg['BeginTreatData'],dayfirst=cfg['dayfirst']))
 	EndTreat=pd.Timestamp(pd.to_datetime(cfg['EndTreatData'],dayfirst=cfg['dayfirst']))
 	
-	print("BeginTreat",BeginTreat)	
-	print("EndTreat",EndTreat)
 
 	if BeginTreat>EndDataset:
 		logger.error('Treatment start date is after end of available data')
@@ -629,7 +644,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			logger.info('use private map')
 			file_extension = os.path.splitext(cfg['private_map'])[1] 
 			if file_extension == '.csv':
-				df_continent = pd.read_csv(cfg['path']+cfg['private_map'],index_col=0)
+				df_continent = pd.read_csv(os.path.join(cfg['path'],cfg['private_map']),index_col=0)
 				df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
 				continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 			elif file_extension == '.geojson':

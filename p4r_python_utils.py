@@ -62,3 +62,13 @@ def check_and_read_csv(cfg, file, **kwargs):
 		logger.error('File '+file+' does not exist.')
 		log_and_exit(2, cfg['path'])
 	return pd.read_csv(file, **kwargs)
+	
+def get_path():
+	p4r_root = os.path.normpath(os.environ.get("PLAN4RESROOT"))
+	pwd = os.path.normpath(os.environ.get("PWD"))
+	if "P4R_DIR_LOCAL" in os.environ:
+		path = os.path.normpath(os.environ.get("P4R_DIR_LOCAL"))
+	else:
+		path = p4r_root
+
+	return path

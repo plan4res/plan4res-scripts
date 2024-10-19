@@ -13,11 +13,12 @@ import sys
 
 from p4r_python_utils import *
 
-path = os.environ.get("PLAN4RESROOT")
+#path = os.environ.get("PLAN4RESROOT")
+path = get_path()
 logger.info('path='+path)
 
 def abspath_to_relpath(path, basepath):
-	return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+	return os.path.relpath(path, basepath) #if os.path.abspath(path) else path
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -47,17 +48,18 @@ if nbargs>3:
 	if 'path' in cfg:
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
 	else:
-		cfg['path']='/data/local/'+namedataset+'/'
+		cfg['path']=os.path.join(path, 'data/local', namedataset)
+		#cfg['path']='/data/local/'+namedataset+'/'
 cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
 cfg['outputpath']=os.path.join(cfg['path'], cfg['outputDir'])
 if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'],'TimeSeries/')
 
-if cfg['USEPLAN4RESROOT']:
-	path = os.environ.get("PLAN4RESROOT")
-	cfg['path']=path+cfg['path']
-	cfg['outputpath']=path+cfg['outputpath']
-	cfg['inputpath']=path+cfg['inputpath']
-	cfg['timeseriespath']=path+cfg['timeseriespath']
+# if cfg['USEPLAN4RESROOT']:
+	# path = os.environ.get("PLAN4RESROOT")
+	# cfg['path']=path+cfg['path']
+	# cfg['outputpath']=path+cfg['outputpath']
+	# cfg['inputpath']=path+cfg['inputpath']
+	# cfg['timeseriespath']=path+cfg['timeseriespath']
 logger.info('path: '+cfg['inputpath'])
 
 cfg['treat']=cfg['csvfiles']
