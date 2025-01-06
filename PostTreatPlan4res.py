@@ -3,12 +3,15 @@
 
 ## Import packages
 import pandas as pd ## necessary data analysis package
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
+import matplotlib.dates as mdates
+import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.dates as mdates
 import numpy as np
 import yaml
 import os
+import re
 import math
 import os.path
 import pyam
@@ -33,12 +36,11 @@ def season(x):
 	else :
 		return 'Winter'
 p4rpath = os.environ.get("PLAN4RESROOT")
-print('p4rpath',p4rpath)
 path = get_path()
 logger.info('path='+path)
 
 def abspath_to_relpath(path, basepath):
-		return os.path.relpath(path, basepath) if os.path.abspath(path) else path
+	return os.path.relpath(path, basepath) if os.path.abspath(path) else path
 
 nbargs=len(sys.argv)
 if nbargs>1: 
@@ -56,8 +58,6 @@ if nbargs>1:
 		settings_format="settings_format.yml"
 else:
 	settings_posttreat="settingsPostTreatPlan4res.yml"
-print("settings_posttreat",settings_posttreat)
-print("settings_posttreat",os.path.join(path,settings_posttreat))
 
 # read config file
 cfg={}
@@ -74,7 +74,20 @@ if 'partition' in cfg.keys():
 	if 'Continent' in cfg['partition'].keys():
 		cfg['partition']['continent'] = cfg['partition']['Continent']
 
+skiprow=False
+skip=0
+if 'additionalRowInSheets' in cfg and cfg['additionalRowInSheets']:
+	skiprow=True
+	skip=1
 
+if 'FileNumScenPrefix' not in cfg:
+	if 'ScenarioIdentifier' in cfg:
+		cfg['FileNumScenPrefix']= str(cfg['ScenarioIdentifier']).split('$i')[0]
+		cfg['FileNumScenPostfix']= str(cfg['ScenarioIdentifier']).split('$i')[1]		
+	else:
+		cfg['FileNumScenPrefix']= ""
+		cfg['FileNumScenPostfix']= ""
+	
 # replace name of current dataset by name given as input
 if nbargs>4:
 	namedataset=sys.argv[4]
@@ -95,31 +108,11 @@ cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
 #if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
 if 'nomenclatureDir' not in cfg: 
 	cfg['nomenclatureDir']='scripts/python/openentrance/definitions/'
-	# if cfg['USEPLAN4RESROOT']: 
-		# cfg['nomenclatureDir']='/scripts/python/openentrance/definitions/'
-	# else:
-		# logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
-		# log_and_exit(1, cfg['path'])
-print("cfg[nomenclatureDir]",cfg['nomenclatureDir'])
-print("p4rpath=",p4rpath)
 cfg['nomenclatureDir']=os.path.join(p4rpath, cfg['nomenclatureDir'])
-print("cfg[nomenclatureDir]",cfg['nomenclatureDir'])
-# if cfg['USEPLAN4RESROOT']:
-	# path = os.environ.get("PLAN4RESROOT")
-	# cfg['dir']=path+cfg['dir']
-	# cfg['inputpath']=path+cfg['inputpath']
-	# cfg['path']=path+cfg['path']
-	# cfg['nomenclatureDir']=path+cfg['nomenclatureDir']
 cfg['dayfirst']=cfg['Calendar']['dayfirst']
 cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
-#if 'pythonDir' not in cfg: 
-#	if cfg['USEPLAN4RESROOT']: 
-#		cfg['pythonDir']='/scripts/python/plan4res-scripts/settings/'
-#	else:
-#		logger.error('pythonDir missing in settingsCreateInputPlan4res')
-#		log_and_exit(1, cfg['path'])
+
 cfg['pythonDir']=os.path.join(p4rpath,'scripts/python/plan4res-scripts/settings/')
-print('pythondir=',cfg['pythonDir'])
 logger.info('results in:'+cfg['dir'])
 logger.info('dataset in:'+cfg['inputpath'])
 # define latex functions
@@ -304,6 +297,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	InputStartUpCost=pd.DataFrame(index=list_regions)
 	InputFixedCost=pd.DataFrame(index=list_regions)
 	InstalledCapacity=pd.DataFrame(index=list_regions)
+	InstalledCapacityLastLoopCem=pd.DataFrame(index=list_regions)
 	IsInvestedTechno=pd.DataFrame(index=list_regions)
 	isInvest=cfg['ParametersCreate']['invest']
 	listTechnosInDataset=[]
@@ -321,6 +315,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			df=InputData[ InputData.Name==techno ]
 			df.index=df.Zone
 			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
+			InstalledCapacityLastLoopCem[techno]=df['MaxPower']*df['NumberUnits']
 			InputVarCost[techno]=0
 			InputStartUpCost[techno]=0
 			InputStartUpCost[techno]=0
@@ -329,11 +324,33 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	else: listTechnosSS=[]	
 	logger.info('Seasonal storage technos: '+str(listTechnosSS))
 	
+	files=os.listdir(cfg['inputpath'])
+	LoopCem=False
 	# thermal mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['TU_ThermalUnits'])):
-		InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
+		
+		# find file TU_ThermalUnits_save_$i.csv with biggest i, if it exists
+		pattern = re.compile(r'TU_ThermalUnits_save_(\d+)\.csv')
+		matching_files = [f for f in files if pattern.match(f)]	
+		max_i = -1
+		max_file = None
+		for f in matching_files:
+			match = pattern.match(f)
+			if match:
+				LoopCem=True
+				i = int(match.group(1))
+				if i > max_i:
+					max_i = i
+					max_file = f
+		
+		if LoopCem:
+			InputTULastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
+			InputTUData=pd.read_csv(os.path.join(cfg['inputpath'], 'TU_ThermalUnits_save_0.csv'),skiprows=skip)
+		else:
+			InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
 		inputdata_save['TU_ThermalUnits'] = InputTUData
 		listTechnosTU=InputTUData.Name.unique().tolist()
+		
 		if isInvest:
 			for row in InputTUData.index:
 				if (InputTUData.loc[row,'MaxAddedCapacity']>0)+(InputTUData.loc[row,'MaxRetCapacity']>0):
@@ -345,6 +362,12 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			df.index=df.Zone
 			InputVarCost[techno]=df['VariableCost']
 			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
+			InstalledCapacity[techno] = InstalledCapacity[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+			if LoopCem:
+				dfLastLoopCem=InputTULastCemIter[ InputTULastCemIter.Name==techno ]
+				dfLastLoopCem.index=dfLastLoopCem.Zone
+				InstalledCapacityLastLoopCem[techno]=dfLastLoopCem['MaxPower']*dfLastLoopCem['NumberUnits']
+				InstalledCapacityLastLoopCem[techno] = InstalledCapacityLastLoopCem[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
 			if 'VariableCost' in df.columns:
 				InputStartUpCost[techno]=df['VariableCost']
 			else:
@@ -360,7 +383,26 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 	# intermittent generation mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['RES_RenewableUnits'])):
-		InputData=read_input_csv(cfg, 'RES_RenewableUnits')
+		
+		# find file RES_RenewableUnits_save_$i.csv with biggest i, if it exists
+		pattern = re.compile(r'RES_RenewableUnits_save_(\d+)\.csv')
+		matching_files = [f for f in files if pattern.match(f)]	
+		max_i = -1
+		max_file = None
+		for f in matching_files:
+			match = pattern.match(f)
+			if match:
+				LoopCem=True
+				i = int(match.group(1))
+				if i > max_i:
+					max_i = i
+					max_file = f
+		
+		if LoopCem:
+			InputRESLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'RES_RenewableUnits_save_0.csv'),skiprows=skip)
+		else:
+			InputData=read_input_csv(cfg, 'RES_RenewableUnits')
 		inputdata_save['RES_RenewableUnits'] = InputData
 		listTechnosRES=InputData.Name.unique().tolist()
 		if isInvest:
@@ -373,6 +415,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			df=InputData[ InputData.Name==techno ]
 			df.index=df.Zone
 			InstalledCapacity[techno]=df['Capacity']
+			InstalledCapacity[techno] = InstalledCapacity[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+
+			if LoopCem:
+				dfLastLoopCem=InputRESLastCemIter[ InputRESLastCemIter.Name==techno ]
+				dfLastLoopCem.index=dfLastLoopCem.Zone
+				InstalledCapacityLastLoopCem[techno]=dfLastLoopCem['MaxPower']*dfLastLoopCem['NumberUnits']
+				InstalledCapacityLastLoopCem[techno] = InstalledCapacityLastLoopCem[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+
 			InputVarCost[techno]=0
 			InputStartUpCost[techno]=0
 			InputStartUpCost[techno]=0
@@ -384,7 +434,26 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# short term storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['STS_ShortTermStorage'])):
-		InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
+		
+		# find file STS_ShortTermStorage_save_$i.csv with biggest i, if it exists
+		pattern = re.compile(r'STS_ShortTermStorage_save_(\d+)\.csv')
+		matching_files = [f for f in files if pattern.match(f)]	
+		max_i = -1
+		max_file = None
+		for f in matching_files:
+			match = pattern.match(f)
+			if match:
+				LoopCem=True
+				i = int(match.group(1))
+				if i > max_i:
+					max_i = i
+					max_file = f
+		
+		if LoopCem:
+			InputSTSLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'STS_ShortTermStorage_save_0.csv'),skiprows=skip)
+		else:
+			InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
 		inputdata_save['STS_ShortTermStorage'] = InputData
 		listTechnosSTS=InputData.Name.unique().tolist()
 		if isInvest:
@@ -398,6 +467,15 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			df=InputData[ InputData.Name==techno ]
 			df.index=df.Zone
 			InstalledCapacity[techno]=df['MaxPower']*df['NumberUnits']
+			InstalledCapacity[techno] = InstalledCapacity[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+
+			if LoopCem:
+				dfLastLoopCem=InputSTSLastCemIter[ InputSTSLastCemIter.Name==techno ]
+				dfLastLoopCem.index=dfLastLoopCem.Zone
+				InstalledCapacityLastLoopCem[techno]=dfLastLoopCem['MaxPower']*dfLastLoopCem['NumberUnits']
+				InstalledCapacityLastLoopCem[techno] = InstalledCapacityLastLoopCem[techno].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+
+
 			InputVarCost[techno]=0
 			InputStartUpCost[techno]=0
 			InputStartUpCost[techno]=0
@@ -418,13 +496,39 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 	# interconnections
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['IN_Interconnections'])):
-		InputData=read_input_csv(cfg, 'IN_Interconnections')
+		
+		# find file IN_Interconnections_save_$i.csv with biggest i, if it exists
+		pattern = re.compile(r'IN_Interconnections_save_(\d+)\.csv')
+		matching_files = [f for f in files if pattern.match(f)]	
+		max_i = -1
+		max_file = None
+		for f in matching_files:
+			match = pattern.match(f)
+			if match:
+				LoopCem=True
+				i = int(match.group(1))
+				if i > max_i:
+					max_i = i
+					max_file = f
+		
+		if LoopCem:
+			InputINLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'IN_Interconnections_save_0.csv'),skiprows=skip)
+		else:
+			InputData=read_input_csv(cfg, 'IN_Interconnections')
 		inputdata_save['IN_Interconnections'] = InputData
 		if 'Name' in InputData.columns:
 			InputData=InputData.set_index('Name')
 		listLinesInDataset=InputData.index.tolist()
 		cfg['lines']=listLinesInDataset
 		LineCapacity=InputData[ ['MaxPowerFlow', 'MinPowerFlow'] ]
+		
+		if LoopCem:
+			LineCapacityLastLoopCem=InputINLastCemIter[ ['MaxPowerFlow', 'MinPowerFlow'] ]
+			
+		#LineCapacity['MaxPowerFlow'] = LineCapacity['MaxPowerFlow'].apply(lambda x: 0 if x < cfg['ParametersCreate']['zerocapacity'] else x)
+		#LineCapacity['MinPowerFlow'] = LineCapacity['MinPowerFlow'].apply(lambda x: 0 if x > -1.0*cfg['ParametersCreate']['zerocapacity'] else x)
+
 		if isInvest:
 			IsInvestedLine=(InputData['MaxAddedCapacity']>0)+(InputData['MaxRetCapacity']>0)
 	else:
@@ -444,6 +548,24 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		InvestedCapacity=pd.DataFrame(index=InstalledCapacity.index,columns=InstalledCapacity.columns,data=0.0)
 		InvestedLine=pd.DataFrame(index=LineCapacity.index,columns=LineCapacity.columns,data=0.0)
 		
+		# if cem was ran in a loop
+		isTUinvested=False
+		isRESinvested=False
+		isSTSinvested=False
+		isINinvested=False
+		if os.path.isfile(os.path.join(cfg['inputpath'], 'TUinvested.csv')):
+			TUinvested = pd.read_csv(os.path.join(cfg['inputpath'], 'TUinvested.csv'),skiprows=skip, index_col=['Zone','Name'])
+			isTUinvested=True
+		if os.path.isfile(os.path.join(cfg['inputpath'], 'RESinvested.csv')):
+			RESinvested = pd.read_csv(os.path.join(cfg['inputpath'], 'RESinvested.csv'),skiprows=skip, index_col=['Zone','Name'])
+			isRESinvested=True
+		if os.path.isfile(os.path.join(cfg['inputpath'], 'STSinvested.csv')):
+			STSinvested = pd.read_csv(os.path.join(cfg['inputpath'], 'STSinvested.csv'),skiprows=skip, index_col=['Zone','Name'])
+			isSTSinvested=True
+		if os.path.isfile(os.path.join(cfg['inputpath'], 'INinvested.csv')):
+			INinvested = pd.read_csv(os.path.join(cfg['inputpath'], 'INinvested.csv'),skiprows=skip, index_col=0)
+			isINinvested=True		
+		
 		# get solution of capacity expansion
 		sol=check_and_read_csv(cfg, cfg['dir']+'Solution_OUT.csv',header=None)
 		
@@ -452,14 +574,47 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			techno=asset[1]
 			region=asset[0]
 			invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
-			print('region ',region,' techno ',techno,' indexsol ',indexSol,' sol ',sol[0].loc[indexSol],' added ',InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region])
-			InvestedCapacity[techno].loc[region]=np.round(InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region],decimals=cfg['arrondi'])
+			if LoopCem:
+				if ( (region in InstalledCapacityLastLoopCem.index) and (techno in InstalledCapacityLastLoopCem.columns) ):
+					added=InstalledCapacityLastLoopCem[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacityLastLoopCem[techno].loc[region]
+				else:	
+					added=0
+			else:
+				added=InstalledCapacity[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacity[techno].loc[region]
+			if isTUinvested:
+				if asset in TUinvested.index:
+					added=added+TUinvested.loc[asset,'InvestedCapacity']
+				
+			if isRESinvested:
+				if asset in RESinvested.index:
+					added=added+RESinvested.loc[asset,'InvestedCapacity']
+			if isSTSinvested:	
+				if asset in STSinvested.index:
+					added=added+STSinvested.loc[asset,'InvestedCapacity']
+				
+			InvestedCapacity[techno].loc[region]=np.round(added,decimals=cfg['arrondi'])
 			indexSol=indexSol+1
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
 				invest_factor_by_asset[line] = sol[0].loc[indexSol]
-				InvestedLine.loc[line]=np.round(LineCapacity.loc[line]*sol[0].loc[indexSol],decimals=cfg['arrondi'])																										
+				
+				if LoopCem:
+					if line in LineCapacityLastLoopCem.index:
+						addedMax=LineCapacityLastLoopCem.loc[line]['MaxPowerFlow']*sol[0].loc[indexSol]-LineCapacityLastLoopCem.loc[line]['MaxPowerFlow']
+						addedMin=LineCapacityLastLoopCem.loc[line]['MinPowerFlow']*sol[0].loc[indexSol]-LineCapacityLastLoopCem.loc[line]['MinPowerFlow']
+					else:	
+						addedMax=0
+						addedMin=0
+				else:				
+					addedMax=LineCapacity.loc[line]['MaxPowerFlow']*sol[0].loc[indexSol]-LineCapacity.loc[line]['MaxPowerFlow']
+					addedMin=LineCapacity.loc[line]['MinPowerFlow']*sol[0].loc[indexSol]-LineCapacity.loc[line]['MinPowerFlow']
+				if isINinvested:
+					if line in INinvested.index:
+						addedMax=addedMax+INinvested.loc[line]['InvestedCapacityMaxPowerFlow']
+						addedMin=addedMin+INinvested.loc[line]['InvestedCapacityMinPowerFlow']
+				InvestedLine.loc[line]['MaxPowerFlow']=np.round(addedMax,decimals=cfg['arrondi'])																										
+				InvestedLine.loc[line]['MinPowerFlow']=np.round(addedMin,decimals=cfg['arrondi'])																										
 				indexSol=indexSol+1
 		InvestedLine=InvestedLine.fillna(0.0)
 		InvestedCapacity.to_csv(cfg['dirOUT']+'InvestedCapacity.csv')
@@ -472,23 +627,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	InputFixedCost.to_csv(cfg['dirOUT']+'InputFixedCost.csv')
 	InstalledCapacity.to_csv(cfg['dirOUT']+'InstalledCapacity.csv')
 	LineCapacity.to_csv(cfg['dirOUT']+'LineCapacity.csv')
-
-	# write csv_after_invest
-	# if isInvest:
-		# dir_csv_after_invest = cfg['inputpath']
-		# if not os.path.isdir(dir_csv_after_invest):
-			# os.makedirs(dir_csv_after_invest)
-		# installed_capacity = InstalledCapacity.stack().swaplevel().sort_index()
-		# for k in inputdata_save.keys():
-			# path_cs_save = os.path.join(dir_csv_after_invest, cfg['csvfiles'][k])
-			# logger.info('Writing '+path_cs_save)
-			# for c in ['MaxPower', 'MinPower', 'Capacity']:
-				# if c in inputdata_save[k].columns:
-					# for i in inputdata_save[k].index:
-						# asset = tuple(inputdata_save[k].loc[i, ['Zone', 'Name']]) if 'Zone' in inputdata_save[k].columns else inputdata_save[k].loc[i, 'Name']
-						# if asset in invest_factor_by_asset.keys():
-							# inputdata_save[k][c].loc[i] = np.round(inputdata_save[k][c].loc[i]*invest_factor_by_asset[asset],decimals=cfg['arrondi'])
-			# inputdata_save[k].to_csv(path_cs_save, index=None)
 
 	# compute aggregated Installed capacity
 	AggrInstalledCapacity=pd.DataFrame(index=list_regions)
@@ -532,8 +670,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		else:
 			lenpost=0
 		for elem in listFiles:
-			print(elem)
-			print(lenpre,lenpost)
 			if '-' not in elem: listscen.append(int(elem.split('.')[0].replace("Demand","")[lenpre:][:-lenpost]))
 		listscen=list(range(len(listscen)))
 	else:
@@ -931,6 +1067,22 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		plt.close('all')
 		return namefigpng		
 
+	def plot_power_flow(dfin,NameFile):
+		df=pd.DataFrame(data=dfin)
+		fig, ax = plt.subplots(figsize=(10,5),nrows=1, ncols=1)
+
+		# Tracer les barres
+		for index, row in df.iterrows():
+			ax.bar(index, row['MaxPowerFlow'], color='b', width=0.4, align='center')
+			ax.bar(index, abs(row['MinPowerFlow']), bottom=-abs(row['MinPowerFlow']), color='r', width=0.4, align='center')
+
+		namefigpng=cfg['dirIMG']+NameFile
+		plt.savefig(namefigpng)
+		fig.clf()
+		plt.close('all')
+		return namefigpng	
+
+	
 	# function for drawing stochastic graph
 	def StochasticGraphs(NbCols,NbRows,List,What,Dir,SizeCol,SizeRow,TitleSize,LabelSize,DrawMean=False,max=0,drawScale=True,isTimeIndex=True):
 	# draw one graphic per item in the List, organised as a table with NbCols and NbRows, ...
@@ -1109,7 +1261,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# create graphs for installed capacity
 		logger.info('Draw Installed capacity')
 		InstalledCapacity=pd.read_csv(cfg['dirOUT']+'InstalledCapacity.csv',index_col=0).fillna(0.0)
+		LineCapacity=pd.read_csv(cfg['dirOUT']+'LineCapacity.csv',index_col=0).fillna(0.0)
 		AggrInstalledCapacity=pd.read_csv(cfg['dirOUT']+'AggrInstalledCapacity.csv',index_col=0).fillna(0.0)
+		namefigpng=plot_power_flow(LineCapacity,'LineCapacityBar.jpeg')
 		namefigpng=StackedBar(InstalledCapacity,'InstalledCapacityBar.jpeg',TechnoColors)
 		namefigpng=StackedBar(AggrInstalledCapacity,'AggrInstalledCapacityBar.jpeg',TechnoAggrColors)
 		if isInvest:
@@ -1117,6 +1271,11 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			InvestedInstalledCapacity=pd.read_csv(cfg['dirOUT']+'InvestedCapacity.csv',index_col=0).fillna(0.0)
 			namefigpng=StackedBar(InitialInstalledCapacity,'InitialInstalledCapacityBar.jpeg',TechnoColors)
 			namefigpng=StackedBar(InvestedInstalledCapacity,'InvestedInstalledCapacityBar.jpeg',TechnoColors)
+			
+			InitialLineCapacity=pd.read_csv(cfg['dirOUT']+'InitialLineCapacity.csv',index_col=0).fillna(0.0)
+			InvestedLineCapacity=pd.read_csv(cfg['dirOUT']+'InvestedLines.csv',index_col=0).fillna(0.0)
+			namefigpng=plot_power_flow(InitialLineCapacity,'InitialLineCapacityBar.jpeg')
+			namefigpng=plot_power_flow(InvestedLineCapacity,'InvestedLineCapacityBar.jpeg')
 			
 		if cfg['map']: 
 			namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
@@ -1189,8 +1348,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				data={'region':VariableCost.index,str(BeginDataset.year):VariableCost[InstTech]}
 				df=pd.DataFrame(data)
 				Annualdf=pyam.IamDataFrame(data=pd.DataFrame(data),model=cfg['model'],scenario=cfg['scenario'],unit='EUR/MWh',variable=var)
-				# if 'regions' in cfg['InstalledCapacity']:
-					# Annualdf=Annualdf.filter(region=cfg['InstalledCapacity']['regions'])
 				if firstAnnualIAMC==True: 
 					firstAnnualIAMC=False
 					IAMCAnnualDf=Annualdf
@@ -1353,7 +1510,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			else:
 				for index in range(len(cfg['regionsANA'])):
 					Demand[index]=pd.concat([Demand[index],df[regions[index]]], axis=1)
-		print(list_regions)
 		for index in range(len(list_regions)):
 			reg=list_regions[index]
 			logger.info('     writing file for '+reg)
@@ -1421,7 +1577,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			del df
 		
 		meanTime=pd.DataFrame(columns=cfg['regionsANA'],index=listscen)
-		#meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		meanScen=pd.DataFrame(columns=cfg['regionsANA'],index=TimeIndex)
 		meanScenMonotone=pd.DataFrame(columns=cfg['regionsANA'],index=range(NbTimeSteps))
 		SlackCmar=pd.DataFrame(columns=listscen)
@@ -1431,7 +1586,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			reg=cfg['regionsANA'][index]
 			logger.info('     writing file for '+reg)
 			MargCosts[index].to_csv(cfg['dirSto'] +cfg['PostTreat']['MarginalCost']['Dir']+'MarginalCostActivePowerDemand-'+reg+'.csv')
-			#meanScenReg=MargCosts[index].mean(axis=1).reset_index()
 			if len(listscen)>1:		  
 				meanScenReg=MargCosts[index].mean(axis=1)			
 				meanScen[reg]=MargCosts[index].mean(axis=1)							   
@@ -1650,8 +1804,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			i=0
 			
 			# replace colums names (from Line_i to reg1>reg2)
-			#newcols=['Timestep']+cfg['lines']
-			#Fulldf.columns=newcols
 			Fulldf=Fulldf.drop(['Timestep'],axis=1)
 			Fulldf.to_csv(cfg['dirSto']+cfg['PostTreat']['Flows']['Dir']+'ImportExport'+str(scen)+'.csv')
 			MeanImportExport=MeanImportExport+Fulldf/nbscen
@@ -1690,8 +1842,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# read ActivePowerOUT.csv per scenario and create 1 file per region with all scenario data, for selected technos
 	if (cfg['PostTreat']['Power']['read']):	
 		logger.info('   Read Stochastic results for Power')
-		#listTechnosAggr=cfg['technosAggr'].keys()
-		#listTechnos=cfg['Technos'].keys()
 		listTechnosAggr=listaggrTechnosInDataset
 		listTechnos=listTechnosInDataset
 		
@@ -2230,11 +2380,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	
 		bodylatex_Sto=bodylatex_Sto+"\\section{Mean Costs}\n"
 		VarCost=pd.read_csv(cfg['dirOUT'] + 'MeanVariableCost.csv',index_col=0)
-		#bodylatex_Sto=bodylatex_Sto+tablelatex(VarCost,'Mean Variable Costs (Euro)')+"\n"
 		if cfg['usevu']:
 			BV=pd.read_csv(cfg['dirOUT'] + 'BellmanValuesPerScenario.csv',index_col=0)
 			BV=BV.mean(axis=0)
-			#bodylatex_Sto=bodylatex_Sto+tablelatex(BV,'Mean BellmanValue of Seasonal Storages (Euro)')+"\n"
 
 	# create graphs for flows
 	if(cfg['PostTreat']['Flows']['draw']):
@@ -2251,7 +2399,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		MeanFlows=pd.read_csv(cfg['dirOUT'] + 'MeanImportExport.csv',index_col=0)
 		MeanFlowsEnergy=MeanFlows.sum(axis=0)
-		#bodylatex_Sto=bodylatex_Sto+tablelatex(MeanFlowsEnergy,'Mean Energy Flows (MWh)')+"\n"
 	
 	# create output files in openentrance data format for flows
 	if(cfg['PostTreat']['Flows']['iamc']):
@@ -2772,7 +2919,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					
 					if cfg['PostTreat']['SpecificPeriods']['latex']:
 						BilanNRJ=pd.read_csv(cfg['dirOUTScen']+'Balance-'+country+'.csv',index_col=0)
-						#bodylatex_Det=bodylatex_Det+"\\subsection{Energy Generated}\n"+tablelatex(BilanNRJ,'Energy Balance(MWh) in '+country)+"\n"
 						namefigpng='Scenario_'+str(NumScen)+'_Pie_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
 						bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Energy Pie in '+country,namefigpng)
 						NbHeuresDef=pd.read_csv(cfg['dirOUTScen']+'NbHoursNonServed-'+country+'.csv',header=None)
@@ -2781,7 +2927,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 						BilanCouthTH=pd.read_csv(cfg['dirOUTScen']+'ThermalCost-'+country+'.csv',index_col=0)
 						CoutTotal=pd.read_csv(cfg['dirOUTScen']+'TotalCost-'+country+'.csv',header=None)
 						bodylatex_Det=bodylatex_Det+"\\subsection{Costs}\n"+"\nTotal Cost without Bellman Value="+str(CoutTotal[1][0])+"\n"
-						#bodylatex_Det=bodylatex_Det+tablelatex(BilanCouthTH,'Thermal costs in '+country,column_format='|p{3cm}|p{3cm}|p{3cm}|p{3cm}|')+"\n"
 					
 				################################################################################################
 				# end loop on countries
@@ -2815,18 +2960,13 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SMSFlowsPerCountry=SMSFlowsPerCountry.drop_duplicates()
 			SMSFlowsPerCountry = SMSFlowsPerCountry.loc[:,~SMSFlowsPerCountry.columns.duplicated()]
 			BilansSMSFlows=SMSFlowsPerCountry.sum(axis=0).transpose()
-			#CostFlowsSMS=pd.Series(index=SMSFlowsPerCountry.columns,dtype='float64')
 						
-			#for col in SMSFlowsPerCountry.columns:
-			#	CostFlowsSMS[col]=cfg['flow_cost']*SMSFlowsPerCountry[col].abs().sum()
-
 			if cfg['usevu']: CoutTotalAllCountriesSMS=CoutTotalAllCountriesSMShorsVU+valuesmsIni-valuesmsFin
 			else: CoutTotalAllCountriesSMS=CoutTotalAllCountriesSMShorsVU
 			if cfg['usevu'] : VBSMS=pd.DataFrame([['BV begin (Euro)', valuesmsIni, 'BV end (Euro)', valuesmsFin]])
 
 			CoutTotalAllCountries=pd.DataFrame([['Total Cost (Euro)', CoutTotalAllCountriesSMS]])
 			BilanFlows=pd.DataFrame({'Import/Export (MWh)': BilansSMSFlows})
-			#CostFlows=pd.DataFrame({'Import/Export Cost (MWh)': CostFlowsSMS})
 
 			BilanFlows=BilanFlows.dropna()
 			BilanFlows=BilanFlows.drop_duplicates()
@@ -2836,7 +2976,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			tablebilansNRJ.to_csv(cfg['dirOUTScen']+'Balance.csv',sep=',',mode='w')
 				
 			logger.info('Treat Import Exports')
-			#CostFlows.to_csv(cfg['dirOUTScen']+'CostFlows'+'.csv',sep=',',mode='w',header=True,index=True)
 			
 			# build flows dataframe (import/export in same col)
 			SMS_IE=pd.DataFrame(columns=cfg['lines'],index=SMSFlowsPerCountry.index)
@@ -2881,10 +3020,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					bodylatex_Det=bodylatex_Det+"Initial Bellman Value (Euro) ="+str(BV[1][0])+"\n"
 					bodylatex_Det=bodylatex_Det+"Final Bellman Value (Euro) ="+str(BV[3][0])+"\n"
 				
-				#CostFlows=pd.read_csv(cfg['dirOUTScen']+'CostFlows.csv')
 				if len(list_regions)>1:
 					namefigpng='ImportsExports'+start_week.strftime('%Y-%m-%d')+'.jpeg'
-					#bodylatex_Det=bodylatex_Det+"\\subsection{Imports/Exports}\n"+tablelatex(BilanFlows,'Imports/Exports (MWh)')+figure(cfg['dirIMGLatex']+namefigpng,'Imports/Exports (MWh)',namefigpng)
 
 
 			###########################################################		
@@ -2974,7 +3111,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				writelatex=True
 				bodylatex_Det=bodylatex_Det+"\\subsection{Energy generation}\n"
 				tablebilansNRJ=pd.read_csv(cfg['dirOUTScen']+'Balance.csv',index_col=0)	
-				#bodylatex_Det=bodylatex_Det+tablelatex(tablebilansNRJ,'Total Energy Balance (MWh)')
 				
 				namefigpng='Scenario_ChloroMap-MeanEnergy.jpeg'
 				bodylatex_Det=bodylatex_Det+figure(cfg['dirIMGLatex']+namefigpng,'Map of energy generated for Scenario '+str(NumScen)+' (MWh)',namefigpng)

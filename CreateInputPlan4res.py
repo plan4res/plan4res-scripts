@@ -17,34 +17,38 @@ import sys
 
 from p4r_python_utils import *
 
+path = get_path()
+logger.info('path='+path)
 p4rpath = os.environ.get("PLAN4RESROOT")
-print("p4rpath=",p4rpath)
-path=get_path()
-print("plan4res path=",path)			   
+logger.info('p4rpath='+p4rpath)
+
+def abspath_to_relpath(path, basepath):
+	return os.path.relpath(path, basepath) #if os.path.abspath(path) else path
+	
 nbargs=len(sys.argv)
 if nbargs>1: 
 	settings_create=sys.argv[1]
 else:
 	settings_create="settingsCreateInputPlan4res.yml"
-print("os.path.abspath(settings_create)=",os.path.abspath(settings_create))
-#if os.path.abspath(settings_create):
-	#settings_create = os.path.relpath(settings_create, path)		
-print("settings_create=",settings_create)
+if os.path.abspath(settings_create):
+	settings_create = os.path.relpath(settings_create, path)
 
 cfg={}
 # open the configuration file using the pathway defined below
-#with open(os.path.join(path, settings_create),"r") as mysettings:
-with open(settings_create,"r") as mysettings:
+with open(os.path.join(path, settings_create),"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 	
 # replace name of current dataset by name given as input
 if nbargs>2:
 	namedataset=sys.argv[2]
-	cfg['path']=os.path.join(path, 'data/local', namedataset)
-	# if cfg['USEPLAN4RESROOT']: 
-		# cfg['path']=os.path.join(path, 'data/local', namedataset)
-	# else: 
-		# cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+	if 'path' in cfg:
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+	else:
+		cfg['path']=os.path.join(path, 'data/local', namedataset)
+	if 'p4rpath' in cfg:
+		cfg['p4rpath']=cfg['p4rpath'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+	else:
+		cfg['p4rpath']=p4rpath
 if 'outputpath' not in cfg: 
 	if cfg['ParametersCreate']['invest']:
 		cfg['outputpath']=os.path.join(cfg['path'], 'csv_invest')
@@ -54,20 +58,8 @@ if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 
 if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs')
 if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries')
 if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
-if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(p4rpath,'scripts/python/plan4res-scripts/settings/')
-if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(p4rpath,'scripts/python/openentrance/definitions/')
-# if 'pythonDir' not in cfg: 
-	# if cfg['USEPLAN4RESROOT']: 
-		# cfg['pythonDir']='scripts/python/plan4res-scripts/settings/'
-	# else:
-		# logger.error('\npythonDir missing in settingsCreateInputPlan4res')
-		# log_and_exit(1, cfg['path'])
-# if 'nomenclatureDir' not in cfg: 
-	# if cfg['USEPLAN4RESROOT']: 
-		# cfg['nomenclatureDir']='scripts/python/openentrance/definitions/'
-	# else:
-		# logger.error('\nnomenclatureDir missing in settingsCreateInputPlan4res')
-		# log_and_exit(1, cfg['path'])		
+if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
+if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
 
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
@@ -77,12 +69,11 @@ for datagroup in cfg['datagroups']:
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
 
-
 if cfg['USEPLAN4RESROOT']:
 	cfg['outputpath']=os.path.join(path, cfg['outputpath'])
 	cfg['dirTimeSeries']=os.path.join(path, cfg['timeseriespath'])
-	cfg['nomenclatureDir']=os.path.join(path, cfg['nomenclatureDir'])
-	cfg['pythonDir']=os.path.join(path, cfg['pythonDir'])
+	cfg['nomenclatureDir']=os.path.join(p4rpath, cfg['nomenclatureDir'])
+	cfg['pythonDir']=os.path.join(p4rpath, cfg['pythonDir'])
 	for datagroup in cfg['datagroups']:
 		cfg['datagroups'][datagroup]['inputdatapath']=os.path.join(path, cfg['datagroups'][datagroup]['inputdatapath'])
 else:
@@ -114,7 +105,7 @@ if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open(cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
+with open(os.path.join(path,cfg['configDir'], "VariablesDictionnary.yml"),"r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 # create the dictionnary of time series, containing the names of the timeseries to be included in 

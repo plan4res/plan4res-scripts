@@ -27,7 +27,6 @@ else:
 	settings_format="settings_format.yml"
 settings_format = abspath_to_relpath(settings_format, path)
     
-    
 # read config file
 cfg1={}
 with open(os.path.join(path, settings_format),"r") as mysettings:
@@ -52,14 +51,24 @@ if nbargs>3:
 		#cfg['path']='/data/local/'+namedataset+'/'
 cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
 cfg['outputpath']=os.path.join(cfg['path'], cfg['outputDir'])
+
+CreateDataPostInvest=False # True if csv files are to be re-created former computation of investments
+if 'RecomputeCSV' in cfg['ParametersFormat']:
+	if cfg['ParametersFormat']['RecomputeCSV']:
+		cfg['resultspath']=os.path.join(cfg['path'], cfg['resultsDir'])
+		cfg['investpath']=os.path.join(cfg['path'], cfg['investDir'])
+		
+		if os.path.isfile(cfg['resultspath']+'Solution_OUT.csv'):
+			CreateDataPostInvest=True
+		logger.info('CreateDataPostInvest:'+str(CreateDataPostInvest))
+
+		
 if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'],'TimeSeries/')
 
-# if cfg['USEPLAN4RESROOT']:
-	# path = os.environ.get("PLAN4RESROOT")
-	# cfg['path']=path+cfg['path']
-	# cfg['outputpath']=path+cfg['outputpath']
-	# cfg['inputpath']=path+cfg['inputpath']
-	# cfg['timeseriespath']=path+cfg['timeseriespath']
+number_threads=1
+if nbargs>4:
+	number_threads=int(sys.argv[4])
+
 logger.info('path: '+cfg['inputpath'])
 
 cfg['treat']=cfg['csvfiles']
@@ -100,14 +109,12 @@ def read_input_timeseries(cfg, ts_name, which_path='timeseriespath', **kwargs):
 #################################################################################################################################################
 
 # some of the sheets may have an additional row on top (where usually units can be written)
+skiprow=False
+skip=0
 if 'additionalRowInSheets' in cfg and cfg['additionalRowInSheets']:
 	skiprow=True
 	skip=1
-else:
-	skiprow=False
-	skip=0
-
-
+	
 # Read Parameters
 #################################################################################################################################################
 
@@ -231,12 +238,11 @@ while start<=dates['UCEndData']:
 	i=i+1
 
 # check if csv files have to be modified to include results of investment_solver
-CreateDataPostInvest=False # True if csv files are to be re-created former computation of investments
-if 'RecomputeCSV' in cfg['ParametersFormat']:
-	if cfg['ParametersFormat']['RecomputeCSV'] and os.path.isfile(cfg['path']+'results_invest/Solution_OUT.csv'):
-		CreateDataPostInvest=True
-		solInvest=check_and_read_csv(cfg, cfg['path']+'results_invest/Solution_OUT.csv',header=None)
-		indexSolInvest=0
+#CreateDataPostInvest=False # True if csv files are to be re-created former computation of investments
+if CreateDataPostInvest:
+	logger.info('read invest solution')
+	solInvest=check_and_read_csv(cfg, cfg['resultspath']+'Solution_OUT.csv',header=None)
+	indexSolInvest=0
 			
 # Read sheet ZP_ZonePartition
 #################################################################################################################################################
@@ -346,24 +352,51 @@ if 'TU_ThermalUnits' in sheets:
 		TU=read_input_csv(cfg, 'TU_ThermalUnits', skiprows=skip, index_col=['Name','Zone'])
 	TU=TU[TU['NumberUnits'] != 0]
 	TU=TU.reset_index().drop_duplicates().set_index(['Name','Zone'])
+	
 	if CreateDataPostInvest:
+		TUinvest=read_input_csv(cfg, 'TU_ThermalUnits', input='investpath',skiprows=skip, index_col=['Name','Zone'])
+		TUinvest=TUinvest[TUinvest['NumberUnits'] != 0]
+		TUinvest=TUinvest.reset_index().drop_duplicates().set_index(['Name','Zone'])
+		if os.path.exists( os.path.join(cfg['investpath'], 'TUinvested.csv')):
+			TUinvested = pd.read_csv(os.path.join(cfg['investpath'], 'TUinvested.csv'),skiprows=skip, index_col=['Name','Zone'])
+		else:
+			TUinvested = pd.DataFrame(0, index=TUinvest.index, columns=['InvestedCapacity'])
+		common_columns = TU.columns.intersection(TUinvest.columns)
 		save_input_csv(cfg, 'TU_ThermalUnits',TU)
-		for row in TU.index:
-			if (TU.loc[row,'MaxAddedCapacity']>0)+(TU.loc[row,'MaxRetCapacity']>0):
-				if solInvest[0].loc[indexSolInvest]>1:
-					TU.loc[row,'MaxAddedCapacity']=TU.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*TU.loc[row,'MaxPower']
-					if TU.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						TU.loc[row,'MaxAddedCapacity']=0
-				if solInvest[0].loc[indexSolInvest]<1:
-					TU.loc[row,'MaxRetCapacity']=TU.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*TU.loc[row,'MaxPower']
-					if TU.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						TU.loc[row,'MaxRetCapacity']=0
-				logger.info('Added Capacity to TU '+str(row)+' :'+str(TU.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-TU.loc[row,'MaxPower']))
-				for c in ['MaxPower', 'MinPower', 'Capacity']:
-					if c in TU.columns:
-						TU.loc[row,c] = np.round(TU.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+		save_input_csv(cfg, 'TU_ThermalUnits',TUinvest, input='investpath')
+		for row in TUinvest.index:
+			Changed=False 
+			if (TUinvest.loc[row,'MaxAddedCapacity']>0)+(TUinvest.loc[row,'MaxRetCapacity']>0):
+				OldCapa=TUinvest.loc[row,'MaxPower']
+				NewCapa=np.round(TUinvest.loc[row,'MaxPower']*(solInvest[0].loc[indexSolInvest]-1),cfg['ParametersFormat']['RoundDecimals'])
+				if (solInvest[0].loc[indexSolInvest]>1)+(solInvest[0].loc[indexSolInvest]<1):
+					TUinvest.loc[row,'MaxAddedCapacity']=TUinvest.loc[row,'MaxAddedCapacity']-NewCapa
+					TUinvest.loc[row,'MaxRetCapacity']=TUinvest.loc[row,'MaxRetCapacity']+NewCapa
+					if TUinvest.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						TUinvest.loc[row,'MaxRetCapacity']=0
+					if TUinvest.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						TUinvest.loc[row,'MaxAddedCapacity']=0				
+					logger.info('Added Capacity '+str(row)+' :'+str(NewCapa)+ ' to '+str(OldCapa) )				
+					TUinvested.loc[row,'InvestedCapacity']=TUinvested.loc[row,'InvestedCapacity']+NewCapa
+					if ( (NewCapa > cfg['ParametersCreate']['zerocapacity']) or (NewCapa < -1*cfg['ParametersCreate']['zerocapacity']) ): Changed=True
+					for c in ['MaxPower', 'MinPower', 'Capacity','InitialPower']:
+						if c in TUinvest.columns:
+							TUinvest.loc[row,c] = np.round(TUinvest.loc[row,c]*solInvest[0].loc[indexSolInvest], cfg['ParametersFormat']['RoundDecimals'])
+					if row in TU.index:
+						for c in ['MaxPower', 'MinPower', 'Capacity','InitialPower']:
+							if c in TU.columns:
+								TU.loc[row,c] = TUinvest.loc[row,c]
+					else:
+						# add row to TU
+						if Changed:
+							if TUinvest.loc[row,'MaxPower']>cfg['ParametersCreate']['zerocapacity']:
+								new_row = pd.DataFrame([TUinvest.loc[row, TU.columns]],index=pd.MultiIndex.from_tuples([row],names=TUinvest.index.names))
+								TU=pd.concat([TU,new_row])
 				indexSolInvest=indexSolInvest+1
+		TU['NumberUnits'] = TU['NumberUnits'].astype(int)
+		TUinvested.to_csv(os.path.join(cfg['investpath'], 'TUinvested.csv'),index=True)
 		write_input_csv(cfg, 'TU_ThermalUnits',TU)
+		write_input_csv(cfg, 'TU_ThermalUnits',TUinvest,input='investpath')
 	TU=TU.drop( TU[ TU['NumberUnits']==0 ].index )
 	if ('MaxAddedCapacity' not in TU.columns and 'MaxRetCapacity' not in TU.columns):
 		TU=TU.drop( TU[ TU['MaxPower']<=cfg['ParametersCreate']['zerocapacity'] ].index )
@@ -395,25 +428,51 @@ if 'RES_RenewableUnits' in sheets:
 	else:
 		RES=read_input_csv(cfg, 'RES_RenewableUnits',skiprows=skip,index_col=['Name','Zone'])
 	RES=RES.reset_index().drop_duplicates().set_index(['Name','Zone'])
-	if CreateDataPostInvest:
-		save_input_csv(cfg, 'RES_RenewableUnits',RES)
-		for row in RES.index:
-			if (RES.loc[row,'MaxAddedCapacity']>0)+(RES.loc[row,'MaxRetCapacity']>0):
-				if solInvest[0].loc[indexSolInvest]>1:
-					RES.loc[row,'MaxAddedCapacity']=RES.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*RES.loc[row,'MaxPower']
-					if RES.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						RES.loc[row,'MaxAddedCapacity']=0
-				if solInvest[0].loc[indexSolInvest]<1:
-					RES.loc[row,'MaxRetCapacity']=RES.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*RES.loc[row,'MaxPower']
-					if RES.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						RES.loc[row,'MaxRetCapacity']=0
-				logger.info('Added Capacity to RES '+str(row)+' :'+str(RES.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-RES.loc[row,'MaxPower']))
 
-				for c in ['MaxPower', 'MinPower', 'Capacity']:
-					if c in RES.columns:
-						RES.loc[row,c] = np.round(RES.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+	if CreateDataPostInvest: 
+		RESinvest=read_input_csv(cfg, 'RES_RenewableUnits',input='investpath',skiprows=skip,index_col=['Name','Zone'])
+		RESinvest=RESinvest.reset_index().drop_duplicates().set_index(['Name','Zone'])
+		common_columns = RES.columns.intersection(RESinvest.columns)
+		save_input_csv(cfg, 'RES_RenewableUnits',RES)
+		save_input_csv(cfg, 'RES_RenewableUnits',RESinvest,input='investpath')
+		if os.path.exists( os.path.join(cfg['investpath'], 'RESinvested.csv')):
+			RESinvested = pd.read_csv(os.path.join(cfg['investpath'], 'RESinvested.csv'),skiprows=skip, index_col=['Name','Zone'])
+		else:
+			RESinvested = pd.DataFrame(0, index=RESinvest.index, columns=['InvestedCapacity'])
+		for row in RESinvest.index:
+			Changed=False
+			if (RESinvest.loc[row,'MaxAddedCapacity']>0)+(RESinvest.loc[row,'MaxRetCapacity']>0):
+				OldCapa=RESinvest.loc[row,'MaxPower']
+				NewCapa=np.round(RESinvest.loc[row,'MaxPower']*(solInvest[0].loc[indexSolInvest]-1), cfg['ParametersFormat']['RoundDecimals'])
+				if (solInvest[0].loc[indexSolInvest]>1)+(solInvest[0].loc[indexSolInvest]<1):
+					RESinvest.loc[row,'MaxAddedCapacity']=RESinvest.loc[row,'MaxAddedCapacity']-NewCapa
+					RESinvest.loc[row,'MaxRetCapacity']=RESinvest.loc[row,'MaxRetCapacity']+NewCapa
+					if RESinvest.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						RESinvest.loc[row,'MaxRetCapacity']=0
+					if RESinvest.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						RESinvest.loc[row,'MaxAddedCapacity']=0
+				
+					logger.info('Added Capacity '+str(row)+' :'+str(NewCapa)+ ' to '+str(OldCapa) )				
+					if ( (NewCapa > cfg['ParametersCreate']['zerocapacity']) or (NewCapa < -1*cfg['ParametersCreate']['zerocapacity']) ): Changed=True				
+					RESinvested.loc[row,'InvestedCapacity']=RESinvested.loc[row,'InvestedCapacity']+NewCapa				
+					for c in ['MaxPower', 'MinPower', 'Capacity']:
+						if c in RESinvest.columns:
+							RESinvest.loc[row,c] = np.round(RESinvest.loc[row,c]*solInvest[0].loc[indexSolInvest], cfg['ParametersFormat']['RoundDecimals'])
+					if row in RES.index:
+						for c in ['MaxPower', 'MinPower', 'Capacity']:
+							if c in RESinvest.columns:
+								RES.loc[row,c] = RESinvest.loc[row,c]
+					else:
+						# add row to RES
+						if Changed:
+							if RESinvest.loc[row,'MaxPower']>cfg['ParametersCreate']['zerocapacity']:
+								new_row = pd.DataFrame([RESinvest.loc[row, RES.columns]],index=pd.MultiIndex.from_tuples([row],names=RESinvest.index.names))
+								RES=pd.concat([RES,new_row])
 				indexSolInvest=indexSolInvest+1
+		RES['NumberUnits'] = RES['NumberUnits'].astype(int)
+		RESinvested.to_csv(os.path.join(cfg['investpath'], 'RESinvested.csv'),index=True)
 		write_input_csv(cfg, 'RES_RenewableUnits',RES)
+		write_input_csv(cfg, 'RES_RenewableUnits',RESinvest,input='investpath')
 
 	RES=RES.drop( RES[ RES['NumberUnits']==0 ].index )
 	if ('MaxAddedCapacity' not in RES.columns and 'MaxRetCapacity' not in RES.columns):
@@ -447,24 +506,51 @@ if 'STS_ShortTermStorage' in sheets:
 		STS=read_input_csv(cfg, 'STS_ShortTermStorage',skiprows=skip,index_col=['Name','Zone'])
 	STS=STS.reset_index().drop_duplicates().set_index(['Name','Zone'])
 	if CreateDataPostInvest:
+		STSinvest=read_input_csv(cfg, 'STS_ShortTermStorage',input='investpath',skiprows=skip,index_col=['Name','Zone'])
+		STSinvest=STSinvest.reset_index().drop_duplicates().set_index(['Name','Zone'])
+		common_columns = STS.columns.intersection(STSinvest.columns)
 		save_input_csv(cfg, 'STS_ShortTermStorage',STS)
-		for row in STS.index:
-			if (STS.loc[row,'MaxAddedCapacity']>0)+(STS.loc[row,'MaxRetCapacity']>0):
-				if solInvest[0].loc[indexSolInvest]>1:
-					STS.loc[row,'MaxAddedCapacity']=STS.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*STS.loc[row,'MaxPower']
-					if STS.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						STS.loc[row,'MaxAddedCapacity']=0
-				if solInvest[0].loc[indexSolInvest]<1:
-					STS.loc[row,'MaxRetCapacity']=STS.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*STS.loc[row,'MaxPower']
-					if STS.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						STS.loc[row,'MaxRetCapacity']=0
-				logger.info('Added Capacity to STS '+str(row)+' :'+str(STS.loc[row,'MaxPower']*solInvest[0].loc[indexSolInvest]-STS.loc[row,'MaxPower']))
+		save_input_csv(cfg, 'STS_ShortTermStorage',STSinvest,input='investpath')
+		if os.path.exists( os.path.join(cfg['investpath'], 'STSinvested.csv')):
+			STSinvested = pd.read_csv(os.path.join(cfg['investpath'], 'STSinvested.csv'),skiprows=skip, index_col=['Name','Zone'])
+		else:
+			STSinvested = pd.DataFrame(0, index=STSinvest.index, columns=['InvestedCapacity'])
+		for row in STSinvest.index:
+			Changed=False
+			if (STSinvest.loc[row,'MaxAddedCapacity']>0)+(STSinvest.loc[row,'MaxRetCapacity']>0):
+				OldCapa=STSinvest.loc[row,'MaxPower']
+				NewCapa=np.round(STSinvest.loc[row,'MaxPower']*(solInvest[0].loc[indexSolInvest]-1), cfg['ParametersFormat']['RoundDecimals'])
+				if (solInvest[0].loc[indexSolInvest]>1)+(solInvest[0].loc[indexSolInvest]<1):
+					STSinvest.loc[row,'MaxAddedCapacity']=STSinvest.loc[row,'MaxAddedCapacity']-NewCapa
+					STSinvest.loc[row,'MaxRetCapacity']=STSinvest.loc[row,'MaxRetCapacity']+NewCapa
+				
+					if STSinvest.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						STSinvest.loc[row,'MaxRetCapacity']=0
+					if STSinvest.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						STSinvest.loc[row,'MaxAddedCapacity']=0
+				
+					logger.info('Added Capacity '+str(row)+' :'+str(NewCapa)+ ' to '+str(OldCapa) )				
+					if ( (NewCapa > cfg['ParametersCreate']['zerocapacity']) or (NewCapa < -1*cfg['ParametersCreate']['zerocapacity']) ): Changed=True
+					STSinvested.loc[row,'InvestedCapacity']=STSinvested.loc[row,'InvestedCapacity']+NewCapa	
 
-				for c in ['MaxPower', 'MinPower', 'Capacity','MaxVolume','MinVolume']:
-					if c in STS.columns:
-						STS.loc[row,c] = np.round(STS.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+					for c in ['MaxPower', 'MinPower', 'Capacity','MaxVolume','MinVolume','VolumeLevelTarget','InitialPower','InitialStorage','MaxPrimaryPower','MaxSecondaryPower']:
+						if c in STSinvest.columns:
+							STSinvest.loc[row,c] = np.round(STSinvest.loc[row,c]*solInvest[0].loc[indexSolInvest], cfg['ParametersFormat']['RoundDecimals'])
+					if row in STS.index:
+						for c in ['MaxPower', 'MinPower', 'Capacity','MaxVolume','MinVolume','VolumeLevelTarget','InitialPower','InitialStorage','MaxPrimaryPower','MaxSecondaryPower']:
+							if c in STS.columns:
+								STS.loc[row,c] = STSinvest.loc[row,c] 
+					else:
+						# add row to TU
+						if Changed:
+							if STSinvest.loc[row,'MaxPower']>cfg['ParametersCreate']['zerocapacity']:
+								new_row = pd.DataFrame([STSinvest.loc[row, STS.columns]],index=pd.MultiIndex.from_tuples([row],names=STSinvest.index.names))								
+								STS=pd.concat([STS,new_row])
 				indexSolInvest=indexSolInvest+1
+		STS['NumberUnits'] = STS['NumberUnits'].astype(int)
+		STSinvested.to_csv(os.path.join(cfg['investpath'], 'STSinvested.csv'),index=True)
 		write_input_csv(cfg, 'STS_ShortTermStorage',STS)
+		write_input_csv(cfg, 'STS_ShortTermStorage',STSinvest,input='investpath')
 
 	STS=STS.drop( STS[ STS['NumberUnits']==0 ].index )
 	if ('MaxAddedCapacity' not in STS.columns and 'MaxRetCapacity' not in STS.columns):
@@ -509,25 +595,53 @@ if 'IN_Interconnections' in sheets:
 	else:
 		IN=read_input_csv(cfg, 'IN_Interconnections', skiprows=skip,index_col=0)
 	if CreateDataPostInvest:
+		INinvest=read_input_csv(cfg, 'IN_Interconnections', input='investpath',skiprows=skip,index_col=0)
 		save_input_csv(cfg, 'IN_Interconnections',IN,index=True)
-		for row in IN.index:
-			if (IN.loc[row,'MaxAddedCapacity']>0)+(IN.loc[row,'MaxRetCapacity']>0):
-				if solInvest[0].loc[indexSolInvest]>1:
-					IN.loc[row,'MaxAddedCapacity']=IN.loc[row,'MaxAddedCapacity']-(solInvest[0].loc[indexSolInvest]-1)*IN.loc[row,'MaxPowerFlow']
-					if IN.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						IN.loc[row,'MaxAddedCapacity']=0
-				if solInvest[0].loc[indexSolInvest]<1:
-					IN.loc[row,'MaxRetCapacity']=IN.loc[row,'MaxRetCapacity']-(1-solInvest[0].loc[indexSolInvest])*IN.loc[row,'MaxPowerFlow']
-					if IN.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
-						IN.loc[row,'MaxRetCapacity']=0
-				logger.info('Added Capacity to IN '+str(row)+' :'+str(IN.loc[row,'MaxPowerFlow']*solInvest[0].loc[indexSolInvest]-IN.loc[row,'MaxPowerFlow']))
-
-				for c in ['MaxPowerFlow', 'MinPowerFlow']:
-					if c in IN.columns:
-						IN.loc[row,c] = np.round(IN.loc[row,c]*solInvest[0].loc[indexSolInvest], decimals=cfg['ParametersFormat']['RoundDecimals'])
+		save_input_csv(cfg, 'IN_Interconnections',INinvest,input='investpath',index=True)
+		common_columns = IN.columns.intersection(INinvest.columns)
+		if os.path.exists( os.path.join(cfg['investpath'], 'INinvested.csv')):
+			INinvested = pd.read_csv(os.path.join(cfg['investpath'], 'INinvested.csv'),skiprows=skip, index_col=0)
+		else:
+			INinvested = pd.DataFrame(0, index=INinvest.index, columns=['InvestedCapacityMaxPowerFlow','InvestedCapacityMinPowerFlow'])
+		for row in INinvest.index:
+			Changed=False
+			if (INinvest.loc[row,'MaxAddedCapacity']>0)+(INinvest.loc[row,'MaxRetCapacity']>0):
+				OldCapaMax=INinvest.loc[row,'MaxPowerFlow']
+				NewCapaMax=np.round(INinvest.loc[row,'MaxPowerFlow']*(solInvest[0].loc[indexSolInvest]-1), cfg['ParametersFormat']['RoundDecimals'])
+				OldCapaMin=INinvest.loc[row,'MinPowerFlow']	
+				NewCapaMin=np.round(INinvest.loc[row,'MinPowerFlow']*(solInvest[0].loc[indexSolInvest]-1), cfg['ParametersFormat']['RoundDecimals'])
+				if (solInvest[0].loc[indexSolInvest]>1)+(solInvest[0].loc[indexSolInvest]<1):
+					INinvest.loc[row,'MaxAddedCapacity']=INinvest.loc[row,'MaxAddedCapacity']-NewCapaMax
+					INinvest.loc[row,'MaxRetCapacity']=INinvest.loc[row,'MaxRetCapacity']+NewCapaMax
+				
+					if INinvest.loc[row,'MaxRetCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						INinvest.loc[row,'MaxRetCapacity']=0
+					if INinvest.loc[row,'MaxAddedCapacity']<=cfg['ParametersCreate']['zerocapacity']:
+						INinvest.loc[row,'MaxAddedCapacity']=0
+				
+					logger.info(str(row)+' : Added Export Capacity: '+str(NewCapaMax)+ ' added to '+str(OldCapaMax)+' and Import Capacity: '+str(NewCapaMin)+' added to '+str(OldCapaMin) )				
+					if ( (NewCapaMax > cfg['ParametersCreate']['zerocapacity']) or (NewCapaMax < -1*cfg['ParametersCreate']['zerocapacity']) ): Changed=True
+					if ( (NewCapaMin > cfg['ParametersCreate']['zerocapacity']) or (NewCapaMin < -1*cfg['ParametersCreate']['zerocapacity']) ): Changed=True				
+					INinvested.loc[row,'InvestedCapacityMaxPowerFlow']=INinvested.loc[row, 'InvestedCapacityMaxPowerFlow']+ NewCapaMax
+					INinvested.loc[row,'InvestedCapacityMinPowerFlow']=INinvested.loc[row, 'InvestedCapacityMinPowerFlow']+NewCapaMin	
+				
+					INinvest.loc[row,'MaxPowerFlow'] = np.round(INinvest.loc[row,'MaxPowerFlow']*solInvest[0].loc[indexSolInvest], cfg['ParametersFormat']['RoundDecimals'])
+					INinvest.loc[row,'MinPowerFlow'] = np.round(INinvest.loc[row,'MinPowerFlow']*solInvest[0].loc[indexSolInvest], cfg['ParametersFormat']['RoundDecimals'])
+						
+					if row in IN.index:
+						IN.loc[row,'MaxPowerFlow' ] = INinvest.loc[row,'MaxPowerFlow' ]
+						IN.loc[row,'MinPowerFlow' ] = INinvest.loc[row,'MinPowerFlow' ]
+					else:
+						# add row to IN
+						if Changed:
+							if INinvest.loc[row,'MaxPowerFlow']>cfg['ParametersCreate']['zerocapacity'] or INinvest.loc[row,'MinPowerFlow']<-1*cfg['ParametersCreate']['zerocapacity']:
+								new_row = pd.DataFrame([INinvest.loc[row, IN.columns]],index=pd.MultiIndex.from_tuples([row],names=INinvest.index.names))
+								IN=pd.concat([IN,new_row])
 				indexSolInvest=indexSolInvest+1
+		write_input_csv(cfg, 'IN_Interconnections',INinvest,input='investpath',index=True)
 		write_input_csv(cfg, 'IN_Interconnections',IN,index=True)
-	
+		INinvested.to_csv(os.path.join(cfg['investpath'], 'INinvested.csv'),index=True)
+
 	if ('MaxAddedCapacity' not in IN.columns and 'MaxRetCapacity' not in IN.columns):
 		IN=IN.drop( IN[ (IN['MaxPowerFlow']<=cfg['ParametersCreate']['zerocapacity']) & (IN['MinPowerFlow']>=(-1)*cfg['ParametersCreate']['zerocapacity'])  ].index )
 	else:
@@ -2203,15 +2317,39 @@ def createUCBlock(filename,id,scenario,start,end):
 	UCBlock.close()
 
 
-def createSDDPBlock(filename,id):
+def createSDDPBlock(filename):
 	SDDPBlock=Dataset(filename,'w',format='NETCDF4')
 	# general attribute of the file
 	SDDPBlock.setncattr('SMS++_file_type',1)
-	Block=SDDPBlock.createGroup("Block_"+str(id))
+
+	# compute number of sub-blocks
+	# a sub-block is created per threads in the parallelisation
+	# a subblock can include more than 1 scenario ; there cannot be more subblocks than the number of scenarios
+	numberSubBlocks= len(ListScenarios)	
+	if number_threads < len(ListScenarios):
+		numberSubBlocks = number_threads
+	
+	# compute list of scenarios per subblock
+	ListScenariosPerSubBlock=pd.Series( [[] for _ in range(numberSubBlocks)] )
+	MeanNumberScenariosPerSubBlock=len(ListScenarios) // number_threads
+	LastNumberScenariosPerSubBlock=MeanNumberScenariosPerSubBlock+ (len(ListScenarios) % number_threads)
+	indexScen=0
+
+	# compute the list of scenarios per subblock
+	for subblock in range(numberSubBlocks):
+		if subblock < numberSubBlocks-1: NumberScenariosInSubBlock=MeanNumberScenariosPerSubBlock
+		else: NumberScenariosInSubBlock=LastNumberScenariosPerSubBlock
+		for i in range(NumberScenariosInSubBlock): 
+			ListScenariosPerSubBlock.loc[subblock].append( ListScenarios[indexScen])
+			indexScen=indexScen+1
+
+	# create block
+	Block=SDDPBlock.createGroup("Block_"+str(0))
 	Block.type="SDDPBlock"
 	Block.createDimension("NumPolyhedralFunctionsPerSubBlock",NumberHydroSystems)
 	Block.createDimension("TimeHorizon",TimeHorizonSSV)
 	Block.createDimension("NumberScenarios",len(ListScenarios))
+	Block.createDimension("NumSubBlocksPerStage",numberSubBlocks)
 	SubScenarioSize = ThermalMaxPowerSize * Nb_TPP + (SSVTimeStep/UCTimeStep) * (Nb_APD + Nb_SS + Nb_RGP)
 	ScenarioSize=NumberSSVTimeSteps*SubScenarioSize
 	Block.createDimension("SubScenarioSize",SubScenarioSize)
@@ -2241,6 +2379,7 @@ def createSDDPBlock(filename,id):
 	logger.info('fill scenarios')
 	Scenarios=Block.createVariable("Scenarios",np.double,("NumberScenarios","ScenarioSize"))
 	indexScenario=0
+	#for scenario in ListScenariosPerSubBlock.loc[subblock]:
 	for scenario in ListScenarios:
 		logger.info('scenario '+scenario)
 		ScenarioData=pd.Series(index=range( NumberSSVTimeSteps ),dtype=object)
@@ -2335,170 +2474,175 @@ def createSDDPBlock(filename,id):
 	# create stochastic blocks and benders blocks
 	##################################################################################
 	logger.info('Create StochasticBlocks')
+	indexSubBlock=0
 	for indexSSV in range(NumberSSVTimeSteps):
-		# create blocks
-		StochasticBlocks=Block.createGroup("StochasticBlock_"+str(indexSSV))
-		StochasticBlocks.type="StochasticBlock"
-		StochasticBlocks.createDimension("NumberDataMappings",NumberDataMappings)
-		StochasticBlocks.createDimension("SetSizeSize",2*NumberDataMappings)
-		SetElementsSize=4 * (Nb_SS + Nb_TPP + Nb_RGP)+2 * Nb_SS 
-		if Nb_SS == 0: SetElementsSize=SetElementsSize+4
-		if Nb_APDTo>0: SetElementsSize=SetElementsSize+NumberNodes * (Nb_APDTo + 2)
-		StochasticBlocks.createDimension("SetElementsSize",SetElementsSize)
+		# create subblocks
+		for subblock in range(numberSubBlocks):
+			# create a subblock at SSvTimestep indexSSV corresponding to scenarios ListScenariosPerSubBlock[indexSubBlocks]
+			StochasticBlocks=Block.createGroup("StochasticBlock_"+str(indexSubBlock))
+			StochasticBlocks.type="StochasticBlock"
+			StochasticBlocks.createDimension("NumberDataMappings",NumberDataMappings)
+			StochasticBlocks.createDimension("SetSizeSize",2*NumberDataMappings)
+			SetElementsSize=4 * (Nb_SS + Nb_TPP + Nb_RGP)+2 * Nb_SS 
+			if Nb_SS == 0: SetElementsSize=SetElementsSize+4
+			if Nb_APDTo>0: SetElementsSize=SetElementsSize+NumberNodes * (Nb_APDTo + 2)
+			StochasticBlocks.createDimension("SetElementsSize",SetElementsSize)
+ 
+			# fill stochastic blocks
+			DataType=StochasticBlocks.createVariable("DataType",'S1' ,("NumberDataMappings"))
+			DataType[:]=NumberDataMappings*'D'
 
-		# fill stochastic blocks
-		DataType=StochasticBlocks.createVariable("DataType",'S1' ,("NumberDataMappings"))
-		DataType[:]=NumberDataMappings*'D'
-
-		SetSize=StochasticBlocks.createVariable("SetSize","u4",("SetSizeSize"))
-		SetSizeData=NumberNodes*[Nb_APDTo,0]+2 * (Nb_SS + Nb_TPP + Nb_RGP)*[0]+2*[Nb_SS]
-		SetSize[:]=np.array(SetSizeData)
-		
-		SetElements=StochasticBlocks.createVariable("SetElements","u4",("SetElementsSize"))
-		SetElementsData=[]
-		if Nb_APDTo > 0:
-			for i in range(NumberNodes):
-				for t in range(Nb_APDTo):
-					SetElementsData=SetElementsData+[ t+ i * SSVTimeStep/UCTimeStep ]
-				SetElementsData=SetElementsData+[ i * Nb_APDTo, (i+1)*Nb_APDTo]
-		begin = NumberNodes * Nb_APDTo
-		inflow_begin=begin
-		for i in range(Nb_SS):
-			SetElementsData=SetElementsData+ [ begin + i*SSVTimeStep/UCTimeStep, begin + (i+1)*SSVTimeStep/UCTimeStep,0,SSVTimeStep/UCTimeStep ]
-		begin=begin+Nb_SS*SSVTimeStep/UCTimeStep
-		for i in range(Nb_TPP):
-			SetElementsData=SetElementsData+[begin + i * ThermalMaxPowerSize,begin + (i + 1) * ThermalMaxPowerSize,0,SSVTimeStep/UCTimeStep  ]
-		begin=begin+Nb_TPP * ThermalMaxPowerSize
-		for i in range(Nb_RGP):
-			SetElementsData=SetElementsData+[ begin + i*SSVTimeStep/UCTimeStep, begin + (i+1)*SSVTimeStep/UCTimeStep,0,SSVTimeStep/UCTimeStep]
-		if Nb_SS==0: SetElementsData=SetElementsData+[0,0,0,0]
-		else:
-			for i in range(Nb_SS):
-				SetElementsData=SetElementsData+[inflow_begin + i * SSVTimeStep/UCTimeStep]
-			reservoir_index = 0
-			for reservoir in SS.index:
-				SetElementsData=SetElementsData+[reservoir_index]
-				reservoir_index=reservoir_index+SS.loc[reservoir]['NumberReservoirs']
-		SetElements[:]=np.array(SetElementsData)
-		
-		FunctionName=StochasticBlocks.createVariable("FunctionName",str,("NumberDataMappings"))
-		FunctionNameData=[]
-		if Nb_APDTo > 0: FunctionNameData=FunctionNameData+NumberNodes*["UCBlock::set_active_power_demand"]
-		FunctionNameData=FunctionNameData+Nb_SS*["HydroUnitBlock::set_inflow"]+Nb_TPP*["ThermalUnitBlock::set_maximum_power"]+Nb_RGP*["IntermittentUnitBlock::set_maximum_power"]+["BendersBFunction::modify_constants"]
-		FunctionName[:]=np.array(FunctionNameData)
-
-		Caller=StochasticBlocks.createVariable("Caller",'S1',("NumberDataMappings"))
-		CallerData=(NumberDataMappings-1)*"B"+"F"
-		Caller[:]=np.array(list(CallerData))
-
-		# create abstract path of stochastic blocks
-		APSB=StochasticBlocks.createGroup("AbstractPath")
-		APSB.createDimension("PathDim",NumberDataMappings)
-		totalLength = (4 * Nb_SS) + (3 * Nb_TPP) + (3 * Nb_RGP) + 1
-		demandPathTotalLength = 0
-		if Nb_APDTo>0: 
-			demandPathTotalLength=2*NumberNodes
-			totalLength=totalLength+demandPathTotalLength
-		APSB.createDimension("TotalLength",totalLength)
-		
-		PathStart=APSB.createVariable("PathStart",'u4',("PathDim"))
-		PathStartData=[]
-		if Nb_APDTo>0: 
-			for i in range(NumberNodes): 
-				PathStartData=PathStartData+[2*i]
-		for s in range(Nb_SS): 
-			PathStartData=PathStartData+[demandPathTotalLength + 4*s]
-		for s in range(Nb_TPP+Nb_RGP): 
-			PathStartData=PathStartData+[demandPathTotalLength+ 4*Nb_SS  +3*s]
-		PathStartData=PathStartData+[demandPathTotalLength+ 4*Nb_SS +3*Nb_TPP+3*Nb_RGP]
-		PathStart[:]=PathStartData		
-		
-		PathNodeTypes=APSB.createVariable("PathNodeTypes",'S1',("TotalLength"))
-		PathNodeTypesData=""
-		if Nb_APDTo>0: 
-			PathNodeTypesData=NumberNodes*"OB"
-		PathNodeTypesData=PathNodeTypesData+Nb_SS*"OBBB"+(Nb_TPP+Nb_RGP)*"OBB"+"O"
-		PathNodeTypes[:]=np.array(list(PathNodeTypesData))
+			SetSize=StochasticBlocks.createVariable("SetSize","u4",("SetSizeSize"))
+			SetSizeData=NumberNodes*[Nb_APDTo,0]+2 * (Nb_SS + Nb_TPP + Nb_RGP)*[0]+2*[Nb_SS]
+			SetSize[:]=np.array(SetSizeData)
 			
-		PathGroupIndices=APSB.createVariable("PathGroupIndices",'u4',("TotalLength"))
-		PathGroupIndicesIndex=0
-		for n in range(NumberNodes):
-			PathGroupIndices[PathGroupIndicesIndex+1]=0
-			PathGroupIndicesIndex=PathGroupIndicesIndex+2
-		num_previous_units=0
-		for h in range(NumberHydroSystems): # loop on hydrosystems
-			indexUnitInHS=0
-			for u in range(int(HSSS.loc[h]['NumberUnits'].sum())):  # loop on hydrounits of hydrosystem h
+			SetElements=StochasticBlocks.createVariable("SetElements","u4",("SetElementsSize"))
+			SetElementsData=[]
+			if Nb_APDTo > 0:
+				for i in range(NumberNodes):
+					for t in range(Nb_APDTo):
+						SetElementsData=SetElementsData+[ t+ i * SSVTimeStep/UCTimeStep ]
+					SetElementsData=SetElementsData+[ i * Nb_APDTo, (i+1)*Nb_APDTo]
+			begin = NumberNodes * Nb_APDTo
+			inflow_begin=begin
+			for i in range(Nb_SS):
+				SetElementsData=SetElementsData+ [ begin + i*SSVTimeStep/UCTimeStep, begin + (i+1)*SSVTimeStep/UCTimeStep,0,SSVTimeStep/UCTimeStep ]
+			begin=begin+Nb_SS*SSVTimeStep/UCTimeStep
+			for i in range(Nb_TPP):
+				SetElementsData=SetElementsData+[begin + i * ThermalMaxPowerSize,begin + (i + 1) * ThermalMaxPowerSize,0,SSVTimeStep/UCTimeStep  ]
+			begin=begin+Nb_TPP * ThermalMaxPowerSize
+			for i in range(Nb_RGP):
+				SetElementsData=SetElementsData+[ begin + i*SSVTimeStep/UCTimeStep, begin + (i+1)*SSVTimeStep/UCTimeStep,0,SSVTimeStep/UCTimeStep]
+			if Nb_SS==0: SetElementsData=SetElementsData+[0,0,0,0]
+			else:
+				for i in range(Nb_SS):
+					SetElementsData=SetElementsData+[inflow_begin + i * SSVTimeStep/UCTimeStep]
+				reservoir_index = 0
+				for reservoir in SS.index:
+					SetElementsData=SetElementsData+[reservoir_index]
+					reservoir_index=reservoir_index+SS.loc[reservoir]['NumberReservoirs']
+			SetElements[:]=np.array(SetElementsData)
+			
+			FunctionName=StochasticBlocks.createVariable("FunctionName",str,("NumberDataMappings"))
+			FunctionNameData=[]
+			if Nb_APDTo > 0: FunctionNameData=FunctionNameData+NumberNodes*["UCBlock::set_active_power_demand"]
+			FunctionNameData=FunctionNameData+Nb_SS*["HydroUnitBlock::set_inflow"]+Nb_TPP*["ThermalUnitBlock::set_maximum_power"]+Nb_RGP*["IntermittentUnitBlock::set_maximum_power"]+["BendersBFunction::modify_constants"]
+			FunctionName[:]=np.array(FunctionNameData)
+
+			Caller=StochasticBlocks.createVariable("Caller",'S1',("NumberDataMappings"))
+			CallerData=(NumberDataMappings-1)*"B"+"F"
+			Caller[:]=np.array(list(CallerData))
+
+			# create abstract path of stochastic blocks
+			APSB=StochasticBlocks.createGroup("AbstractPath")
+			APSB.createDimension("PathDim",NumberDataMappings)
+			totalLength = (4 * Nb_SS) + (3 * Nb_TPP) + (3 * Nb_RGP) + 1
+			demandPathTotalLength = 0
+			if Nb_APDTo>0: 
+				demandPathTotalLength=2*NumberNodes
+				totalLength=totalLength+demandPathTotalLength
+			APSB.createDimension("TotalLength",totalLength)
+			
+			PathStart=APSB.createVariable("PathStart",'u4',("PathDim"))
+			PathStartData=[]
+			if Nb_APDTo>0: 
+				for i in range(NumberNodes): 
+					PathStartData=PathStartData+[2*i]
+			for s in range(Nb_SS): 
+				PathStartData=PathStartData+[demandPathTotalLength + 4*s]
+			for s in range(Nb_TPP+Nb_RGP): 
+				PathStartData=PathStartData+[demandPathTotalLength+ 4*Nb_SS  +3*s]
+			PathStartData=PathStartData+[demandPathTotalLength+ 4*Nb_SS +3*Nb_TPP+3*Nb_RGP]
+			PathStart[:]=PathStartData		
+			
+			PathNodeTypes=APSB.createVariable("PathNodeTypes",'S1',("TotalLength"))
+			PathNodeTypesData=""
+			if Nb_APDTo>0: 
+				PathNodeTypesData=NumberNodes*"OB"
+			PathNodeTypesData=PathNodeTypesData+Nb_SS*"OBBB"+(Nb_TPP+Nb_RGP)*"OBB"+"O"
+			PathNodeTypes[:]=np.array(list(PathNodeTypesData))
+				
+			PathGroupIndices=APSB.createVariable("PathGroupIndices",'u4',("TotalLength"))
+			PathGroupIndicesIndex=0
+			for n in range(NumberNodes):
 				PathGroupIndices[PathGroupIndicesIndex+1]=0
-				PathGroupIndices[PathGroupIndicesIndex+2]=h
-				PathGroupIndices[PathGroupIndicesIndex+3]=u+num_previous_units
-				indexUnitInHS=indexUnitInHS+1
-				PathGroupIndicesIndex=PathGroupIndicesIndex+4
-			num_previous_units=HSSS.loc[h]['NumberUnits'].sum()-1
-		for i in range(Nb_TPP):
-			PathGroupIndices[PathGroupIndicesIndex+1]=0
-			PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+i
-			PathGroupIndicesIndex=PathGroupIndicesIndex+3
-		for i in range(Nb_RGP):
-			PathGroupIndices[PathGroupIndicesIndex+1]=0
-			PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+NumberThermalUnits+i
-			PathGroupIndicesIndex=PathGroupIndicesIndex+3
-		
-		BendersBlocks = StochasticBlocks.createGroup("Block")
-		BendersBlocks.type="BendersBlock"
-		
-		# fill benders blocks
-		BendersBlocks.createDimension("NumVar",TotalNumberReservoirs)
-		
-		# add BendersBFunction to BendersBlocks
-		BBF=BendersBlocks.createGroup("BendersBFunction")
-		BBF.createDimension("NumVar",TotalNumberReservoirs)
-		BBF.createDimension("NumRow",TotalNumberReservoirs)
-		BBF.createDimension("NumNonzero",TotalNumberReservoirs)
-		
-		# include UCBlocks
-		UCB=BBF.createGroup("Block")
-		UCB.id=str(indexSSV)
-		UCB.filename="Block_"+str(indexSSV)+".nc4"
-		
-		# create abstract path of bendersbfunction
-		AP=BBF.createGroup("AbstractPath")
-		PathDim=TotalNumberReservoirs
-		TotalLength=3*TotalNumberReservoirs
-		AP.createDimension("PathDim",PathDim)
-		AP.createDimension("TotalLength",TotalLength)
-		
-		PathNodeTypes=AP.createVariable("PathNodeTypes",'S1',("TotalLength"))
-		PathNodeTypesData=TotalNumberReservoirs*"BBC"
-		PathNodeTypes[:]=np.array(list(PathNodeTypesData))
-		
-		PathGroupIndices=AP.createVariable("PathGroupIndices",'u4',("TotalLength"))
-		PathGroupIndicesData=[]
-		
-		for h in range(NumberHydroSystems): # loop on hydrosystems
+				PathGroupIndicesIndex=PathGroupIndicesIndex+2
+			num_previous_units=0
+			for h in range(NumberHydroSystems): # loop on hydrosystems
+				indexUnitInHS=0
+				for u in range(int(HSSS.loc[h]['NumberUnits'].sum())):  # loop on hydrounits of hydrosystem h
+					PathGroupIndices[PathGroupIndicesIndex+1]=0
+					PathGroupIndices[PathGroupIndicesIndex+2]=h
+					PathGroupIndices[PathGroupIndicesIndex+3]=u+num_previous_units
+					indexUnitInHS=indexUnitInHS+1
+					PathGroupIndicesIndex=PathGroupIndicesIndex+4
+				num_previous_units=HSSS.loc[h]['NumberUnits'].sum()-1
+			for i in range(Nb_TPP):
+				PathGroupIndices[PathGroupIndicesIndex+1]=0
+				PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+i
+				PathGroupIndicesIndex=PathGroupIndicesIndex+3
+			for i in range(Nb_RGP):
+				PathGroupIndices[PathGroupIndicesIndex+1]=0
+				PathGroupIndices[PathGroupIndicesIndex+2]=NumberHydroSystems+NumberThermalUnits+i
+				PathGroupIndicesIndex=PathGroupIndicesIndex+3
+			
+			BendersBlocks = StochasticBlocks.createGroup("Block")
+			BendersBlocks.type="BendersBlock"
+			
+			# fill benders blocks
+			BendersBlocks.createDimension("NumVar",TotalNumberReservoirs)
+			
+			# add BendersBFunction to BendersBlocks
+			BBF=BendersBlocks.createGroup("BendersBFunction")
+			BBF.createDimension("NumVar",TotalNumberReservoirs)
+			BBF.createDimension("NumRow",TotalNumberReservoirs)
+			BBF.createDimension("NumNonzero",TotalNumberReservoirs)
+			
+			# include UCBlocks
+			UCB=BBF.createGroup("Block")
+			UCB.id=str(indexSSV)
+			UCB.filename="Block_"+str(indexSSV)+".nc4"
+			
+			# create abstract path of bendersbfunction
+			AP=BBF.createGroup("AbstractPath")
+			PathDim=TotalNumberReservoirs
+			TotalLength=3*TotalNumberReservoirs
+			AP.createDimension("PathDim",PathDim)
+			AP.createDimension("TotalLength",TotalLength)
+			
+			PathNodeTypes=AP.createVariable("PathNodeTypes",'S1',("TotalLength"))
+			PathNodeTypesData=TotalNumberReservoirs*"BBC"
+			PathNodeTypes[:]=np.array(list(PathNodeTypesData))
+			
+			PathGroupIndices=AP.createVariable("PathGroupIndices",'u4',("TotalLength"))
+			PathGroupIndicesData=[]
+			
+			for h in range(NumberHydroSystems): # loop on hydrosystems
+				indexUnitInHS=0
+				for u in HSSS.loc[h].index:  # loop on hydrounits of hydrosystem h
+					for r in range(SS.loc[u]['NumberReservoirs']):
+						PathGroupIndicesData=PathGroupIndicesData+[h,indexUnitInHS,0]
+					indexUnitInHS=indexUnitInHS+1
+			PathGroupIndices[:]=PathGroupIndicesData
+			
+			PathElementIndices=AP.createVariable("PathElementIndices",'u4',("TotalLength"))
+			PathElementIndicesIndex=2
 			indexUnitInHS=0
-			for u in HSSS.loc[h].index:  # loop on hydrounits of hydrosystem h
-				for r in range(SS.loc[u]['NumberReservoirs']):
-					PathGroupIndicesData=PathGroupIndicesData+[h,indexUnitInHS,0]
-				indexUnitInHS=indexUnitInHS+1
-		PathGroupIndices[:]=PathGroupIndicesData
-		
-		PathElementIndices=AP.createVariable("PathElementIndices",'u4',("TotalLength"))
-		PathElementIndicesIndex=2
-		indexUnitInHS=0
-		for h in range(NumberHydroSystems): # loop on hydrosystems
-			for u in HSSS.loc[h].index:  # loop on hydrounits of hydrosystem h
-				for r in range(SS.loc[u]['NumberReservoirs']):
-					PathElementIndices[PathElementIndicesIndex]=r
-					PathElementIndicesIndex=PathElementIndicesIndex+3
-				indexUnitInHS=indexUnitInHS+1
-		
-		
-		PathStart=AP.createVariable("PathStart",'u4',("PathDim"))
-		PathStartData=[]
-		for r in range(TotalNumberReservoirs):
-			PathStartData=PathStartData+[3*r]
-		PathStart[:]=PathStartData
+			for h in range(NumberHydroSystems): # loop on hydrosystems
+				for u in HSSS.loc[h].index:  # loop on hydrounits of hydrosystem h
+					for r in range(SS.loc[u]['NumberReservoirs']):
+						PathElementIndices[PathElementIndicesIndex]=r
+						PathElementIndicesIndex=PathElementIndicesIndex+3
+					indexUnitInHS=indexUnitInHS+1
+			
+			
+			PathStart=AP.createVariable("PathStart",'u4',("PathDim"))
+			PathStartData=[]
+			for r in range(TotalNumberReservoirs):
+				PathStartData=PathStartData+[3*r]
+			PathStart[:]=PathStartData
+			
+			indexSubBlock=indexSubBlock+1
 		
 	# create SDDPBlock abstract path
 	# create abstract path of bendersbfunction
@@ -2785,11 +2929,11 @@ elif cfg['FormatMode']=='UC':
 
 elif cfg['FormatMode']=='SDDP':
 	logger.info('create One SDDPBlock =>'+cfg['outputpath']+'SDDPBlock.nc4')
-	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
+	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4')
 
 elif cfg['FormatMode']=='SDDPandUC':
 	logger.info('create One SDDPBlock and One UCBlock per SSV timestep =>'+cfg['outputpath']+'SDDPBlock.nc4')
-	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
+	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4')
 	for i in range(NumberSSVTimeSteps):
 		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
@@ -2800,12 +2944,12 @@ elif cfg['FormatMode']=='INVEST':
 
 elif cfg['FormatMode']=='INVESTandSDDP':
 	logger.info('create One SDDPBlock and one InvestmentBlock =>'+cfg['outputpath']+'SDDPBlock.nc4  and '+cfg['outputpath']+'InvestmentBlock.nc4'  )
-	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
+	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4')
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 
 elif cfg['FormatMode']=='INVESTandSDDPandUC':
 	logger.info('create One InvestmentBlock, One SDDPBlock and One UCBlock per SSV timestep => '+cfg['outputpath']+'SDDPBlock.nc4 , '+cfg['outputpath']+'InvestmentBlock.nc4' )
-	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4',0)
+	createSDDPBlock(cfg['outputpath']+'SDDPBlock.nc4')
 	createInvestmentBlock(cfg['outputpath']+'InvestmentBlock.nc4')
 	for i in range(NumberSSVTimeSteps):
 		logger.info('Create UCBlock '+str(i)+' from '+str(datesSSV.loc[i]['start'])+' to '+str(datesSSV.loc[i]['end'])+' => '+cfg['outputpath']+'Block_'+str(i)+'.nc4')

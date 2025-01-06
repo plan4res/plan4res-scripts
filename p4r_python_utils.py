@@ -19,10 +19,10 @@ def log_and_exit(code, rep): # temporary code to store the return status in file
 	sys.exit(code)
 	
 
-def read_input_csv(cfg, file_name_key, **kwargs):
-	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
+def read_input_csv(cfg, file_name_key,input='inputpath', **kwargs):
+	file = os.path.join(cfg[input], cfg['csvfiles'][file_name_key])
 	if not os.path.isfile(file):
-		logger.error('File '+file+' does not exist. Use key inputpath in configuration file to specify input directory.')
+		logger.error('File '+file+' does not exist. Use key ', input ,' in configuration file to specify input directory.')
 		log_and_exit(2, cfg['path'])
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
@@ -37,19 +37,21 @@ def read_input_csv(cfg, file_name_key, **kwargs):
 		log_and_exit(3, cfg['path'])
 	return data
 
-def save_input_csv(cfg, file_name_key,data, index=True, **kwargs):
-	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
+def save_input_csv(cfg, file_name_key,data,index=True,input='inputpath', **kwargs):
 	indexSave=0
-	while os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key]+'.save_'+str(indexSave)+'.csv')):
+	
+	while os.path.isfile(os.path.join(cfg[input], cfg['csvfiles'][file_name_key].split('.')[0]+'_save_'+str(indexSave)+'.csv')):
 		indexSave=indexSave+1
-	fileSave = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key]+'.save_'+str(indexSave)+'.csv')
+	fileSave = os.path.join(cfg[input], cfg['csvfiles'][file_name_key].split('.')[0]+'_save_'+str(indexSave)+'.csv')
+	
+	print('save file ',file_name_key,' index ',indexSave,' to ',fileSave)
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
 	#data.to_csv(fileSave,**kwargs)
 	data.to_csv(fileSave,index=index, **kwargs)
 	
-def write_input_csv(cfg, file_name_key,data, index=True, **kwargs):
-	file = os.path.join(cfg['inputpath'], cfg['csvfiles'][file_name_key])
+def write_input_csv(cfg, file_name_key,data, index=True,input='inputpath',  **kwargs):
+	file = os.path.join(cfg[input], cfg['csvfiles'][file_name_key])
 	indexSave=0
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
