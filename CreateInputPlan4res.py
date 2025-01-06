@@ -69,15 +69,7 @@ for datagroup in cfg['datagroups']:
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
 
-if cfg['USEPLAN4RESROOT']:
-	cfg['outputpath']=os.path.join(path, cfg['outputpath'])
-	cfg['dirTimeSeries']=os.path.join(path, cfg['timeseriespath'])
-	cfg['nomenclatureDir']=os.path.join(p4rpath, cfg['nomenclatureDir'])
-	cfg['pythonDir']=os.path.join(p4rpath, cfg['pythonDir'])
-	for datagroup in cfg['datagroups']:
-		cfg['datagroups'][datagroup]['inputdatapath']=os.path.join(path, cfg['datagroups'][datagroup]['inputdatapath'])
-else:
-	cfg['dirTimeSeries']=cfg['timeseriespath']	
+cfg['dirTimeSeries']=cfg['timeseriespath']	
 
 if not os.path.isdir(cfg['outputpath']):
 	os.mkdir(cfg['outputpath'])
