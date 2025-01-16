@@ -2293,7 +2293,7 @@ def createUCBlock(filename,id,scenario,start,end):
 		MinPowerFlow[:]=MinData
 		MaxPowerFlow=Block.createVariable("MaxPowerFlow",np.double ,("NumberLines"))
 		MaxPowerFlow[:]=MaxData
-		Susceptance=Block.createVariable("Susceptance",np.double,("NumberLines"))
+		Susceptance=Block.createVariable("LineSusceptance",np.double,("NumberLines"))
 		Susceptance[:]=SusceptanceData
 		NetworkCost=Block.createVariable("NetworkCost",np.double ,("NumberLines"))
 		NetworkCost[:]=CostData
