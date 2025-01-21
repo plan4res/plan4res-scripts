@@ -335,12 +335,14 @@ if 'SS_SeasonalStorage' in sheets:
 			HSSS.loc[hs]=SS[ SS['HydroSystem']==hs ]
 	else: 
 		logger.warning('No seasonal storage mix in this dataset')
-		NumberHydroSystems=0	
+		NumberHydroSystems=0
+		TotalNumberReservoirs=0
+		TotalNumberHydroUnits=0
 else: 
 	logger.warning('No seasonal storage mix in this dataset')
 	NumberHydroSystems=0
-
-  
+	TotalNumberReservoirs=0
+	TotalNumberHydroUnits=0
   
   
 # Read sheet TU_ThermalUnits
@@ -1324,7 +1326,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 		
 		# create polyhedral function only when requested
 		if ('WaterValues' in SS.columns) and (cfg['IncludeVU']!='None' and cfg['FormatVU']=='PerReservoir') and ((cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' or (cfg['IncludeVU']=='Last' and cfg['FormatMode']=='SingleUC')):
-
+			# case were water values are given in the csv files
 			indexReservoir=0;
 			NumberReservoirsInHydroSystem=HSSS.loc[hydrosystem]['NumberReservoirs'].sum()
 			# water values are given per each reservoir
@@ -1380,7 +1382,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 		# case with a cuts file
 		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' in SS.columns) and ( (cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' ):
 			# water values are given once for the hydrosystem
-			
+   
 			# find file
 			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
 			if len(ListWVfile)>0:
@@ -1428,8 +1430,15 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 			PolyhedralFunctionBlock.createDimension("PolyFunction_NumRow", 1)
 			PolyFunction_A=PolyhedralFunctionBlock.createVariable("PolyFunction_A",np.double,("PolyFunction_NumRow","PolyFunction_NumVar"))
 			PolyFunction_b=PolyhedralFunctionBlock.createVariable("PolyFunction_b",np.double,("PolyFunction_NumRow"))
-			Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
-			Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
+			if 'LastStepPolyFunctionA' in cfg['ParametersFormat']:
+				Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=cfg['ParametersFormat']['LastStepPolyFunctionA'])
+			else:
+				Data_A=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=0)
+			if 'LastStepPolyFunctionB' in cfg['ParametersFormat']:
+				Data_B=np.full(shape=1,fill_value =cfg['ParametersFormat']['LastStepPolyFunctionB'])
+			else:
+				Data_B=np.full(shape=(1,NumberReservoirsInHydroSystem),fill_value=0)
+
 			PolyFunction_A[0,:]=Data_A[0]
 			PolyFunction_b[0]=Data_B[0]
 
@@ -2419,56 +2428,57 @@ def createSDDPBlock(filename):
 	AdmissibleStateDownData=np.zeros(shape=(int(SS['NumberUnits'].sum()),NumberSSVTimeSteps))
 	indexHydroUnit=0
 	indexInitialState=0
-	for hs in HSSS.index:
-		for hu in HSSS.loc[hs].index:
-			for t in range( NumberSSVTimeSteps ):
-				if 'InitialVolume' in SS.columns:
-					if type(HSSS.loc[hs].loc[hu]['NumberReservoirs'])==str:
-						AdmissibleStateData[indexHydroUnit][t]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[t]['start'] ]
-					else:
-						AdmissibleStateData[indexHydroUnit][t]=HSSS.loc[hs].loc[hu]['InitialVolume']
-					AdmissibleStateDownData[indexHydroUnit][t]=HSSS.loc[hs].loc[hu]['MaxVolume']
-				if t==0:
-					if 'InitialVolume' in SS.columns:
-						if type(HSSS.loc[hs].loc[hu]['NumberReservoirs'])==str:
-							if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
-								InitialState[indexInitialState]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[0]['start'] ]
-								indexInitialState=indexInitialState+1
-							elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
-								InitialState[indexInitialState]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[0]['start'] ]
-								InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
-								indexInitialState=indexInitialState+2
-						else:
-							if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
-								InitialState[indexInitialState]=HSSS.loc[hs].loc[hu]['InitialVolume']
-								indexInitialState=indexInitialState+1
-							elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
-								InitialState[indexInitialState]=HSSS.loc[hs].loc[hu]['InitialVolume']
-								InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
-								indexInitialState=indexInitialState+1+2
-					else:
-						if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
-							InitialState[indexInitialState]=0
-							indexInitialState=indexInitialState+1
-						elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
-							InitialState[indexInitialState]=0
-							InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
-							indexInitialState=indexInitialState+1+2
-			indexHydroUnit=indexHydroUnit+1
-	indexHydroUnit=0
-	indexAdmissibleState=0
-	for t in range( NumberSSVTimeSteps ):
-		indexHydroUnit=0
+	if NumberHydroSystems >0:
 		for hs in HSSS.index:
 			for hu in HSSS.loc[hs].index:
-				if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
-					AdmissibleState[indexAdmissibleState]=AdmissibleStateData[indexHydroUnit][t]
-					indexAdmissibleState=indexAdmissibleState+1
-				elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
-					AdmissibleState[indexAdmissibleState]=AdmissibleStateData[indexHydroUnit][t]
-					AdmissibleState[indexAdmissibleState+1]=AdmissibleStateDownData[indexHydroUnit][t]
-					indexAdmissibleState=indexAdmissibleState+2
+				for t in range( NumberSSVTimeSteps ):
+					if 'InitialVolume' in SS.columns:
+						if type(HSSS.loc[hs].loc[hu]['NumberReservoirs'])==str:
+							AdmissibleStateData[indexHydroUnit][t]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[t]['start'] ]
+						else:
+							AdmissibleStateData[indexHydroUnit][t]=HSSS.loc[hs].loc[hu]['InitialVolume']
+						AdmissibleStateDownData[indexHydroUnit][t]=HSSS.loc[hs].loc[hu]['MaxVolume']
+					if t==0:
+						if 'InitialVolume' in SS.columns:
+							if type(HSSS.loc[hs].loc[hu]['NumberReservoirs'])==str:
+								if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
+									InitialState[indexInitialState]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[0]['start'] ]
+									indexInitialState=indexInitialState+1
+								elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
+									InitialState[indexInitialState]=DeterministicTimeSeries[HSSS.loc[hs].loc[hu]['InitialVolume']].loc[datesSSV.loc[0]['start'] ]
+									InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
+									indexInitialState=indexInitialState+2
+							else:
+								if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
+									InitialState[indexInitialState]=HSSS.loc[hs].loc[hu]['InitialVolume']
+									indexInitialState=indexInitialState+1
+								elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
+									InitialState[indexInitialState]=HSSS.loc[hs].loc[hu]['InitialVolume']
+									InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
+									indexInitialState=indexInitialState+1+2
+						else:
+							if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
+								InitialState[indexInitialState]=0
+								indexInitialState=indexInitialState+1
+							elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
+								InitialState[indexInitialState]=0
+								InitialState[indexInitialState+1]=HSSS.loc[hs].loc[hu]['MaxVolume']
+								indexInitialState=indexInitialState+1+2
 				indexHydroUnit=indexHydroUnit+1
+		indexHydroUnit=0
+		indexAdmissibleState=0
+		for t in range( NumberSSVTimeSteps ):
+			indexHydroUnit=0
+			for hs in HSSS.index:
+				for hu in HSSS.loc[hs].index:
+					if HSSS.loc[hs].loc[hu]['NumberReservoirs']==1:
+						AdmissibleState[indexAdmissibleState]=AdmissibleStateData[indexHydroUnit][t]
+						indexAdmissibleState=indexAdmissibleState+1
+					elif HSSS.loc[hs].loc[hu]['NumberReservoirs']==2:
+						AdmissibleState[indexAdmissibleState]=AdmissibleStateData[indexHydroUnit][t]
+						AdmissibleState[indexAdmissibleState+1]=AdmissibleStateDownData[indexHydroUnit][t]
+						indexAdmissibleState=indexAdmissibleState+2
+					indexHydroUnit=indexHydroUnit+1
 	
 	##################################################################################
 	# create stochastic blocks and benders blocks
@@ -2888,18 +2898,22 @@ if cfg['IncludeScenarisedData'] or 'SDDP' in cfg['FormatMode'] or 'INVEST' in cf
 		DemandScenarios=create_demand_scenarios()
 		Nb_APDTo=TimeHorizonUC
 		Nb_APD=len(DemandScenarios.index)
+		logger.info(str(Nb_APD)+' demand series')
 	if NumberIntermittentUnits>0 and 'Renewable:MaxPowerProfile' in ScenarisedData: 
 		logger.info('read renewable generation timeseries')
 		RESScenarios=create_res_scenarios()
 		Nb_RGP=len(RESScenarios.index)
+		logger.info(str(Nb_RGP)+' intermittent series')
 	if NumberHydroSystems>0 and 'Hydro:Inflows' in ScenarisedData: 
 		logger.info('read inflows timeseries')
 		InflowsScenarios=create_inflows_scenarios()
 		Nb_SS=len(InflowsScenarios.index)
+		logger.info(str(Nb_SS)+' inflows series')		
 	if NumberThermalUnits>=0 and 'Thermal:MaxPowerProfile' in ScenarisedData: 
 		logger.info('read thermal maxpower timeseries')
 		ThermalScenarios=create_thermal_scenarios()
 		Nb_TPP=len(ThermalScenarios.index)
+		logger.info(str(Nb_TPP)+' thermal series')
 	ThermalMaxPowerSize=SSVTimeStep/ThermalMaxPowerTimeSpan
 	NumberDataMappings = Nb_SS + Nb_TPP + Nb_RGP + 1
 	if Nb_APDTo > 0:
