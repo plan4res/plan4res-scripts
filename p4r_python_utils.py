@@ -47,7 +47,6 @@ def save_input_csv(cfg, file_name_key,data,index=True,input='inputpath', **kwarg
 	print('save file ',file_name_key,' index ',indexSave,' to ',fileSave)
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
-	#data.to_csv(fileSave,**kwargs)
 	data.to_csv(fileSave,index=index, **kwargs)
 	
 def write_input_csv(cfg, file_name_key,data, index=True,input='inputpath',  **kwargs):
@@ -55,7 +54,6 @@ def write_input_csv(cfg, file_name_key,data, index=True,input='inputpath',  **kw
 	indexSave=0
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
-	#data.to_csv(file,**kwargs)
 	data.to_csv(file,index=index, **kwargs)
 
 

@@ -92,10 +92,10 @@ if 'FileNumScenPrefix' not in cfg:
 if nbargs>4:
 	namedataset=sys.argv[4]
 	if 'path' in cfg:
-		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
-		#cfg['path']='/data/local/'+namedataset+'/'
-		cfg['path']=os.path.join(path, 'data/local', namedataset)
+		#cfg['path']='/data'+namedataset+'/'
+		cfg['path']=os.path.join(path, 'data', namedataset)
 
 	logger.info('posttreat '+namedataset)
 

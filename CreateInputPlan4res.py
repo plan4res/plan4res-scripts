@@ -42,11 +42,11 @@ with open(os.path.join(path, settings_create),"r") as mysettings:
 if nbargs>2:
 	namedataset=sys.argv[2]
 	if 'path' in cfg:
-		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
-		cfg['path']=os.path.join(path, 'data/local', namedataset)
+		cfg['path']=os.path.join(path, 'data', namedataset)
 	if 'p4rpath' in cfg:
-		cfg['p4rpath']=cfg['p4rpath'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+		cfg['p4rpath']=cfg['p4rpath'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
 		cfg['p4rpath']=p4rpath
 if 'outputpath' not in cfg: 

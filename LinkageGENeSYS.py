@@ -33,8 +33,8 @@ with open(os.path.join(path, settings),"r") as mysettings:
 if nbargs>1:
 	namedataset=sys.argv[2]
 	if cfg['USEPLAN4RESROOT']: 
-		cfg['path']=os.path.join(path, 'data/local', namedataset)
-	else: cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+		cfg['path']=os.path.join(path, 'data', namedataset)
+	else: cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	
 if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings/')
 if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath']=os.path.join(cfg['path'], 'genesys_inputs/')

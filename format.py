@@ -45,10 +45,10 @@ else:
 if nbargs>3:
 	namedataset=sys.argv[3]
 	if 'path' in cfg:
-		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-2],namedataset)
+		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
-		cfg['path']=os.path.join(path, 'data/local', namedataset)
-		#cfg['path']='/data/local/'+namedataset+'/'
+		cfg['path']=os.path.join(path, 'data', namedataset)
+		#cfg['path']='/data/'+namedataset+'/'
 cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
 cfg['outputpath']=os.path.join(cfg['path'], cfg['outputDir'])
 
