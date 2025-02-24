@@ -765,8 +765,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 	FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 	
-	world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-	#world.to_csv('world.csv')
 	if cfg['map']:
 		####################################################################################################
 		# Create map of selected regions
