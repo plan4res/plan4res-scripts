@@ -64,7 +64,6 @@ if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpat
 for datagroup in cfg['datagroups']:
 	if 'inputdatapath' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdatapath']='IAMC'
-	#cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'])
 	cfg['datagroups'][datagroup]['inputdatapath'] = os.path.join(cfg['path'], cfg['datagroups'][datagroup]['inputdatapath'])
 	if 'inputdata' not in cfg['datagroups'][datagroup]:
 		cfg['datagroups'][datagroup]['inputdata']=namedataset+'.xlsx'
@@ -90,9 +89,9 @@ if isSecondary: partitionSecondary=cfg['CouplingConstraints']['SecondaryDemand']
 isInvest= cfg['ParametersCreate']['invest']
 
 # connect to the openentrance scenario explorer (set credentials)
-if cfg['mode_annual']=='platform' or cfg['mode_subannual']=='platform':
-	pyam.iiasa.set_config(cfg['user'],cfg['password'])
-	pyam.iiasa.Connection('openentrance')
+if cfg['ScenarioExplorer']['annual'] or cfg['ScenarioExplorer']['subannual']:
+	pyam.iiasa.set_config(cfg['ScenarioExplorer']['user'],cfg['ScenarioExplorer']['password'])
+	pyam.iiasa.Connection(cfg['ScenarioExplorer']['instance'])
 
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
@@ -159,13 +158,14 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listGlobalReg=[]
 
 	# define list of aggregated regions
-	if cfg['ParametersCreate']['ExistsNuts']:
-		with open(os.path.join(cfg['nomenclatureDir'], "region/nuts3.yaml"),"r",encoding='UTF-8') as nutsreg:
-			nuts3=yaml.safe_load(nutsreg)
-		with open(os.path.join(cfg['nomenclatureDir'], "region/nuts2.yaml"),"r",encoding='UTF-8') as nutsreg:
-			nuts2=yaml.safe_load(nutsreg)
-		with open(os.path.join(cfg['nomenclatureDir'], "region/nuts1.yaml"),"r",encoding='UTF-8') as nutsreg:
-			nuts1=yaml.safe_load(nutsreg)
+	if 'ExistsNuts' in cfg['ParametersCreate']:
+		if cfg['ParametersCreate']['ExistsNuts']:
+			with open(os.path.join(cfg['nomenclatureDir'], "region/nuts3.yaml"),"r",encoding='UTF-8') as nutsreg:
+				nuts3=yaml.safe_load(nutsreg)
+			with open(os.path.join(cfg['nomenclatureDir'], "region/nuts2.yaml"),"r",encoding='UTF-8') as nutsreg:
+				nuts2=yaml.safe_load(nutsreg)
+			with open(os.path.join(cfg['nomenclatureDir'], "region/nuts1.yaml"),"r",encoding='UTF-8') as nutsreg:
+				nuts1=yaml.safe_load(nutsreg)
 	with open(os.path.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
 		countries=yaml.safe_load(nutsreg)
 	with open(os.path.join(cfg['nomenclatureDir'], "region/ehighway.yaml"),"r",encoding='UTF-8') as nutsreg:
@@ -213,35 +213,36 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	listRegGet=listLocalReg+listGlobalReg
 	
 	# treat cases where disaggregation level is nuts1/2/3
-	if cfg['ParametersCreate']['ExistsNuts']:
-		minaggr=''
-		nuts3list= {}
-		nuts2list= {}
-		nuts1list= {}
-		for k in nuts1[0]['NUTS1']: nuts1list.update(k)
-		for k in nuts2[0]['NUTS2']: nuts2list.update(k)
-		for k in nuts3[0]['NUTS3']: nuts3list.update(k)
-		# create lists of nuts per countries
-		countryNuts3={v:[] for v in listcountries}
-		{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
-		countryNuts2={v:[] for v in listcountries}
-		{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
-		countryNuts1={v:[] for v in listcountries}
-		{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
-		
-		# extend list of regions to get with regions from datagroups
-		if 'nuts3' in listRegGet:
-			while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
-			listRegGet=listRegGet+list(nuts3.keys())
-			minaggr='nuts3'	
-		if 'nuts2' in listRegGet:
-			while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
-			listRegGet=listRegGet+list(nuts2.keys())
-			minaggr='nuts2'	
-		if 'nuts1' in listRegGet:
-			while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
-			listRegGet=listRegGet+list(nuts1.keys())
-			minaggr='nuts1'	
+	if 'ExistsNuts' in cfg['ParametersCreate']:
+		if cfg['ParametersCreate']['ExistsNuts']:
+			minaggr=''
+			nuts3list= {}
+			nuts2list= {}
+			nuts1list= {}
+			for k in nuts1[0]['NUTS1']: nuts1list.update(k)
+			for k in nuts2[0]['NUTS2']: nuts2list.update(k)
+			for k in nuts3[0]['NUTS3']: nuts3list.update(k)
+			# create lists of nuts per countries
+			countryNuts3={v:[] for v in listcountries}
+			{countryNuts3[v['country']].append(k) for k,v in nuts3list.items()}
+			countryNuts2={v:[] for v in listcountries}
+			{countryNuts2[v['country']].append(k) for k,v in nuts2list.items()}
+			countryNuts1={v:[] for v in listcountries}
+			{countryNuts1[v['country']].append(k) for k,v in nuts1list.items()}
+			
+			# extend list of regions to get with regions from datagroups
+			if 'nuts3' in listRegGet:
+				while 'nuts3' in listRegGet: listRegGet.remove('nuts3')
+				listRegGet=listRegGet+list(nuts3.keys())
+				minaggr='nuts3'	
+			if 'nuts2' in listRegGet:
+				while 'nuts2' in listRegGet: listRegGet.remove('nuts2')
+				listRegGet=listRegGet+list(nuts2.keys())
+				minaggr='nuts2'	
+			if 'nuts1' in listRegGet:
+				while 'nuts1' in listRegGet: listRegGet.remove('nuts1')
+				listRegGet=listRegGet+list(nuts1.keys())
+				minaggr='nuts1'	
 	if 'countries' in listRegGet:
 		while 'countries' in listRegGet: listRegGet.remove('countries')
 		listRegGet=listRegGet+list(countries.keys())
@@ -251,7 +252,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	# loop on all different data sources
 		if 'scenario' in cfg['datagroups'][datagroup]: scenget=cfg['datagroups'][datagroup]['scenario']
 		else: scenget=cfg['scenario']
-		if cfg['ParametersCreate']['debug']: logger.info('reading '+datagroup)
+		if 'debug' in cfg['ParametersCreate']:
+			if cfg['ParametersCreate']['debug']: logger.info('reading '+datagroup)
 		
 		listvardatagroup=[]
 		listlocalvar=[] # list of variables which are not 'global'
@@ -297,8 +299,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		
 		
-		if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='platform') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='platform'):
-			if cfg['ParametersCreate']['debug']: logger.info('download data from platform')
+		if ( cfg['datagroups'][datagroup]['subannual'] and cfg['ScenarioExplorer']['subannual'] ) or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['ScenarioExplorer']['annual']):
+			if 'debug' in cfg['ParametersCreate']:
+				if cfg['ParametersCreate']['debug']: logger.info('download data from platform')
 			
 			groupdf=pyam.read_iiasa('openentrance',model=cfg['datagroups'][datagroup]['model'],
 				variable=listvardatagroup,
@@ -326,11 +329,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				else:
 					AnnualDataFrame=AnnualDataFrame.append(groupdf)
 				
-		if not (cfg['mode_annual']=='platform' and cfg['mode_subannual']=='platform'):
+		if not (cfg['ScenarioExplorer']['annual'] and cfg['ScenarioExplorer']['subannual']):
 			# load data from files per data source (previously uploaded from platform)
-			if cfg['ParametersCreate']['debug']: logger.info('open data files')
+			if 'debug' in cfg['ParametersCreate']:
+				if cfg['ParametersCreate']['debug']: logger.info('open data files')
 		
-			if ( cfg['datagroups'][datagroup]['subannual'] and cfg['mode_subannual']=='files') or ( not cfg['datagroups'][datagroup]['subannual'] and cfg['mode_annual']=='files'):
+			if ( cfg['datagroups'][datagroup]['subannual'] and not cfg['ScenarioExplorer']['subannual']) or ( not cfg['datagroups'][datagroup]['subannual'] and not cfg['ScenarioExplorer']['annual']):
 				logger.info('reading datagroup '+datagroup+' from '+os.path.join(cfg['genesys_inputpath'], cfg['datagroups'][datagroup]['inputdatapath'], cfg['datagroups'][datagroup]['inputdata']))
 														
 				if 'Start' in cfg['datagroups'][datagroup]['inputdata']:
@@ -344,7 +348,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				SubAdfdatagroup=pyam.IamDataFrame(pd.DataFrame(columns=['model','scenario','region','variable','unit','subannual',str(cfg['year'])]))
 				
 				# read data as a IAMDataFrame
-				if cfg['ParametersCreate']['debug']: logger.info('read file '+file)
+				if 'debug' in cfg['ParametersCreate']:
+					if cfg['ParametersCreate']['debug']: logger.info('read file '+file)
 				if not os.path.isfile(file):
 					logger.error('\nError: '+file+' does not exist.') 
 					logger.error('Check file '+settings_create+'. You can specify the input data repository using key inputdatapath (default=IAMC) and file name using key inputdata (default=name of the study+.xlsx).')
@@ -358,33 +363,39 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					if len(df['Subannual'].unique()==1): df=df.drop(['Subannual'],axis=1)
 				dfdatagroup=pyam.IamDataFrame(data=df)
 
-				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:
-					if cfg['ParametersCreate']['debug']: logger.info('renaming ISO3')
+				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:				
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('renaming ISO3')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso3)
 				if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['local']:
-					if cfg['ParametersCreate']['debug']: logger.info('renaming ISO2')
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('renaming ISO2')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso2)
 				
-				if cfg['ParametersCreate']['debug']: logger.info('change country names')
+				if 'debug' in cfg['ParametersCreate']: 
+					if cfg['ParametersCreate']['debug']: logger.info('change country names')
 				dfdatagroup=dfdatagroup.filter(region=listRegGet)
 				
-				if cfg['ParametersCreate']['debug']: logger.info('filter countries')
+				if 'debug' in cfg['ParametersCreate']: 
+					if cfg['ParametersCreate']['debug']: logger.info('filter countries')
 				# if there are data at lower granularity than country or cluster (only country until now), aggregate
 				firstcountry=1
-				if cfg['ParametersCreate']['ExistsNuts']:
-					for country in listcountries:
-						
-						# create list of nuts of the country
-						listNuts1=countryNuts1[country]
-						listNuts2=countryNuts2[country]
-						listNuts3=countryNuts3[country]
-						listNuts=listNuts1+listNuts2+listNuts3
-						NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
-						# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
-						
-						if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
-							if cfg['ParametersCreate']['debug']: logger.info('aggregating nuts')
-							dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
+				if 'ExistsNuts' in cfg['ParametersCreate']:
+					if cfg['ParametersCreate']['ExistsNuts']:
+						for country in listcountries:
+							
+							# create list of nuts of the country
+							listNuts1=countryNuts1[country]
+							listNuts2=countryNuts2[country]
+							listNuts3=countryNuts3[country]
+							listNuts=listNuts1+listNuts2+listNuts3
+							NumberOfNutsLists=int(len(listNuts1)>0)+int(len(listNuts2)>0)+int(len(listNuts3)>0)
+							# To be implemented: include weights to aggregation, weight=1/NumberOfNutsLists
+							
+							if (len(listNuts)>0 and ('NoNutsAggregation' not in cfg)): 
+								if 'debug' in cfg['ParametersCreate']: 
+									if cfg['ParametersCreate']['debug']: logger.info('aggregating nuts')
+								dfdatagroup.aggregate_region(dfdatagroup.variable,region=country, subregions=listNuts, append=True)
 
 				dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
 				dfdatagroup=dfdatagroup.filter(scenario=scenget)
@@ -472,8 +483,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 											listvarmean.append(newvar)
 	if(cfg['aggregateregions']!=None):
 		for reg in cfg['aggregateregions'].keys():
-			if cfg['ParametersCreate']['debug']: logger.info('aggregating ' +reg+' for subregions:')
-			if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'][reg])
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('aggregating ' +reg+' for subregions:')
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'][reg])
 			# creation of aggregated timeseries
 			listTypes={'ZV': cfg['CouplingConstraints']['ActivePowerDemand']['SumOf'],'RES':cfg['technos']['res']+cfg['technos']['runofriver'],'SS':['Inflows']}
 			for typeData in listTypes:
@@ -597,7 +610,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN.fillna(value=0.0)
 		
 		# delete lines which start/end in same aggregated
-		if cfg['ParametersCreate']['debug']: logger.info('deleting lines which start and end in same aggregated region')
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('deleting lines which start and end in same aggregated region')
 		IN['Name']=IN.index
 		IN['StartLine']=IN['Name'].str.split('>',expand=True)[0]
 		IN['EndLine']=IN['Name'].str.split('>',expand=True)[1]
@@ -617,8 +631,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		
 		DeleteLines=[]
 		# sum lines with start in same aggregated region AND end in same other aggregated region
-		if cfg['ParametersCreate']['debug']: logger.info('aggregate lines which start or end in same aggregated region')
-		if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'])
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('aggregate lines which start or end in same aggregated region')
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info(cfg['aggregateregions'])
 		if(cfg['aggregateregions']!=None):
 			for AggReg1 in cfg['partition'][ partitionDemand ]:
 				if AggReg1 in cfg['aggregateregions'].keys(): # AggReg1 is an aggregated region
@@ -683,7 +699,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN.drop(RowsToDelete )
 
 		# merge lines reg1>reg2 reg2>reg1
-		if cfg['ParametersCreate']['debug']: logger.info('merging symetric lines')
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('merging symetric lines')
 		IN['MinPowerFlow']=0
 		NewLines=[]
 		LinesToDelete=[]
@@ -725,7 +742,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		IN=IN[ listcols ]
 		
 		# delete lines which do not start and end in a zone in partition
-		if cfg['ParametersCreate']['debug']: logger.info('delete lines which are not in partition')
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('delete lines which are not in partition')
 		LinesToDelete=[]
 		for line in IN.index:
 			regstart=line.split('>')[0]
@@ -786,11 +804,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		else: isInertia=False
 			
 		# compute missing global values
-		if cfg['ParametersCreate']['debug']: logger.info('compute missing Coupling constraints')
-		isTotalEnergy=False
-		
-		
-		
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('compute missing Coupling constraints')
+		isTotalEnergy=False		
 		isHeating=False
 		isTransport=False
 		isCooling=False
@@ -895,7 +911,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					'value':[Inertia,MaxInertia,CostInertia],'year':[cfg['year'],cfg['year'],cfg['year']]})
 
 		# include timeseries names from TimeSeries dictionnary and compute scaling coefficient
-		if cfg['ParametersCreate']['debug']: logger.info('include time series and compute scaling coefficients')
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('include time series and compute scaling coefficients')
 		for row in datapartition.index:
 			mytype=datapartition.loc[row,'Type']
 			if mytype in ListTypesZV:
@@ -911,11 +928,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	logger.info('treat global variables ')
 	globalvars=pd.Series(str)
 	for datagroup in cfg['listdatagroups']:
-		if cfg['ParametersCreate']['debug']: logger.info('treat datagroup '+datagroup)
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']: logger.info('treat datagroup '+datagroup)
 		if 'techno' in cfg['datagroups'][datagroup]['listvariables'].keys():
 			for techno in cfg['datagroups'][datagroup]['listvariables']['techno'].keys():
 				if 'global' in cfg['datagroups'][datagroup]['listvariables']['techno'][techno].keys():
-					if cfg['ParametersCreate']['debug']: logger.info('there are global vars for:'+datagroup+',techno:'+techno)
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('there are global vars for:'+datagroup+',techno:'+techno)
 					if type(cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global'])==list:
 						for var in cfg['datagroups'][datagroup]['listvariables']['techno'][techno]['global']:
 							for fuel in cfg['technos'][techno]:
@@ -950,7 +969,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		v=0
 		# loop on technos 
 		for oetechno in cfg['technos']['thermal']:
-			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			TU=pd.DataFrame({'Name':oetechno,'region':listregions})
 			TU=TU.set_index('region')
 			for variable in vardict['Input']['VarTU']:
@@ -970,7 +990,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					varname=vardict['Input']['VarTU'][variable]+oetechno
 				
 				if varname not in bigdata['variable'].unique():
-					if cfg['ParametersCreate']['debug']: logger.info('variable '+varname+' not in dataset')
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+varname+' not in dataset')
 					if not isMainVar:
 						TreatVar=False
 					TreatVar=False
@@ -985,12 +1006,14 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					isGlobal=False
 					Global=0
 					if vardict['Input']['VarTU'][variable]+oetechno in globalvars.index:
-						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+oetechno]+' techno '+oetechno)
+						if 'debug' in cfg['ParametersCreate']: 
+							if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+oetechno]+' techno '+oetechno)
 						isGlobal=True
 						Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+oetechno] ]
 					if isFuel:
 						if vardict['Input']['VarTU'][variable]+fuel in globalvars.index:
-							if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
+							if 'debug' in cfg['ParametersCreate']: 
+								if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
 							isGlobal=True
 							Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+fuel] ]
 						
@@ -1073,7 +1096,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		listTU=BigTU.columns.tolist()
 		listcols= ['Zone','Name','NumberUnits','MaxPower','VariableCost']
 		if 'Capacity' in listTU: listcols.append('Capacity')
-		if 'Energy' in listTU and cfg['ParametersCreate']['debug']: listcols.append('Energy')
+		if 'debug' in cfg['ParametersCreate']: 
+			if 'Energy' in listTU and cfg['ParametersCreate']['debug']: listcols.append('Energy')
 		if 'CO2Rate' in listTU: listcols.append('CO2Rate')
 		if isDynamic:
 			if 'MinPower' in listTU: listcols.append('MinPower')
@@ -1114,7 +1138,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		logger.info('Creating SS_SeasonalStorage')
 		v=0
 		for oetechno in	cfg['technos']['reservoir']:
-			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			SS=pd.DataFrame({'Name':oetechno,'region':listregions})
 			SS=SS.set_index('region')
 			
@@ -1129,7 +1154,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					
 					Global=data[variable][globalvars[varname] ]
@@ -1223,10 +1249,15 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				BigSS=pd.concat([BigSS,SS])
 		
 		listSS=BigSS.columns.tolist()
-		if cfg['ParametersCreate']['debug']:
-			listcols= ['Name','Zone','HydroSystem','NumberUnits','MaxPower','MinPower',
-			'MaxVolume','MinVolume','Inflows','InflowsProfile','InitialVolume', 
-			'TurbineEfficiency','PumpingEfficiency','AddPumpedStorage']
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']:
+				listcols= ['Name','Zone','HydroSystem','NumberUnits','MaxPower','MinPower',
+				'MaxVolume','MinVolume','Inflows','InflowsProfile','InitialVolume', 
+				'TurbineEfficiency','PumpingEfficiency','AddPumpedStorage']
+			else:
+				listcols= ['Name','Zone','HydroSystem','NumberUnits','MaxPower','MinPower',
+				'MaxVolume','MinVolume','Inflows','InflowsProfile','InitialVolume', 
+				'TurbineEfficiency','PumpingEfficiency']
 		else:
 			listcols= ['Name','Zone','HydroSystem','NumberUnits','MaxPower','MinPower',
 			'MaxVolume','MinVolume','Inflows','InflowsProfile','InitialVolume', 
@@ -1253,7 +1284,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		logger.info('     Treating Hydro Pumped Storage')
 		isVarHydroStorage=pd.Series()
 		for oetechno in	cfg['technos']['hydrostorage']:
-			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			for variable in vardict['Input']['VarSTS|Hydro']:
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
@@ -1269,7 +1301,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				Global=0
 				# treat global variables
 				if varname in globalvars.index:
-					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname] ]
@@ -1368,7 +1401,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		# treat batteries
 		isVarBattery=pd.Series()
 		for oetechno in	cfg['technos']['battery']:
-			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			BAT=pd.DataFrame({'region':listregions})
 			BAT=BAT.set_index('region')
 			for variable in vardict['Input']['VarSTS|Battery']:
@@ -1386,7 +1420,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[varname]+' techno '+oetechno)
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname] ]
@@ -1503,7 +1538,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# loop on appliances
 			for appliance in cfg['technos']['demandresponseloadshifting']:
-				if cfg['ParametersCreate']['debug']: logger.info('treat '+appliance)
+				if 'debug' in cfg['ParametersCreate']: 
+					if cfg['ParametersCreate']['debug']: logger.info('treat '+appliance)
 				DRLS=pd.DataFrame({'region':cfg['partition'][partitionDemand]})
 				DRLS=DRLS.set_index('region')
 				EMminusE=pd.Series(index={'region':cfg['partition'][partitionDemand]})
@@ -1599,8 +1635,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					
 			#####################################"
 		
-		if cfg['ParametersCreate']['debug']:
-			listcols= ['Name','Zone','NumberUnits','MaxPower','MaxVolume','TurbineEfficiency','PumpingEfficiency','MinPower','MinVolume','Inflows','InitialVolume','AddPumpedStorage']
+		if 'debug' in cfg['ParametersCreate']: 
+			if cfg['ParametersCreate']['debug']:
+				listcols= ['Name','Zone','NumberUnits','MaxPower','MaxVolume','TurbineEfficiency','PumpingEfficiency','MinPower','MinVolume','Inflows','InitialVolume','AddPumpedStorage']
+			else:
+				listcols= ['Name','Zone','NumberUnits','MaxPower','MaxVolume','TurbineEfficiency','PumpingEfficiency','MinPower','MinVolume']
 		else:
 			listcols= ['Name','Zone','NumberUnits','MaxPower','MaxVolume','TurbineEfficiency','PumpingEfficiency','MinPower','MinVolume']
 
@@ -1627,7 +1666,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		logger.info('Creating RES_RenewableUnits')
 		isVarRes=pd.Series()
 		for oetechno in	cfg['technos']['res']+cfg['technos']['runofriver']:
-			if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
+			if 'debug' in cfg['ParametersCreate']: 
+				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			RES=pd.DataFrame({'Name':oetechno,'region':listregions})
 			RES=RES.set_index('region')
 			for variable in vardict['Input']['VarRES']:
@@ -1645,7 +1685,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isGlobal=False
 				Global=0
 				if varname in globalvars.index:
-					if cfg['ParametersCreate']['debug']: logger.info(str(varname)+' is global')
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info(str(varname)+' is global')
 					isGlobal=True
 					if len(data[variable])>0:
 						Global=data[variable][globalvars[varname]]
