@@ -105,7 +105,7 @@ TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 cfg['dir']=os.path.join(cfg['path'], cfg['Resultsdir'])
 #cfg['inputpath']=cfg['path']+cfg['inputDir']
 cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
-#if 'configDir' not in cfg: cfg['configDir']=cfg['path']+'settings/'
+if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
 if 'nomenclatureDir' not in cfg: 
 	cfg['nomenclatureDir']='scripts/python/openentrance/definitions/'
 cfg['nomenclatureDir']=os.path.join(p4rpath, cfg['nomenclatureDir'])
@@ -167,7 +167,7 @@ if isLatex:
 # create the dictionnary of variables containing the correspondence between plan4res (SMS++) variable 
 # names and openentrance nomenclature variable names
 vardict={}
-with open(cfg['pythonDir']+"VariablesDictionnary.yml","r") as myvardict:
+with open(os.path.join(path,cfg['configDir'], "VariablesDictionnary.yml"),"r") as myvardict:
 	vardict=yaml.safe_load(myvardict)
 
 # it may be difficult to install geopandas, this allows to skip it (not install, not use)
