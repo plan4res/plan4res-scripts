@@ -407,8 +407,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		listTechnosRES=InputData.Name.unique().tolist()
 		if isInvest:
 			for row in InputData.index:
-				if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
-					listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	
+				if 'MaxAddedCapacity' in InputData.columns and 'MaxRetCapacity' in InputData.columns:
+					if (InputData.loc[row,'MaxAddedCapacity']>0)+(InputData.loc[row,'MaxRetCapacity']>0):
+						listInvestedAssets.append( (InputData.loc[row,'Zone'],InputData.loc[row,'Name']) )	
 		for techno in listTechnosRES:
 			if techno not in listTechnosInDataset:
 				listTechnosInDataset.append(techno)
@@ -427,7 +428,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			InputStartUpCost[techno]=0
 			InputStartUpCost[techno]=0
 			if isInvest:
-				IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
+				if 'MaxAddedCapacity' in InputData.columns and 'MaxRetCapacity' in InputData.columns:
+					IsInvestedTechno[techno]=(df['MaxAddedCapacity']>0)+(df['MaxRetCapacity']>0)
+				else:
+					IsInvestedTechno[techno]=False
 	else: listTechnosRES=[]	
 	logger.info('Variable renewable technos: '+str(listTechnosRES))	
 
@@ -2932,7 +2936,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 
 			if cfg['usevu']:
 				logger.info('compute SMS VB')
-				SMSVB=pd.read_csv(cfg['dirScen'] +'BellmanValuesOUT.csv')
+				SMSVB=pd.read_csv(cfg['dirSto'] +'BellmanValuesOUT.csv')
 				cols=['Timestep']+cfg['ReservoirRegions']+['b']
 				SMSVB.columns=cols
 				VolSMS=pd.DataFrame(columns=['Name','VolumeIni','VolumeFin']) 
