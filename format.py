@@ -1380,11 +1380,14 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 		###############################
 		
 		# case with a cuts file
-		elif (cfg['FormatVU']=='Polyhedral') and ('WaterValues' in SS.columns) and ( (cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' ):
+		elif (cfg['FormatVU']=='Polyhedral') and ( (cfg['IncludeVU']=='Last' and id==NumberSSVTimeSteps-1) or cfg['IncludeVU']=='All' ):
 			# water values are given once for the hydrosystem
    
 			# find file
-			ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
+			if 'WaterValues' in SS.columns:
+				ListWVfile=[elem for elem in list(HSSS.loc[hydrosystem]['WaterValues']) if len(elem)>0 ]					
+			else:
+				ListWVfile=[ 'bellmanvalues.csv' ]
 			if len(ListWVfile)>0:
 				WVfile=ListWVfile[0]
 				logger.info('Add Bellman values from file')
