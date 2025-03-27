@@ -17,6 +17,24 @@ import sys
 
 from p4r_python_utils import *
 
+def find_entry(variable_name, dictionary):
+	for entry, variables in dictionary.items():
+		for item in variables:
+			if variable_name.startswith(item):
+				return entry
+	return None
+
+def search_variable(variable_name, data):
+	entry = find_entry(variable_name, data.get('coupling', {}))
+	if entry:
+		return entry
+	for sub_dict in data.get('techno', {}).values():
+		entry = find_entry(variable_name, sub_dict)
+		if entry:
+			return entry
+	return None
+
+
 path = get_path()
 logger.info('path='+path)
 p4rpath = os.environ.get("PLAN4RESROOT")
@@ -309,8 +327,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				scenario=scenget)
 			
 			# remove rows for global variables / local regions or local variables / global regions
-			groupdf=groupdf.filter(region=globalreg, variable=listlocalvar, keep=False)
-			groupdf=groupdf.filter(region=listLocalReg, variable=listglobalvar, keep=False)
+			#groupdf=groupdf.filter(region=globalreg, variable=listlocalvar, keep=False)			
+			#groupdf=groupdf.filter(region=listLocalReg, variable=listglobalvar, keep=False)
 			
 			# rename regions if necessary
 			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
@@ -400,10 +418,50 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				dfdatagroup=dfdatagroup.filter(model=cfg['datagroups'][datagroup]['model'])
 				dfdatagroup=dfdatagroup.filter(scenario=scenget)
 				dfdatagroup=dfdatagroup.filter(year=cfg['year'])
+			
+				# treat case of variables which are only present with higher disaggregation	
+				# eg. we need Capacity|Electricity|Gas and we have Capacity|Electricity|Gas|OCGT and Capacity|Electricity|Gas|CCGT
+				# in that case we will compute Capacity|Electricity|Gas using the rules defined in the settings
+				
+				# get list of missing variables
+				existing_variables = dfdatagroup.variable
+				missing_variables = [var for var in listvardatagroup if var not in existing_variables]
+				missing_variables = list(set(missing_variables))
+
+				# Get for each of these missing variables the list of "sub-variables" in dfdatagroup
+				sub_variables_dict = {}
+				to_remove = []
+				for var in missing_variables:
+					sub_variables = [v for v in existing_variables if v.startswith(var + '|')]
+					if len(sub_variables)>0:
+						sub_variables_dict[var] = sub_variables
+					else:
+						to_remove.append(var)
+				for var in to_remove:
+					missing_variables.remove(var)
+				
+				# get aggregation method
+				aggregation_methods = {}
+				for var in missing_variables:
+					method = search_variable(var, cfg['datagroups'][datagroup]['listvariables'])
+					aggregation_methods[var] = method
+
+				# Create rows for the missing variables
+				for var, sub_vars in sub_variables_dict.items():
+					if sub_vars:
+						method = aggregation_methods[var]
+						if method == 'global':
+							method = 'mean'
+						elif method in ['flow', 'add']:
+							method = 'sum'
+						dfdatagroup.aggregate(variable=var, components=sub_vars, method=method, append=True)
+
+				# only keep variables in settings
 				dfdatagroup=dfdatagroup.filter(variable=listvardatagroup)
 				# remove local variables on global region and global variables on local regions
-				dfdatagroup=dfdatagroup.filter(region=globalreg, variable=listlocalvar, keep=False)
-				dfdatagroup=dfdatagroup.filter(region=listLocalReg, variable=listglobalvar, keep=False)
+				#dfdatagroup=dfdatagroup.filter(region=globalreg, variable=listlocalvar, keep=False)
+				#dfdatagroup=dfdatagroup.filter(region=listLocalReg, variable=listglobalvar, keep=False)
+				
 				if cfg['datagroups'][datagroup]['subannual']: SubAdfdatagroup=dfdatagroup
 				
 				if cfg['datagroups'][datagroup]['subannual']:
@@ -547,14 +605,18 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			# aggregation of variables
 			for variable in listvaradd:
 				if ExistsAnnualData: 
-					if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
+					if variable in AnnualDataFrame.variable: 
+						AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
 				if ExistsSubAnnualData: 
-					if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
+					if variable in SubAnnualDataFrame.variable: 
+						SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], append=True)
 			for variable in listvarmean:
 				if ExistsAnnualData: 
-					if variable in AnnualDataFrame.variable: AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
+					if variable in AnnualDataFrame.variable: 
+						AnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
 				if ExistsSubAnnualData: 
-					if variable in SubAnnualDataFrame.variable: SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
+					if variable in SubAnnualDataFrame.variable: 
+						SubAnnualDataFrame.aggregate_region(variable, region=reg, subregions=cfg['aggregateregions'][reg], method='mean',append=True)	
 	#remove aggregated subregions
 	listregion=listGlobalReg
 	for partition in cfg['partition']:
@@ -1016,12 +1078,27 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 								if cfg['ParametersCreate']['debug']: logger.info('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
 							isGlobal=True
 							Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+fuel] ]
+					
+					if isGlobal:
+						new_dataTU=pd.Series(index=TU.index,name=dataTU.name)
+						for reg in TU.index:
+							if reg in dataTU.index: new_dataTU.loc[reg] = dataTU.loc[reg]
+							else: new_dataTU.loc[reg] = Global
+						TU=pd.concat([TU, new_dataTU], axis=1)
+					else:
+						TU=pd.concat([TU, dataTU], axis=1)
+					#if isGlobal: 
+						#TU[variable]=Global
+						# only use the global value for regions which are not there
 						
-					TU=pd.concat([TU, dataTU], axis=1)
-					if isGlobal: TU[variable]=Global
 				else:
 					TU[variable]=0.0
+			if 'AvailabilityRate' in TU.columns:
+				TU['AvailabilityRate'].fillna(1, inplace=True)
+			else:
+				TU['AvailabilityRate']=1
 			TU=TU.fillna(value=0.0)
+			
 			# replace low capacities with 0
 			TU.loc[ TU['Capacity'] < cfg['ParametersCreate']['zerocapacity'], 'Capacity' ]=0
 			
@@ -1058,7 +1135,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'thermal' in cfg['ParametersCreate']:
 				if 'NbUnitsPerTechno' in cfg['ParametersCreate']['thermal']:
 					if cfg['ParametersCreate']['thermal']['NbUnitsPerTechno']==1:
-						TU['MaxPower']=TU['Capacity']
+						TU['MaxPower']=TU['Capacity']*TU['AvailabilityRate']
 					else: isMaxPower=True
 			
 			if not cfg['ParametersCreate']['DynamicConstraints']:
@@ -1169,17 +1246,21 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			isMaxVolume=False
 			if 'MaxVolume' in SS.columns and not (SS==0).all()['MaxVolume']: 
 				isMaxVolume=True
-			if not isMaxVolume and 'MaxPower' in SS.columns:
-				multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
-				SS['MaxVolume']=SS['MaxPower']*multfactor
-				logger.info('no Max Storage for '+oetechno+' replaced by MaxPower*'+str(multfactor))
-				
+			multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+			if 'VolumeRate' in SS.columns:
+				SS['VolumeRate'].fillna(multfactor/8760, inplace=True)
+				SS['VolumeRate']=SS['VolumeRate']*8760
+			else:
+				SS['VolumeRate']=multfactor
+			if not isMaxVolume and 'MaxPower' in SS.columns:				
+				SS['MaxVolume']=SS['MaxPower']*SS['VolumeRate']
+				logger.info('no Max Storage for '+oetechno+' replaced by MaxPower*VolumeRate')
 			# replace low capacities with 0
 			SS.loc[ SS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
 			RowsToDelete = SS[ SS['MaxPower'] == 0 ].index
 			# Delete these row indexes from dataFrame
 			SS=SS.drop(RowsToDelete)
-			
+
 			# include inflows profiles: include timeseries names from TimeSeries dictionnary
 			SS['InflowsProfile']=''
 			SS['WaterValues']=''
@@ -1216,11 +1297,22 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['ParametersCreate']['InitialFillingrate'][row]
 						
 				# treatment volume when no max storage is provided or MaxPower<minpowerMWh or no inflows
-				if SS.loc[row,'MaxVolume']==0 or SS.loc[row,'MaxPower']<cfg['ParametersCreate']['reservoir']['minpowerMWh'] or SS.loc[row,'Inflows']==0:
+				if SS.loc[row,'MaxVolume']==0 or SS.loc[row,'MaxPower']<cfg['ParametersCreate']['reservoir']['minpowerMWh'] or SS.loc[row,'Inflows']==0 :
 					# this storage is moved to Additionnal Pumped Storage
 					SS.loc[row,'AddPumpedStorage']=SS.loc[row,'MaxPower']
 					SS.loc[row,'AddPumpedStorageVolume']=SS.loc[row,'MaxVolume']
-					logger.info('No volume for reservoir in region '+row+', adding capacity to Pumped Storage')
+					if SS.loc[row,'MaxVolume']==0:
+						logger.info('No volume for reservoir in region '+row+', adding capacity to Pumped Storage')
+					elif SS.loc[row,'MaxPower']<cfg['ParametersCreate']['reservoir']['minpowerMWh']:
+						logger.info('MaxPower in region '+row+' is very low, adding capacity to Pumped Storage')
+					elif SS.loc[row,'Inflows']==0:
+						logger.info('No inflows in region '+row+', adding capacity to Pumped Storage')
+				# same treatment for regions excluded from seasonal storage
+				if 'excluded_regions' in cfg['ParametersCreate']['reservoir']:
+					if row in cfg['ParametersCreate']['reservoir']['excluded_regions']:
+						SS.loc[row,'AddPumpedStorage']=SS.loc[row,'MaxPower']
+						SS.loc[row,'AddPumpedStorageVolume']=SS.loc[row,'MaxVolume']
+						logger.info('No volume for reservoir in region '+row+', adding capacity to Pumped Storage')
 				# treatment inflows timeseries
 				if row in timeseriesdict['SS']['Inflows'].keys():
 					filetimeserie=timeseriesdict['SS']['Inflows'][row]
@@ -1237,11 +1329,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			SS['PumpingEfficiency']=0.0
 			# create df for addedcapacity
 			AddedCapa=SS[SS.AddPumpedStorage >0]
-			
 			# remove rows where MaxVolume=0 or where MaxPower < minPowerMWh
 			SS = SS.drop(SS[SS.MaxVolume == 0].index)
+			SS = SS.drop(SS[SS.AddPumpedStorage > 0].index)
 			SS = SS.drop(SS[SS.MaxPower < cfg['ParametersCreate']['reservoir']['minpowerMWh']].index)
-			
 			if v==0:
 				BigSS=SS
 				v=1
@@ -1287,6 +1378,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'debug' in cfg['ParametersCreate']: 
 				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			for variable in vardict['Input']['VarSTS|Hydro']:
+				print(variable)
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
 				if len(vardf.index)>0: 
