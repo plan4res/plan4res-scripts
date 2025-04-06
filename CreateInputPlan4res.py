@@ -1378,7 +1378,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'debug' in cfg['ParametersCreate']: 
 				if cfg['ParametersCreate']['debug']: logger.info('treat '+oetechno)
 			for variable in vardict['Input']['VarSTS|Hydro']:
-				print(variable)
 				varname=vardict['Input']['VarSTS|Hydro'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
 				if len(vardf.index)>0: 
