@@ -1890,11 +1890,11 @@ def addBatteryUnitBlocks(Block,indexUnitBlock,start,end):
 				TurbineEfficiency=STS['TurbineEfficiency'][tu]
 				if type(TurbineEfficiency)==str:
 					ExtractingBatteryRho=TBlock.createVariable("ExtractingBatteryRho",np.double,("NumberIntervals"))
-					ExtractingBatteryRho[:]=np.array(DeterministicTimeSeries[TurbineEfficiency][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
+					ExtractingBatteryRho[:]=np.array(1/DeterministicTimeSeries[TurbineEfficiency][ ( DeterministicTimeSeries.index >= start ) & ( DeterministicTimeSeries.index <= end ) ])
 				else:
 					ExtractingBatteryRho=TBlock.createVariable("ExtractingBatteryRho",np.double,())
 					if TurbineEfficiency!=0:
-						ExtractingBatteryRho[:]=[TurbineEfficiency]
+						ExtractingBatteryRho[:]=[1/TurbineEfficiency]
 					else:
 						ExtractingBatteryRho[:]=[1]
 			else:
