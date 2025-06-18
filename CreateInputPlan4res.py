@@ -325,11 +325,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				variable=listvardatagroup,
 				region=listRegGet,year=cfg['year'],
 				scenario=scenget)
-			
-			# remove rows for global variables / local regions or local variables / global regions
-			#groupdf=groupdf.filter(region=globalreg, variable=listlocalvar, keep=False)			
-			#groupdf=groupdf.filter(region=listLocalReg, variable=listglobalvar, keep=False)
-			
+						
 			# rename regions if necessary
 			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
 			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO2':groupdf.rename(dict_iso2,inplace=True)
@@ -458,9 +454,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 				# only keep variables in settings
 				dfdatagroup=dfdatagroup.filter(variable=listvardatagroup)
-				# remove local variables on global region and global variables on local regions
-				#dfdatagroup=dfdatagroup.filter(region=globalreg, variable=listlocalvar, keep=False)
-				#dfdatagroup=dfdatagroup.filter(region=listLocalReg, variable=listglobalvar, keep=False)
 				
 				if cfg['datagroups'][datagroup]['subannual']: SubAdfdatagroup=dfdatagroup
 				
@@ -1036,6 +1029,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			TU=pd.DataFrame({'Name':oetechno,'region':listregions})
 			TU=TU.set_index('region')
 			for variable in vardict['Input']['VarTU']:
+				if 'debug' in cfg['ParametersCreate']: 
+					if cfg['ParametersCreate']['debug']: logger.info('treat variable '+variable)
 				isFuel=False
 				TreatVar=True
 				isMainVar=False
@@ -1058,7 +1053,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						TreatVar=False
 					TreatVar=False
 				if TreatVar:
-					
+					if 'debug' in cfg['ParametersCreate']: 
+						if cfg['ParametersCreate']['debug']: logger.info('variable '+variable + 'is in dataset')
 					vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
 					vardf=vardf.set_index('region')
 					vardf=vardf.rename(columns={"value":variable})
@@ -1104,29 +1100,37 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			
 			# case with investment optimisation
 			if isInvest and ('thermal' in cfg['ParametersCreate']['CapacityExpansion']):
-				if 'InvestmentCost' not in TU.columns:
+				if 'CapitalCost' not in TU.columns: # if no investment cost given use value from config file	
 					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
 						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
-							TU['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['InvestmentCost']
+							TU['CapitalCost']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['InvestmentCost']
 						else:
-							TU['InvestmentCost']=0
+							TU['CapitalCost']=0
 					else:
-						TU['InvestmentCost']=0
-				else:
-					if 'Lifetime' in TU.columns:
-						TU['Lifetime']=TU['Lifetime'].apply(lambda x: x if x>1 else 1)
-						TU['InvestmentCost']=TU['InvestmentCost']/TU['Lifetime']
-					if 'FixedCost' in TU.columns:
-						TU['InvestmentCost']=TU['InvestmentCost']+TU['FixedCost']
-				
-				if isInvest and oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
+						TU['CapitalCost']=0
+				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
 					#replace 0 capacity with investment minimal capacity
 					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=cfg['ParametersCreate']['zerocapacity']
-					TU['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
+					# create MaxAddedCapacity, bounded to the MaxCapacity if in dataset
+					if 'MaxCapacity' in TU.columns:
+						maxaddconfig=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity'] < row['Capacity']+maxaddconfig else maxaddconfig, axis=1)
+					else:
+						TU['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
 					TU['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
 				else:
 					TU['MaxAddedCapacity']=0
 					TU['MaxRetCapacity']=0
+			
+			# compute InvestmentCost as CapitalCost/Lifetime+FixedCost
+			if 'CapitalCost' in TU.columns:
+				if 'Lifetime' in TU.columns:
+					TU['Lifetime']=TU['Lifetime'].apply(lambda x: x if x>1 else 1)
+					TU['InvestmentCost']=TU['CapitalCost']/TU['Lifetime']
+				else:
+					TU['InvestmentCost']=TU['CapitalCost']
+				if 'FixedCost' in TU.columns:
+					TU['InvestmentCost']=TU['InvestmentCost']+TU['FixedCost']
 			
 			RowsToDelete = TU[ TU['Capacity'] == 0 ].index
 			# Delete row with 0 capacity
@@ -1151,8 +1155,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if 'CO2Rate' in TU.columns: 
 					isCO2=True
 				elif ('CO2Emission' in TU.columns) & ('Energy' in TU.columns): 
-					TU['InvEnergy']=TU['Energy'].apply(lambda x: 1/x if x>0 else 0)
-					TU['CO2Rate']=TU['CO2Emission']*TU['InvEnergy']
+					TU['CO2Rate']=TU['CO2Emission']*TU['Energy'].apply(lambda x: 1/x if x>0 else 0)
 					isCO2=True
 				else: 
 					TU['CO2Rate']=0.0
@@ -1176,6 +1179,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		if 'debug' in cfg['ParametersCreate']: 
 			if 'Energy' in listTU and cfg['ParametersCreate']['debug']: listcols.append('Energy')
 		if 'CO2Rate' in listTU: listcols.append('CO2Rate')
+		if 'Lifetime' in listTU: listcols.append('Lifetime')
+		if 'CapitalCost' in listTU: listcols.append('CapitalCost')
+		if 'FixedCost' in listTU: listcols.append('FixedCost')
+		if 'MaxCapacity' in listTU: listcols.append('MaxCapacity')
+		if 'AvailabilityRate' in listTU: listcols.append('AvailabilityRate')
 		if isDynamic:
 			if 'MinPower' in listTU: listcols.append('MinPower')
 			if 'DeltaRampUp' in listTU: listcols.append('DeltaRampUp')
@@ -1199,7 +1207,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'InvestmentCost' in BigTU.columns: listcols.append('InvestmentCost')
 			if 'MaxAddedCapacity' in BigTU.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigTU.columns: listcols.append('MaxRetCapacity')
-			if 'Lifetime' in listTU: listcols.append('Lifetime')
 
 		BigTU=BigTU[ listcols ]
 		
@@ -1402,6 +1409,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 
 				if isGlobal: STS[variable]=Global
 				
+			if 'AvailabilityRate' in STS.columns:
+				STS['AvailabilityRate'].fillna(1, inplace=True)
+			else:
+				STS['AvailabilityRate']=1
+						
 			isPumpingEfficiency=False
 			isChargingEfficiency=False
 			isDischargingEfficiency=False
@@ -1452,7 +1464,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			# case where Maximum Storage is not in the data
 			if isMaxPower and not isMaxVolume: 
 				STS['MaxVolume']=STS['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
-			
+			STS['MaxPower']=STS['MaxPower']*STS['AvailabilityRate']
 			# treat additionnal pumped storage from SS
 			STS['AddPumpedStorage']=0
 			STS['AddPumpedStorageVolume']=0
@@ -1520,6 +1532,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				BAT=pd.concat([BAT, data], axis=1)	
 				if isGlobal: BAT[variable]=Global
 			
+			if 'AvailabilityRate' in BAT.columns:
+				BAT['AvailabilityRate'].fillna(1, inplace=True)
+			else:
+				BAT['AvailabilityRate']=1
 			isRoundTripEfficiency=False
 			isChargingEfficiency=False
 			isDischargingEfficiency=False
@@ -1560,25 +1576,42 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if not isMaxVolume:
 				BAT['MaxVolume']=BAT['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 
+			BAT['MaxPower']=BAT['MaxPower']*BAT['AvailabilityRate']
+			
 			# case with investment
 			if isInvest and 'battery' in cfg['ParametersCreate']['CapacityExpansion']:
-				if not isVarBattery['InvestmentCost']:
+				if 'CapitalCost' not in BAT.columns: # if no investment cost given use value from config file	
 					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['battery']:
 						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]:
-							BAT['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['InvestmentCost']
+							BAT['CapitalCost']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['InvestmentCost']
 						else:
-							BAT['InvestmentCost']=0
+							BAT['CapitalCost']=0
 					else:
-						BAT['InvestmentCost']=0
+						BAT['CapitalCost']=0
 				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['battery']:
 					# replace 0 capacity with investment minimal capacity
 					BAT.loc[ BAT['MaxPower'] == 0, 'MaxPower' ]=cfg['ParametersCreate']['zerocapacity']
 					BAT.loc[ BAT['MaxVolume'] == 0, 'MaxVolume' ]=cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
-					BAT['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['MaxAdd']
+					maxaddconfig=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['MaxAdd']
+					if 'MaxCapacity' in BAT.columns:						
+						BAT['MaxAddedCapacity']= BAT.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity'] < row['Capacity']+maxaddconfig else maxaddconfig, axis=1)
+					else:
+						BAT['MaxAddedCapacity']=maxaddconfig					
 					BAT['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['battery'][oetechno]['MaxRet']
 				else:
 					BAT['MaxAddedCapacity']=0
 					BAT['MaxRetCapacity']=0
+			
+			# compute InvestmentCost as CapitalCost/Lifetime+FixedCost
+			if 'CapitalCost' in BAT.columns:
+				if 'Lifetime' in BAT.columns:
+					BAT['Lifetime']=BAT['Lifetime'].apply(lambda x: x if x>1 else 1)
+					BAT['InvestmentCost']=BAT['CapitalCost']/BAT['Lifetime']
+				else:
+					BAT['InvestmentCost']=BAT['CapitalCost']
+				if 'FixedCost' in BAT.columns:
+					BAT['InvestmentCost']=BAT['InvestmentCost']+BAT['FixedCost']
+
 			RowsToDelete=[]
 			RowsToDelete = BAT[ BAT['MaxPower'] == 0 ].index
 			#if isMaxVolume: RowsToDelete = BAT[ BAT['MaxVolume'] == 0 ].index
@@ -1740,6 +1773,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		if isPrimary and 'MaxPrimaryPower' in listSTS: listcols.append('MaxPrimaryPower')
 		if isSecondary and 'MaxSecondaryPower' in listSTS: listcols.append('MaxSecondaryPower')
 		if 'VolumeLevelTarget' in listSTS: listcols.append('VolumeLevelTarget')
+		if 'CO2Rate' in listSTS: listcols.append('CO2Rate')
+		if 'Lifetime' in listSTS: listcols.append('Lifetime')
+		if 'CapitalCost' in listSTS: listcols.append('CapitalCost')
+		if 'Capacity' in listSTS: listcols.append('Capacity')
+		if 'FixedCost' in listSTS: listcols.append('FixedCost')
+		if 'MaxCapacity' in listSTS: listcols.append('MaxCapacity')
+		if 'AvailabilityRate' in listSTS: listcols.append('AvailabilityRate')
 		if isInvest and 'battery' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'MaxAddedCapacity' in BigSTS.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigSTS.columns: listcols.append('MaxRetCapacity')
@@ -1785,30 +1825,46 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				RES=pd.concat([RES, data], axis=1)	
 				if isGlobal: RES[variable]=Global
 				
+			if 'AvailabilityRate' in RES.columns:
+				RES['AvailabilityRate'].fillna(1, inplace=True)
+			else:
+				RES['AvailabilityRate']=1
 			RES=RES.fillna(value=0.0)
 			
 			# replace low capacities with 0
 			RES.loc[ RES['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
-			
 			# case with investment
 			if isInvest and 'res' in cfg['ParametersCreate']['CapacityExpansion']:
-				if not isVarRes['InvestmentCost']:
+				if 'CapitalCost' not in RES.columns: # if no investment cost given use value from config file	
 					if oetechno in cfg['ParametersCreate']['CapacityExpansion']['res']:
 						if 'InvestmentCost' in cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]:
-							RES['InvestmentCost']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['InvestmentCost']
+							RES['CapitalCost']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['InvestmentCost']
 						else:
-							RES['InvestmentCost']=0
+							RES['CapitalCost']=0
 					else:
-						RES['InvestmentCost']=0
+						RES['CapitalCost']=0
 				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['res']:
 					# replace 0 capacity with investment minimal capacity
 					RES.loc[ RES['MaxPower'] == 0, 'MaxPower' ]=cfg['ParametersCreate']['zerocapacity']
-					RES['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['MaxAdd']
+					maxaddconfig=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['MaxAdd']
+					if 'MaxCapacity' in RES.columns:						
+						RES['MaxAddedCapacity']= RES.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity'] < row['Capacity']+maxaddconfig else maxaddconfig, axis=1)
+					else:
+						RES['MaxAddedCapacity']=maxaddconfig					
 					RES['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['res'][oetechno]['MaxRet']
 				else:
 					RES['MaxAddedCapacity']=0
 					RES['MaxRetCapacity']=0
 			
+			# compute InvestmentCost as CapitalCost/Lifetime+FixedCost
+			if 'CapitalCost' in RES.columns:
+				if 'Lifetime' in RES.columns:
+					RES['Lifetime']=RES['Lifetime'].apply(lambda x: x if x>1 else 1)
+					RES['InvestmentCost']=RES['CapitalCost']/RES['Lifetime']
+				else:
+					RES['InvestmentCost']=RES['CapitalCost']
+				if 'FixedCost' in RES.columns:
+					RES['InvestmentCost']=RES['InvestmentCost']+RES['FixedCost']
 			RowsToDelete = RES[ RES['MaxPower'] == 0 ].index
 			# Delete row with 0 capacity
 			RES=RES.drop(RowsToDelete)
@@ -1829,6 +1885,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				# Capacity*8760*r=energy				
 				# MaxPower must be multiplied by Energy/(Capacity*8760)
 			
+			RES['MaxPower']=RES['MaxPower']*RES['AvailabilityRate']
+			
 			# include renewable potential profiles: include timeseries names from TimeSeries Disctionnary
 			RES['MaxPowerProfile']=''
 			RES['Energy_Timeserie']=0
@@ -1847,6 +1905,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		listcols= ['Name','Zone','NumberUnits','MaxPower','MinPower','MaxPowerProfile','Energy','Capacity']
 		if (isPrimary or isSecondary) and 'Gamma' in listRES and isInvest: listcols.append('Gamma')
 		if isInertia and 'Inertia' in listRES: listcols.append('Inertia')
+		if 'Lifetime' in listRES: listcols.append('Lifetime')
+		if 'CapitalCost' in listRES: listcols.append('CapitalCost')
+		if 'FixedCost' in listRES: listcols.append('FixedCost')
+		if 'MaxCapacity' in listRES: listcols.append('MaxCapacity')
+		if 'AvailabilityRate' in listRES: listcols.append('AvailabilityRate')
 		if isInvest and 'res' in cfg['ParametersCreate']['CapacityExpansion']:
 			if 'MaxAddedCapacity' in BigRES.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigRES.columns: listcols.append('MaxRetCapacity')

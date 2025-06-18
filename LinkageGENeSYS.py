@@ -23,6 +23,12 @@ logger.info('p4rpath='+p4rpath)
 def abspath_to_relpath(path, basepath):
 	return os.path.relpath(path, basepath) #if os.path.abspath(path) else path
 
+def replace_scenario_names(version, replacement_dict):
+	for short_name, long_name in replacement_dict.items():
+		if short_name in version:
+			return long_name
+	return version
+		
 nbargs=len(sys.argv)	
 if nbargs>1: 
 	settings=sys.argv[1]
@@ -34,11 +40,6 @@ if os.path.abspath(settings):
 cfg={}
 with open(os.path.join(path, settings),"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
-
-debug=False
-if 'debug' in cfg:
-	if cfg['debug']:
-		debug=True
 
 # replace name of current dataset by name given as input
 if nbargs>1:
@@ -63,8 +64,8 @@ if 'outputfile' not in cfg: cfg['outputfile']=namedataset+'.csv'
 if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
 if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
 
-if not os.path.isdir(cfg['outputpath']):os.mkdir(cfg['outputpath'])
-if not os.path.isdir(cfg['timeseriespath']):os.mkdir(cfg['timeseriespath'])
+if not os.path.isdir(cfg['outputpath']): os.mkdir(cfg['outputpath'])
+if not os.path.isdir(cfg['timeseriespath']): os.mkdir(cfg['timeseriespath'])
 if os.path.exists(cfg['outputfile']):
 	os.remove(cfg['outputfile'])
 
@@ -97,41 +98,39 @@ if treatFix:
 	firstVar=True
 
 	# open datafiles
-	data=pd.Series(index=[f'input_{elem}' for elem in cfg['genesys_datafiles']['input_sheets']])
-	for file in cfg['genesys_datafiles']['input']:
-		logger.info('read '+file)
-		xls=pd.ExcelFile(os.path.join(cfg['genesys_inputpath'],file),engine='openpyxl')
-		if 'Scenario' in cfg['genesys_datafiles']['input'][file]:
-			scen=cfg['Scenarios'][cfg['genesys_datafiles']['input'][file]['Scenario']]
-		for sheet in cfg['genesys_datafiles']['input_sheets']:
-			logger.info('  treat sheet '+sheet)
-			df=pd.read_excel(xls,sheet_name=sheet)
-			if pd.isna(data['input_'+sheet]):
-				data['input_'+sheet]=df
-			else:
-				data['input_'+sheet]=pd.concat(data['input_'+sheet],df)
-			if 'Scenario' not in data['input_'+sheet].columns and 'PathwayScenario' not in data['input_'+sheet].columns:
-				data['input_'+sheet]['Scenario']=scen
-			if 'PathwayScenario' in data['input_'+sheet].columns:
-				data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
-	
-	def replace_scenario_names(version, replacement_dict):
-		for short_name, long_name in replacement_dict.items():
-			if short_name in version:
-				return long_name
-		return version
+	data=pd.Series(index=[f'input_{elem}' for elem in cfg['genesys_datafiles']['input']['Sheets']])
+	file=cfg['genesys_datafiles']['input']['inputfile']
+	logger.info('read '+file)
+	xls=pd.ExcelFile(os.path.join(cfg['genesys_inputpath'],file),engine='openpyxl')
+	if 'Scenario' in cfg['genesys_datafiles']:
+		scen=cfg['Scenarios'][cfg['genesys_datafiles']['Scenario']]
+	for sheet in cfg['genesys_datafiles']['input']['Sheets']:
+		logger.info('  treat sheet '+sheet)
+		df=pd.read_excel(xls,sheet_name=sheet)
+		if pd.isna(data['input_'+sheet]):
+			data['input_'+sheet]=df
+		else:
+			data['input_'+sheet]=pd.concat(data['input_'+sheet],df)
+		if 'Scenario' not in data['input_'+sheet].columns and 'PathwayScenario' not in data['input_'+sheet].columns:
+			data['input_'+sheet]['Scenario']=scen
+		if 'PathwayScenario' in data['input_'+sheet].columns:
+			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
-	for file in cfg['genesys_datafiles']:
-		if (file!='input') and (file!='input_sheets'):
-			logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles'][file]))
-			data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles'][file]))
-			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
-				if 'Model Version' in data[file].columns:
-					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+	for file in cfg['genesys_datafiles']['output']:
+		logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+		data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+		if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
+			if 'Model Version' in data[file].columns:
+				data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
 				data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
-				
-			if 'PathwayScenario' in data['input_'+sheet].columns:
-				data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
+			elif 'Scenario' in cfg['genesys_datafiles']:
+				data[file]['Scenario']=cfg['genesys_datafiles']['Scenario']
+				data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+			else:
+				data[file]['Scenario']='No Scenario'
+			
+		if 'PathwayScenario' in data['input_'+sheet].columns:
+			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
 
 	# read mappings
@@ -143,17 +142,11 @@ if treatFix:
 	mappings.loc['emissions']=pd.DataFrame([(tech, details['Emission']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'Emission']).set_index('Technology')
 	mappings.loc['storages_ratios']=pd.DataFrame([(details['TechnoIAMC'], details['StorageRatio']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['TechnoIAMC', 'StorageRatio']).set_index('TechnoIAMC')
 	mappings.loc['storages']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['Technology', 'TechnoIAMC']).set_index('Technology')
-	# for mapping in cfg['mappings']:
-		# logger.info('   mapping '+mapping+' in '+os.path.join(cfg['mappingspath'],cfg['mappings'][mapping]))
-		# mappings.loc[mapping]=pd.read_csv(os.path.join(cfg['mappingspath'],cfg['mappings'][mapping]),index_col=0,header=None)
-		# rows_to_remove=[elem for elem in mappings.loc[mapping].index if str(elem)[0]=='#']
-		# mappings.loc[mapping].drop(rows_to_remove,inplace=True)
 	out=pd.DataFrame()
 	isFirst=True
 	IAMCcols=['Model','Scenario','Region','Variable','Unit','Year','Value']
 	colsAgg=['Region','PathwayScenario','Year','Unit']
 	
-
 	regions=[]
 	regions_source=data.loc['input_Sets']['Region'].dropna()
 	for reg in regions_source:
@@ -176,6 +169,10 @@ if treatFix:
 	logger.info('years in dataset '+', '.join([str(y) for y in Years]))
 	
 	for var in cfg['variables']:
+		debug=False
+		if 'debug' in cfg:
+			if var in cfg['debug']:
+				debug=True
 		isInternal=False
 		logger.info('treat '+var)
 		if debug: 
@@ -464,16 +461,35 @@ if treatFix:
 							print(newdata)
 					elif subrule=='mapAndAddCols':					
 						colref=cfg['variables'][var]['rules'][rulecat][subrule]['column']
-					
+						if debug: print('colref:', colref)
 						for newcol in cfg['variables'][var]['rules'][rulecat][subrule]['mappings']:
 							colmap=cfg['variables'][var]['rules'][rulecat][subrule]['mappings'][newcol]
 							combinedmap=newdata[[colref,colmap]].groupby([colref]).first().reset_index()
 							combineddict={combinedmap.iloc[i,0]: combinedmap.iloc[i,1] for i in range(len(combinedmap.index))}
 							vardata[newcol]=vardata[colref].map(lambda a: combineddict[a] if a in combineddict.keys() else 'None')
+							if debug:
+								print(' combineothersources/mapaddcols/mappings row:',newcol)
+								print('combinedmap')
+								print(combinedmap)
+								print('combineddict')
+								print(combineddict)
+								print('vardata[',newcol,']')
+								print(vardata[newcol])
 						if 'product_cols' in cfg['variables'][var]['rules'][rulecat][subrule]:
+							if debug: print(' apply product_cols')
+							if debug: print(vardata)
 							for col in cfg['variables'][var]['rules'][rulecat][subrule]['product_cols']: 
 								col2=cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]
+								if debug: 
+									print( '     product by ',col2)
+									print( ' vardata[',col,'] before product')
+									print(vardata[col])
+									print( 'multiplied by:')
+									print( vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]])
+									for i in vardata[col].index:
+										print(i,vardata['Technology'].loc[i],vardata['Year'].loc[i],vardata[col].loc[i],vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]].loc[i])
 								vardata[col]=vardata[col]*vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]]
+								if debug: print(vardata[col])
 					elif subrule=='changeValue':
 						colref=cfg['variables'][var]['rules'][rulecat][subrule]['column']
 						colval=cfg['variables'][var]['rules'][rulecat][subrule]['value']
@@ -567,21 +583,24 @@ if treatFix:
 								vardataelem = pd.DataFrame(vardata[vardata['Variable'].isin( serieElems[elem] )]).reset_index().drop(columns='index')
 								colsToAggr=[]
 								if 'PHS' in elem: 
-									print(elem)
-									print('phs 1')
-									print(vardataelem)
+									if debug:
+										print(elem)
+										print('phs 1')
+										print(vardataelem)
 								vardataelem=vardataelem.drop(columns='Variable')
 								for col in vardataelem.columns:
 									if col != 'Value':
 										colsToAggr.append(col)
 								if 'PHS' in elem: 
-									print('phs 2')
-									print(vardataelem)
+									if debug:
+										print('phs 2')
+										print(vardataelem)
 								if len(vardataelem.index)>0:
 									vardataelem=vardataelem.groupby(colsToAggr).agg(ruleagg).reset_index()
 								if 'PHS' in elem: 
-									print('phs 3')
-									print(vardataelem)
+									if debug:
+										print('phs 3')
+										print(vardataelem)
 								vardataelem['Variable']=var+dict[elem]
 								if firstElem:
 									if len(vardataelem.index)>0:
@@ -608,9 +627,10 @@ if treatFix:
 									if cfg['variables'][var]['rules']['compute']['rulemap']=='mult':
 										vardata.loc[row,'Value']=vardata.loc[row,'Value']*dict[vardata.loc[row,'Variable'].replace(componentfrom,'')]
 									vardata.loc[row,'Variable']=vardata.loc[row,'Variable'].replace(componentfrom,var)							
-				print('end compute')
-				print(vardata)
-				print(vardata['Variable'].unique())
+				if debug:
+					print('end compute')
+					print(vardata)
+					print(vardata['Variable'].unique())
 			elif rulecat=='create_interco':	
 				vardata['>']='>'
 				vardata['Region']=vardata['Region'].str.cat(vardata['>']).str.cat(vardata['Region2'])
@@ -766,12 +786,16 @@ if treatFix:
 				filtered_list.append(variable)
 		return filtered_list
 	
-	logger.info('filtering on variables')
-	
+	logger.info('list of all variables')	
 	variable_list=list(df['Variable'].unique())
+	print(variable_list)
 	#new_variable_list=[item for item in variable_list if item not in cfg['removed_variables']]
 	removed_variable_list=filter_variable_list(variable_list)
-	logger.warning('excluding: '.join([str(_) for _ in removed_variable_list]))
+	logger.info('filtering on variables')
+	print(removed_variable_list)
+	#logger.info('excluding: '.join([str(_) for _ in removed_variable_list]))
+	BigIAM.to_excel(cfg['outputpath']+'allvar_'+cfg['outputfile'].replace('csv','xlsx'))
+
 	BigIAM=BigIAM.filter(variable=removed_variable_list, keep=False)
 
 	#filter on unwanted variables
@@ -815,11 +839,11 @@ if treatHourly:
 	AddScenarios=[elem for elem in cfg['AdditionnalScenarios']]
 	Scenarios=['Base']+AddScenarios
 	logger.info('Scenarios:')
-	logger.info(Scenarios)
-	for sheet in cfg['genesys_timeseriesfiles']['timeseries_sheets']:
-		sheetname=cfg['genesys_timeseriesfiles']['timeseries_sheets'][sheet]
-		logger.info('  sheet '+sheet)
-		df=pd.read_excel(os.path.join(cfg['genesys_inputpath'],cfg['genesys_timeseriesfiles']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
+	logger.info(Scenarios) 
+	for sheet in cfg['genesys_datafiles']['timeseries']['sheets']:
+		sheetname=cfg['genesys_datafiles']['timeseries']['sheets'][sheet]
+		logger.info('  sheet '+sheetname)
+		df=pd.read_excel(os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['timeseries']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
 		df=df.reset_index()
 		if sheetname in cfg['TimeSeriesFactor']:
 			multfactor=(1/cfg['TimeSeriesFactor'][sheetname])
