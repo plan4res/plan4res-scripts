@@ -37,7 +37,11 @@ def check_distances(csv_directory, solution_out_file, epsilon):
     # Function to calculate capacities
     def calculate_capacities(df, column_name, sol_invest, index_sol_invest):
         for _, row in df.iterrows():
-            if row['MaxAddedCapacity'] > 0 or row['MaxRetCapacity'] > 0:
+            maxadded=0
+            maxret=0
+            if 'MaxAddedCapacity' in df.columns: maxadded=row['MaxAddedCapacity']
+            if 'MaxRetCapacity' in df.columns: maxret=row['MaxAddedCapacity']
+            if maxadded > 0 or maxret > 0:
                 capacity_before.append(row[column_name])
                 try:
                     # Check if the index exists in sol_invest before accessing it
