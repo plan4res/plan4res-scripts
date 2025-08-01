@@ -116,21 +116,22 @@ if treatFix:
 		if 'PathwayScenario' in data['input_'+sheet].columns:
 			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
-	for file in cfg['genesys_datafiles']['output']:
-		logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
-		data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
-		if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
-			if 'Model Version' in data[file].columns:
-				data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
-				data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
-			elif 'Scenario' in cfg['genesys_datafiles']:
-				data[file]['Scenario']=cfg['genesys_datafiles']['Scenario']
-				data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
-			else:
-				data[file]['Scenario']='No Scenario'
-			
-		if 'PathwayScenario' in data['input_'+sheet].columns:
-			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
+	if 'output' in cfg['genesys_datafiles']:
+		for file in cfg['genesys_datafiles']['output']:
+			logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+			data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
+				if 'Model Version' in data[file].columns:
+					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+					data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
+				elif 'Scenario' in cfg['genesys_datafiles']:
+					data[file]['Scenario']=cfg['genesys_datafiles']['Scenario']
+					data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+				else:
+					data[file]['Scenario']='No Scenario'
+				
+			if 'PathwayScenario' in data[file].columns:
+				data[file].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
 
 	# read mappings
