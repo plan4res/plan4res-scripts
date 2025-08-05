@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 ## Import packages
-import pyam
+import pyam  
 import pandas as pd ## necessary data analysis package
 import numpy as np
 import os
@@ -97,13 +97,19 @@ if treatFix:
 	BigOut=pd.DataFrame()
 	firstVar=True
 
+	# create dictionnary for replacing scenario names
+	scenarios_names_dict = {}
+	for main_name, alt_names in cfg['Scenarios'].items():
+		for alt in alt_names:
+			scenarios_names_dict[alt] = main_name
+
 	# open datafiles
 	data=pd.Series(index=[f'input_{elem}' for elem in cfg['genesys_datafiles']['input']['Sheets']])
 	file=cfg['genesys_datafiles']['input']['inputfile']
 	logger.info('read '+file)
 	xls=pd.ExcelFile(os.path.join(cfg['genesys_inputpath'],file),engine='openpyxl')
-	if 'Scenario' in cfg['genesys_datafiles']:
-		scen=cfg['Scenarios'][cfg['genesys_datafiles']['Scenario']]
+	if 'Scenario' in cfg:
+		scen=cfg['Scenario']
 	for sheet in cfg['genesys_datafiles']['input']['Sheets']:
 		logger.info('  treat sheet '+sheet)
 		df=pd.read_excel(xls,sheet_name=sheet)
@@ -116,22 +122,28 @@ if treatFix:
 		if 'PathwayScenario' in data['input_'+sheet].columns:
 			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
+
 	if 'output' in cfg['genesys_datafiles']:
 		for file in cfg['genesys_datafiles']['output']:
 			logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
 			data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
 			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
-				if 'Model Version' in data[file].columns:
-					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+				if 'Model Version' in data[file].columns:					
+					data[file]['Model Version'] = data[file]['Model Version'].str.split('_').str[1]
+					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 					data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
 				elif 'Scenario' in cfg['genesys_datafiles']:
-					data[file]['Scenario']=cfg['genesys_datafiles']['Scenario']
-					data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(cfg['Scenarios'],))
+					data[file]['Scenario']=cfg['Scenario']
+					data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 				else:
 					data[file]['Scenario']='No Scenario'
 				
 			if 'PathwayScenario' in data[file].columns:
 				data[file].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
+				data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
+				
+			if 'Scenario' in data[file].columns:
+				data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 
 
 	# read mappings
@@ -230,7 +242,7 @@ if treatFix:
 				
 		# replace scenario nameserie
 		if 'PathwayScenario' in vardata.columns:
-			vardata['PathwayScenario']=vardata['PathwayScenario'].replace(cfg['Scenarios'])
+			vardata['PathwayScenario']=vardata['PathwayScenario'].replace(scenarios_names_dict)
 		vardata.rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
 		# treat column names with space
@@ -706,7 +718,7 @@ if treatFix:
 					if col == 'Model': 
 						vardata[col]=cfg['Model']
 					elif col == 'Scenario':
-						vardata[col]=vardata[col].map(cfg['Scenarios'])
+						vardata[col]=vardata[col].map(scenarios_names_dict)
 					
 			if debug:
 				print('after misscols')
@@ -765,6 +777,8 @@ if treatFix:
 		logger.info('no duplicated rows')
 		
 	df=pd.read_csv(cfg['outputpath']+cfg['outputfile'],index_col=0)
+	df['Scenario']=df['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
+
 	 
 	# conversion to IAMDataFrame
 	BigIAM=pyam.IamDataFrame(df)
