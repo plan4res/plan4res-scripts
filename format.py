@@ -2290,9 +2290,12 @@ def createUCBlock(filename,id,scenario,start,end):
 		NameData=np.array(IN.index)
 		CostData=np.array([0.0]*NumberLines)
 		SusceptanceData=np.array([0.0]*NumberLines)
+		EfficiencyData=np.array([0.0]*NumberLines)
 		if 'Impedance' in IN.columns:
 			IN['Susceptance']=IN['Impedance'].apply(lambda x: -1/x if x>0 else 0)
 			SusceptanceData=np.array(IN['Susceptance'])
+		if 'Efficiency' in IN.columns:
+			EfficiencyData=np.array(IN['Efficiency'])
 		if 'Cost' in IN.columns:
 			CostData=np.array(IN['Cost'])
 		for line in IN.index:
@@ -2309,6 +2312,8 @@ def createUCBlock(filename,id,scenario,start,end):
 		Susceptance[:]=SusceptanceData
 		NetworkCost=Block.createVariable("NetworkCost",np.double ,("NumberLines"))
 		NetworkCost[:]=CostData
+		Efficiency=Block.createVariable("Efficiency",np.double ,("NumberLines"))
+		Efficiency[:]=EfficiencyData
 		LineName=Block.createVariable("LineName",str,("NumberLines"))
 		LineName[:]=NameData
 		
