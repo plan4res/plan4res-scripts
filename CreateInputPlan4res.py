@@ -1108,16 +1108,30 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							TU['CapitalCost']=0
 					else:
 						TU['CapitalCost']=0
+				
 				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
-					#replace 0 capacity with investment minimal capacity
-					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=cfg['ParametersCreate']['zerocapacity']
-					# create MaxAddedCapacity, bounded to the MaxCapacity if in dataset
-					if 'MaxCapacity' in TU.columns:
+					# it is allowed to invest in oetechno
+					isMaxAddConfig=False
+					if 'MaxAdd' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
+						# the user defined a maximum investment in the settings
+						isMaxAddConfig=True
 						maxaddconfig=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
-						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity'] < row['Capacity']+maxaddconfig else maxaddconfig, axis=1)
+					if 'MaxRet' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
+						maxretconfig=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
 					else:
-						TU['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
-					TU['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
+						maxretconfig=0
+					
+					if 'MaxCapacity' in TU.columns and isMaxAddConfig:
+						# MaxCapacity, if >0 defines the existing investment potential
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity'] and row['MaxCapacity'] < row['Capacity']+maxaddconfig) else maxaddconfig, axis=1)
+					elif 'MaxCapacity' in TU.columns:
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity']  else 0, axis=1)
+					elif isMaxAddConfig:
+						TU['MaxAddedCapacity']= maxaddconfig
+					else:
+						TU['MaxAddedCapacity']=0
+					TU['MaxRetCapacity']=maxretconfig
+					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=TU.apply(lambda row: cfg['ParametersCreate']['zerocapacity'] if row['MaxAddedCapacity'] > 0  else 0, axis=1)
 				else:
 					TU['MaxAddedCapacity']=0
 					TU['MaxRetCapacity']=0
