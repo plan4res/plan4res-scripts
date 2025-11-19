@@ -8,6 +8,7 @@ import matplotlib.dates as mdates
 import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.dates as mdates
+from matplotlib.patches import Patch
 import numpy as np
 import yaml
 import os
@@ -101,9 +102,7 @@ if nbargs>4:
 
 TimeStepHours=cfg['Calendar']['TimeStep']['Duration']
 
-#cfg['dir']=cfg['path']+cfg['Resultsdir']
 cfg['dir']=os.path.join(cfg['path'], cfg['Resultsdir'])
-#cfg['inputpath']=cfg['path']+cfg['inputDir']
 cfg['inputpath']=os.path.join(cfg['path'], cfg['inputDir'])
 if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
 if 'nomenclatureDir' not in cfg: 
@@ -304,6 +303,16 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	listLinesInDataset=[]
 	listInvestedAssets=[]				  
 	
+	# coupling constraints
+	FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
+	InputVarCost['SlackUnit']=FailureCost
+	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['ZV_ZoneValues'])):
+		InputData=read_input_csv(cfg,'ZV_ZoneValues')
+		for region in list_regions:
+			filtre = (InputData['Type'] == 'CostActivePowerDemand') & (InputData['Zone'] == region)
+			if not InputData[filtre].empty:
+				InputVarCost.loc['SlackUnit',region] = InputData.loc[filtre, 'value'].iloc[0]
+
 	# seasonal storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['SS_SeasonalStorage'])):
 		InputData=read_input_csv(cfg,'SS_SeasonalStorage')
@@ -577,7 +586,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
-			invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
+			#invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
 			if LoopCem:
 				if ( (region in InstalledCapacityLastLoopCem.index) and (techno in InstalledCapacityLastLoopCem.columns) ):
 					added=InstalledCapacityLastLoopCem[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacityLastLoopCem[techno].loc[region]
@@ -598,10 +607,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				
 			InvestedCapacity[techno].loc[region]=np.round(added,decimals=cfg['arrondi'])
 			indexSol=indexSol+1
+			if LoopCem:
+				invest_factor_by_asset[(region, techno)] = InvestedCapacity[techno].loc[region] / InstalledCapacity[techno].loc[region]
+			else: 
+				invest_factor_by_asset[line]=sol[0].loc[indexSol-1]
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
-				invest_factor_by_asset[line] = sol[0].loc[indexSol]
+				#invest_factor_by_asset[line] = sol[0].loc[indexSol]
 				
 				if LoopCem:
 					if line in LineCapacityLastLoopCem.index:
@@ -620,6 +633,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				InvestedLine.loc[line]['MaxPowerFlow']=np.round(addedMax,decimals=cfg['arrondi'])																										
 				InvestedLine.loc[line]['MinPowerFlow']=np.round(addedMin,decimals=cfg['arrondi'])																										
 				indexSol=indexSol+1
+				if LoopCem:
+					invest_factor_by_asset[line] = InvestedLine.loc[line]['MaxPowerFlow'] / LineCapacity.loc[line]['MaxPowerFlow']
+				else: 
+					invest_factor_by_asset[line]=sol[0].loc[indexSol-1]
 		InvestedLine=InvestedLine.fillna(0.0)
 		InvestedCapacity.to_csv(cfg['dirOUT']+'InvestedCapacity.csv')
 		InvestedLine.to_csv(cfg['dirOUT']+'InvestedLines.csv')
@@ -768,7 +785,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	for i in range(listscen[0],listscen[0]+len(listscen)): 
 		ScenarioIndex=ScenarioIndex+[i]
 		
-	FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
+	#FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 	
 	if cfg['map']:
 		####################################################################################################
@@ -787,7 +804,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				df_continent['geometry'] = df_continent['geometry'].apply(wkt.loads)
 				continent=gpd.GeoDataFrame(df_continent, crs='epsg:4326')
 			elif file_extension == '.geojson':
-				continent = gpd.read_file(cfg['path']+cfg['private_map'])
+				continent = gpd.read_file(os.path.join(cfg['path'],cfg['private_map']))
+				continent = continent.to_crs(epsg=4326)						   
 			else:
 				logger.info('unrecognised map file')
 				logger.info('maps will not be created')
@@ -836,7 +854,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		del restofcontinent['isin']
 
 		# aggregate countries in the map
-		if cfg['aggregateregions']: mycontinent = mycontinent.dissolve(by='Aggr')
+		if cfg['aggregateregions']: 
+			mycontinent["geometry"] = mycontinent.buffer(0)
+			mycontinent = mycontinent.dissolve(by='Aggr')
 
 		# plot continent avec frontieres et representative point
 		figmapcontinent, axmapcontinent = plt.subplots(1,1,figsize=(10,10))
@@ -918,10 +938,55 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			figflows.clf()
 			plt.close('all')
 		return namefigpng
-		
+	
+	def FlowsCapacityMap(df,NameFile): 
+	# draws a map of continent with arrows representing the mean annual flows
+	########################################################### 
+		namefigpng=cfg['dirIMG']+NameFile
+	
+		if cfg['geopandas']:							   		 
+			figflows, axflows = plt.subplots(1,1,figsize=(10,10))
+			mycontinent.boundary.plot(ax=axflows,figsize=(10,10))
+			centers.plot(color='r',ax=axflows,markersize=1)
+
+			# fill data with flows and start/end
+			lines=df.index
+			data={'start':[ x.split('>')[0] for x in lines ],'end':[ x.split('>')[1] for x in lines ],'flow':0.5*(df['MaxPowerFlow']-df['MinPowerFlow'])} 
+			flows = pd.DataFrame(data, index = lines )
+				
+			# compute width of arrows
+			if flows['flow'].abs().max()>0: flows['width']=(10.0*flows['flow']/(flows['flow'].abs().max())).abs()
+			else: flows['width']=flows['flow'].abs()
+			
+			flows['newstart']=flows['start']
+			flows['newend']=flows['end']
+			flows['newstart']=np.where(flows['flow']<0,flows['end'],flows['start'])
+			flows['newend']=np.where(flows['flow']<0,flows['start'],flows['end'])
+			flows['newflow']=flows['flow'].abs()
+			
+			flows['startpoint']=flows['newstart'].apply(lambda x: centers[numcenters[x]])
+			flows['endpoint']=flows['newend'].apply(lambda x: centers[numcenters[x]])
+			
+			
+			flows['line']=flows.apply(lambda x: LineString([x['startpoint'], x['endpoint']]),axis=1)
+			geoflows=gpd.GeoDataFrame(flows,geometry=flows['line'])
+
+			# reduce length of arrows
+			scaledgeometry=geoflows.scale(xfact=0.7,yfact=0.7,zfact=1.0,origin='center')
+			geoflows.geometry=scaledgeometry
+
+			# plot lines
+			geoflows.plot(ax=axflows,column='newflow',linewidth=geoflows.width,cmap='Reds',vmin=-100,vmax=500)
+
+			axflows.tick_params(labelbottom=False,labelleft=False)
+			plt.savefig(namefigpng)
+			figflows.clf()
+			plt.close('all')
+		return namefigpng
 	def EuropePieMap(df,NameFile,Colors):  
 	# draw a map of continent with pies in each region
 		namefigpng=cfg['dirIMG']+NameFile
+		namefigpng_legend = cfg['dirIMG'] + NameFile + "_legend.png"
 		TechnosInGraph=[]
 		for tech in df.columns:
 			if ~df[tech].isin([0,cfg['ParametersCreate']['zerocapacity']]).all() :
@@ -944,17 +1009,30 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				x=mycontinent['x'][country]
 				y=mycontinent['y'][country]
 				axmapcontinent.pie(todraw,colors=ColorsKept,center=(x,y),radius=1.5)
-			step=1/len(df.columns)
-			X=np.arange(xmin,xmin+1,step)			
-			patches=axmapcontinent.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
-			axmapcontinent.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
+			#step=1/len(df.columns)
+			#X=np.arange(xmin,xmin+1,step)			
+			#patches=axmapcontinent.bar(X,todraw,bottom=ymax,width=0,color=ColorsInGraph['color'])
+			#axmapcontinent.legend(patches,ColorsInGraph.index,loc="lower left",bbox_to_anchor=(0, -0.09),facecolor='white',ncol=2)
 			axmapcontinent.set_xbound(xbounds)
 			axmapcontinent.set_ybound(ybounds)
 
 			namefigpng=cfg['dirIMG']+NameFile
 			plt.savefig(namefigpng)
-			figmapcontinent.clf()
-			plt.close('all')
+			#figmapcontinent.clf()
+			plt.close(figmapcontinent)
+			
+			# create legend
+			fig_leg, ax_leg = plt.subplots(figsize=(6, 1.5))
+			ax_leg.axis("off")
+			step = 1 / len(TechnosInGraph)
+			X = np.arange(0, 1, step)
+			#patches = ax_leg.bar(X, np.ones_like(X), color=ColorsInGraph['color'], width=step)
+			patches = [Patch(color=color, label=tech) for tech, color in zip(ColorsInGraph.index, ColorsInGraph["color"])]
+
+			ax_leg.legend(patches,ColorsInGraph.index,loc="center",bbox_to_anchor=(0.5, 0.5),facecolor='white',ncol=2,frameon=True)
+
+			plt.savefig(namefigpng_legend, bbox_inches='tight', dpi=300)
+			plt.close(fig_leg)
 		return namefigpng
 
 	def EuropeBarMap(df,NameFile,Colors):
@@ -1282,9 +1360,14 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			
 		if cfg['map']: 
 			namefigpng=EuropePieMap(InstalledCapacity,'InstalledCapacityMapPieEurope.jpeg',TechnoColors)
+			namefigpng=EuropePieMap(AggrInstalledCapacity,'AggrInstalledCapacityMapPieEurope.jpeg',TechnoAggrColors)
+			if cfg['map']: namefigpng=FlowsCapacityMap(LineCapacity,'LineCapacity.jpeg')
 			if isInvest:
 				namefigpng=EuropePieMap(InitialInstalledCapacity,'InitialInstalledCapacityMapPieEurope.jpeg',TechnoColors)
-
+				if cfg['map']: 
+					namefigpng=FlowsCapacityMap(InitialLineCapacity,'InitialLineCapacity.jpeg')
+					namefigpng=FlowsCapacityMap(InvestedLineCapacity,'InvestedLineCapacity.jpeg')
+																							   
 		del namefigpng
 
 	if(cfg['PostTreat']['InstalledCapacity']['latex']):
@@ -1749,7 +1832,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
 			   
 			SlackCmarReg.columns=listscen
-			if not(FailureCost in SlackCmarReg.index): 
+			if not(InputVarCost.loc['SlackUnit',reg] in SlackCmarReg.index): 
 				logger.info('       no non-served energy for zone '+reg)
 				nbHoursSlack.loc[reg]=0
 			else:
@@ -2017,6 +2100,17 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 				ScenIndex=ScenIndex+cfg['FileNumScenPostfix']
 			Fulldf=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Power']['Dir']+'ActivePower'+ScenIndex+'.csv',skiprows = lambda x : x > 0 and x <= NbTimeStepsToRemoveBefore,skipfooter=NbTimeStepsToRemoveAfter,engine='python')
 			
+			# to remove => multiply thermal maxpower for invested technos by solutionOUT
+			# remove when investment_solver is updated
+			if 'MultThermal' in cfg and cfg['MultThermal'] and isInvest:
+				for col in Fulldf.columns:
+					if col != 'Timestep':
+						tech=col.split('_')[0]
+						reg=col.split('_')[1]
+						if (reg,tech) in listInvestedAssets and tech in cfg['technos']['thermal']:
+							print("updated generation of techno ",tech," region ",reg," to reflect new installed capacity, mult by ",str(invest_factor_by_asset[(reg, tech)]))
+							Fulldf[col]=Fulldf[col]*invest_factor_by_asset[(reg, tech)]
+																   
 			# separate pumping from turbining for _PUMP technos
 			for col in Fulldf.columns:
 				if '_' in col and col.split('_')[0] in cfg['pumping'] and '_PUMP' not in col and '_TURB' not in col:
@@ -2357,6 +2451,9 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		namefigpng=StackedBar(MeanEnergyProduced,'MeanEnergyProducedBar.jpeg',TechnoColorsProduced,False)
 		namefigpng=StackedBar(MeanEnergyAggrProduced,'MeanEnergyAggrProducedBar.jpeg',TechnoColorsAggrProduced,False)
 		
+		if cfg['map']: 
+			namefigpng=EuropePieMap(MeanEnergyProduced,'MeanEnergyProducedMapPieEurope.jpeg',TechnoColorsProduced)
+			namefigpng=EuropePieMap(MeanEnergyAggrProduced,'MeanEnergyAggrProducedMapPieEurope.jpeg',TechnoColorsAggrProduced)
 		listTechnosAggr=cfg['technosAggr']
 		listTechnos=cfg['Technos']
 		if "treat" in cfg['Graphs']['Power']: 

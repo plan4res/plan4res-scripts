@@ -72,10 +72,10 @@ if 'outputpath' not in cfg:
 		cfg['outputpath']=os.path.join(cfg['path'], 'csv_invest')
 	else:
 		cfg['outputpath']=os.path.join(cfg['path'], 'csv_simul')
-if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 'TimeSeries')
-if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs')
-if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries')
-if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
+if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 'TimeSeries/')
+if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs/')
+if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries/')
+if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings/')
 if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
 if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
 
@@ -1126,7 +1126,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						# MaxCapacity, if >0 defines the existing investment potential
 						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity'] and row['MaxCapacity'] < row['Capacity']+maxaddconfig) else maxaddconfig, axis=1)
 					elif 'MaxCapacity' in TU.columns:
-						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity']  and row['MaxCapacity'] < 999999 )else 0, axis=1)
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity'] and row['MaxCapacity'] < 999999 ) else 0, axis=1)
 					elif isMaxAddConfig:
 						TU['MaxAddedCapacity']= maxaddconfig
 					else:
