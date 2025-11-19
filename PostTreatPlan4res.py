@@ -345,7 +345,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if LoopCem:
 			InputTULastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
-			InputTUData=pd.read_csv(os.path.join(cfg['inputpath'], 'TU_ThermalUnits_save_0.csv'),skiprows=skip)
+			InputTUData=pd.read_csv(os.path.join(cfg['inputpath'], 'TU_ThermalUnits.csv'),skiprows=skip)
 		else:
 			InputTUData=read_input_csv(cfg, 'TU_ThermalUnits')
 		inputdata_save['TU_ThermalUnits'] = InputTUData
@@ -400,7 +400,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if LoopCem:
 			InputRESLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
-			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'RES_RenewableUnits_save_0.csv'),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'RES_RenewableUnits.csv'),skiprows=skip)
 		else:
 			InputData=read_input_csv(cfg, 'RES_RenewableUnits')
 		inputdata_save['RES_RenewableUnits'] = InputData
@@ -455,7 +455,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if LoopCem:
 			InputSTSLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
-			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'STS_ShortTermStorage_save_0.csv'),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'STS_ShortTermStorage.csv'),skiprows=skip)
 		else:
 			InputData=read_input_csv(cfg, 'STS_ShortTermStorage')
 		inputdata_save['STS_ShortTermStorage'] = InputData
@@ -517,7 +517,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		
 		if LoopCem:
 			InputINLastCemIter=pd.read_csv(os.path.join(cfg['inputpath'], max_file),skiprows=skip)
-			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'IN_Interconnections_save_0.csv'),skiprows=skip)
+			InputData=pd.read_csv(os.path.join(cfg['inputpath'], 'IN_Interconnections.csv'),skiprows=skip)
 		else:
 			InputData=read_input_csv(cfg, 'IN_Interconnections')
 		inputdata_save['IN_Interconnections'] = InputData
@@ -664,6 +664,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	# get list of scenarios and timeframe in dataset from file Demand0.csv
 	if os.path.isdir(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir']):
 		listFiles=os.listdir(cfg['dirSto']+cfg['PostTreat']['Demand']['Dir'])
+
 		listscen=[]
 		if 'FileNumScenPrefix' in cfg: 
 			lenpre=len(cfg['FileNumScenPrefix'])
@@ -1055,8 +1056,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for techno in df.columns:
 			plt.bar(x,df[techno],color=Colors.loc[techno,'color'],bottom=Bottom)
 			Bottom=Bottom+df[techno]
-		plt.legend(df.columns,bbox_to_anchor=(1.1, 1.05),loc='upper left')
-		plt.xticks(rotation=45,fontsize=14)
+		plt.legend(df.columns,bbox_to_anchor=(1.1, 1.05),loc='upper left',fontsize=6)
+		plt.xticks(rotation=45,fontsize=8)
 		plt.tight_layout()
 		
 		if not drawScale:
@@ -1420,6 +1421,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					Volumes[indexres]=pd.concat([Volumes[indexres],df[newreservoirs[indexres]]], axis=1)
 			
 			if cfg['usevu']: 
+
 				# compute Bellman value at begin and end of time period
 				VolSMS=pd.DataFrame(columns=['Name','VolumeIni','VolumeFin']) 
 				for col in df.columns:
@@ -1457,6 +1459,136 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		if cfg['usevu']: BV.to_csv(cfg['dirOUT'] +'BellmanValuesPerScenario.csv')
 		del Volumes, BV, df, reservoirs
 
+
+				  
+
+		if cfg['usevu'] and cfg['PostTreat']['Volume']['draw']: 
+
+			range_centiles =np.arange(0,1,cfg['PostTreat']['Volume'].get('BV_granularity', 0.02))
+			range_weeks = np.arange(0,cfg['timestepvusms'],cfg['timestepvusms']//12) ## remplacer à terme par un range
+										  
+								
+			# seasonal storage mix
+			df = inputdata_save['SS_SeasonalStorage']
+			InstalledVolMAX = pd.DataFrame({
+    		'Zone': df['Zone'],
+  	  		'AggregMaxVolume': df['NumberUnits'] * df['MaxVolume']
+			})
+
+			VolSMSVU=[]
+								 
+			for centile in range_centiles:
+				VolSMSVUcentile=[]
+				for name in listres:	
+					volume = centile * InstalledVolMAX.loc[InstalledVolMAX['Zone'] == name, 'AggregMaxVolume'].values[0]
+					VolSMSVUcentile.append({
+						'Name': name,
+						'Volume': volume
+					})
+				VolSMSVU.append( pd.DataFrame(VolSMSVUcentile))
+			BV_VU = pd.DataFrame(index=range_weeks, columns=range_centiles )
+			VU_VU = pd.DataFrame(index=range_weeks, columns=range_centiles)
+		
+			stored_a_rows={}
+			stored_b_rows={}
+			for week in  range_weeks :## remplacer à terme par un range
+				SMSVB_week=SMSVB[ SMSVB.Timestep.isin([week]) ]
+
+				a_week=SMSVB_week[ cfg['ReservoirRegions'] ]
+				b_week=SMSVB_week['b']
+				for row in a_week.index:
+
+					a_row =a_week.loc[row].rename({'Name': 'value'})
+					stored_a_rows [(week, row)] = a_row
+					stored_b_rows[(week, row)] = b_week.loc[row]
+
+
+
+
+			for i in range(len(range_centiles)) :
+				centile = range_centiles[i]
+				VOLUMES_centile = VolSMSVU[i]
+				VOLUMES_centile.set_index('Name', inplace=True)
+
+				for week in  range_weeks :## remplacer à terme par un range
+					SMSVB_week=SMSVB[ SMSVB.Timestep.isin([week]) ]
+					valuesms_week=-10000000000000
+					VUs_week_centile=0
+					a_average=0
+					a_week=SMSVB_week[ cfg['ReservoirRegions'] ]
+
+
+					for row in a_week.index:
+
+						a_row =stored_a_rows[(week, row)]
+						b_row= stored_b_rows[(week, row)]
+                                        
+						val_a = VOLUMES_centile['Volume'] * a_row
+
+						total_valA = val_a.sum()
+						val_Week=b_row+total_valA
+						if val_Week > valuesms_week: 
+							valuesms_week=val_Week
+
+							# Calcul de la moyenne
+							a_average = a_row.mean()
+							# Ajout d'une ligne fictive "Average"
+							a_row_with_avg = a_row.copy()
+							a_row_with_avg['Average'] = a_average
+							VUs_week_centile=a_row_with_avg
+							#print(a_week.loc[row])
+					BV_VU.at[week,centile]=valuesms_week
+					VU_VU.at[week,centile]=VUs_week_centile
+
+			plt.figure(figsize=( cfg['Graphs']['Volume']['SizeRow'],  cfg['Graphs']['Volume']['SizeCol']))
+			for week in range_weeks:
+				y_vals = BV_VU.loc[week].astype(float).values
+				plt.plot(range_centiles, y_vals, label = 'Week '+ str(week),linewidth=5)
+			plt.xlabel('reservoir Volume (%)',fontsize=cfg['Graphs']['Volume']['LabelSize'])
+			plt.ylabel('Bellman Value',fontsize=cfg['Graphs']['Volume']['LabelSize'])
+			plt.title('Evolution of Bellman Value regarding reservoir volume',fontsize=cfg['Graphs']['Volume']['TitleSize'])
+			plt.legend(fontsize=cfg['Graphs']['Volume']['LabelSize'],
+           loc='upper left',        # l'ancre de la légende est en haut à gauche de la boîte légende
+           bbox_to_anchor=(1, 1))   # la boîte légende est placée à droite (x=1), en haut (y=1) du graphique
+			plt.tight_layout()  # pour éviter que tout soit coupé
+			plt.grid(True)
+
+	# Sauvegarde du graphique BV
+			namefig = cfg['dirIMG'] + 'BV_allweeks' + '.jpeg'
+			plt.savefig(namefig, format='jpeg')
+			plt.close()
+
+			
+	# Sauvegarde du graphique VU
+			n = len(listres)
+			fig, axs = plt.subplots(cfg['Graphs']['Volume']['nblines'], cfg['Graphs']['Volume']['nbcols'], figsize=( cfg['Graphs']['Volume']['SizeRow'],  cfg['Graphs']['Volume']['SizeCol']), sharex=True)  # n lignes, 1 colonne
+			listresGV=listres.copy()
+			listresGV.append('Average')
+			for ax, name in zip(axs.flatten(), listresGV):
+				for week in range_weeks:
+					y_vals = []
+					for centile in range_centiles:
+						VU_regions = VU_VU.loc[week, centile]
+						val_region = VU_regions.loc[name]
+						y_vals.append(-1 * val_region)
+
+					ax.plot(range_centiles, y_vals, label=f'Week {week}')
+
+				ax.set_title(f'Valeur VU pour {name}',fontsize=cfg['Graphs']['MarginalCost']['TitleSize'])
+				ax.set_ylabel('Valeur VU',fontsize=cfg['Graphs']['MarginalCost']['LabelSize'])
+				ax.set_xlabel('mean reservoir Volume (%)',fontsize=cfg['Graphs']['MarginalCost']['LabelSize'])
+				ax.set(ylim =(0,100))
+				ax.grid(True)
+				ax.legend()
+
+
+
+			plt.tight_layout()
+			# Sauvegarde du graphique
+			namefig = cfg['dirIMG'] + 'VU_w1' + '.jpeg'
+			plt.savefig(namefig, format='jpeg')
+			plt.close()
+			 
 	# write volumes in IAMC data format
 	if (cfg['PostTreat']['Volume']['iamc']):
 		logger.info('   creating pyam for Volume')
