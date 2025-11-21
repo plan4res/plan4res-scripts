@@ -6,10 +6,11 @@ import pyam
 import pandas as pd ## necessary data analysis package
 import numpy as np
 import os
+import os.path as osp
 import sys
 import yaml
 #import nomenclature as nc
-from math import ceil
+from math import ceil,fabs
 from datetime import timedelta
 from calendar import monthrange
 
@@ -21,24 +22,161 @@ p4rpath = os.environ.get("PLAN4RESROOT")
 logger.info('p4rpath='+p4rpath)
 
 def abspath_to_relpath(path, basepath):
-	return os.path.relpath(path, basepath) #if os.path.abspath(path) else path
+	return osp.relpath(path, basepath) #if osp.abspath(path) else path
 
 def replace_scenario_names(version, replacement_dict):
 	for short_name, long_name in replacement_dict.items():
 		if short_name in version:
 			return long_name
 	return version
+
+def check_required_inputs(cfg):
+	logger.info('\nCheck required inputs')
+	required_input = ['Sets', 'Par_OutputActivityRatio', 'Par_TechnologyFromStorage', 'Par_TagTechnologyToSector']
+	required_output = []
+	missing = False
+	for var in cfg['variables']:
+		if 'source' in cfg['variables'][var]:
+			if cfg['variables'][var]['source']!='internal':
+				# get data
+				if cfg['variables'][var]['source']!='input':
+					required_output.append(cfg['variables'][var]['source'])
+				else:
+					required_input+=cfg['variables'][var]['sheets']
+	for s in set(required_input):
+		if s not in cfg['genesys_datafiles']['input']['Sheets']:
+			missing = True
+			logger.warning(f'/!\ Required input sheet {s} is missing from parameter genesys_datafiles>input>Sheets. Please add it in settings file settingsLinkageGENeSYS.yml.')
+	for d in set(required_output):
+		if d not in cfg['genesys_datafiles']['output'].keys():
+			missing = True
+			logger.warning(f'/!\ required_output output data {s} is missing from parameter genesys_datafiles>output. Please add it in settings file settingsLinkageGENeSYS.yml.')
+	if missing:
+		log_and_exit(1,os.getcwd()) 
+	
+
+def get_techno_power(data, for_storage=False):
+	elements = data['input_Sets']['Storage' if for_storage else 'Technology'].dropna()
+	technos_ouput_power = data['input_Par_OutputActivityRatio'].set_index('Technology')
+	technos_ouput_power = technos_ouput_power[(technos_ouput_power['Fuel']=='Power')&technos_ouput_power['Value'].abs()>0]
+	technos_is_power = technos_ouput_power.index.unique()
+	if for_storage:
+		storage_techno = data.loc['input_Par_TechnologyFromStorage'].set_index('Storage').loc[elements, 'Technology'].unique()
+		technos_is_power = [data.loc['input_Par_TechnologyToStorage'].set_index('Technology').loc[t, 'Storage'].unique()[0] for t in storage_techno if t in technos_is_power] # we keep storage is associated  techno is outputting power
+	return technos_is_power
+		
+def interactive_check_if_set_is_in_mapping(sets, set_col_name, mappings, mapping_name, data, cfg, filter_on_power=True):
+	logger.info(f'\nCheck if elements in set {set_col_name} are in settings file mappings {mapping_name}.')
+	elements = sets[set_col_name].dropna()
+	technos_ouput_power = data['input_Par_OutputActivityRatio'].set_index('Technology')
+	technos_ouput_power = technos_ouput_power[(technos_ouput_power['Fuel']=='Power')&technos_ouput_power['Value'].abs()>0]
+	technos_is_power = get_techno_power(data, mapping_name=='storages')
+	technos_to_sector = data['input_Par_TagTechnologyToSector'].set_index('Technology')
+	missing_in_mapping = [val for val in elements.dropna() if (not filter_on_power or val in technos_is_power) and val not in mappings.loc[mapping_name].dropna().index]
+	present_in_mapping = [val for val in elements.dropna() if (not filter_on_power or val in technos_is_power) and val in mappings.loc[mapping_name].dropna().index]
+	def display_and_check_mapping(m, data):
+		logger.info(f'{m}:')
+		for k,d in data.items():
+			logger.info(f'\t{k} : {data[k]}')
+		if set_col_name in genesys_mappings.keys():
+			techno_iamc_settings = data['TechnoIAMC']
+			if m in genesys_mappings[set_col_name].index:
+				techno_genmap = genesys_mappings[set_col_name][m]
+				if techno_genmap != techno_iamc_settings:
+					logger.warning(f'Mapping in setting file ({techno_iamc_settings}) is different from ({techno_genmap}) defined in {genesys_mappings_dir}.')
+					query=input('Continue creation of IAMC data? [y]/n\n')
+					if query=='n':
+						log_and_exit(1, os.getcwd())
+								
+								
+	def try_to_find_matching_IAMC_techno(m):
+		tentative = [cfg[b+'_'.join(m[1:])]['TechnoIAMC'] for b in ['RES_', 'P_','D_', 'S_'] if b+'_'.join(m[1:]) in cfg.keys()] # we first try to match to another techno inside settings file ignoring the GENeSYS-MOD prefix
+		if set_col_name in genesys_mappings.keys(): # if additional genesys-mod mappings were provided we also try to match against it
+			tentative += [genesys_mappings[set_col_name][b+'_'.join(m[1:])] for b in ['RES_', 'P_','D_', 'S_'] if b+'_'.join(m[1:]) in genesys_mappings[set_col_name].index]
+		return tentative[0] if len(tentative) > 0 else 'UNDEFINED'
+		
+	for m in present_in_mapping:
+		display_and_check_mapping(m, mappings.loc[mapping_name].loc[m])
+	if len(missing_in_mapping) > 0:
+		logger.warning(f'The following items from set {set_col_name} are missing from mapping {mapping_name}: '+', '.join(missing_in_mapping))
+		query=input('Display a proposal for additional mapping? [y]/n\n')
+		if query!='n':
+			for m in missing_in_mapping:
+				logger.info(f'{m}:')
+				if mapping_name == 'technos':
+					logger.info(f'\tEmission: Yes')
+					logger.info(f'\tSector: {technos_to_sector.loc[m,"Sector"]}')
+				elif mapping_name == 'storages':
+					logger.info(f'\tStorageRatio: 100')
+				logger.info(f'\tTechnoIAMC: {try_to_find_matching_IAMC_techno(m)}')
+			
+		query=input('Continue creation of IAMC data? [y]/n\n')
+		if query=='n':
+			log_and_exit(1, os.getcwd())
+
+def estimate_storage_energy_capacity(data, cfg, filter_on_power=True):
+	logger.info('\nAttempt to check storage capacity')
+	storages = data.loc['input_Sets']['Storage'].dropna()
+	storages_in_settings_mappings = cfg['StorageMappings'].keys()
+	storage_techno = data.loc['input_Par_TechnologyFromStorage'].set_index('Storage').loc[storages, 'Technology'].unique()
+	storage_techno = pd.Index(data.loc['capacity']['Technology'].unique()).intersection(storage_techno)
+	inst_capa_storages = data.loc['capacity'].set_index(['Type','Technology','Region','Year',])['Value'].loc[('TotalCapacity', storage_techno)].droplevel(0).unstack(level=['Region','Year'])
+	inst_capa_storages.index = [data.loc['input_Par_TechnologyToStorage'].set_index('Technology').loc[i,'Storage'].unique()[0] for i in inst_capa_storages.index]
+	inst_capa_storages = inst_capa_storages.reindex(storages).fillna(0.)
+	capacity_to_energy = pd.Series(0, index=storages)
+	technos_is_power = get_techno_power(data, True)
+	if 'input_Par_StorageE2PRatio' in data.index:
+		capacity_to_energy.update(data.loc['input_Par_StorageE2PRatio'].set_index('Technology').loc[storage_techno])
+	elif'input_Par_ResidualStorageCapacity' in data.index:
+		residualstoragecapacity = data['input_Par_ResidualStorageCapacity'].set_index(['Storage','Region','Year'])['Value'].unstack(['Region','Year'])
+		if not residualstoragecapacity.empty:
+			capacity_to_energy.update(residualstoragecapacity.divide(inst_capa_storages).groupby(level='Region',axis=1).max())
+	for s in storages:
+		if filter_on_power and s not in technos_is_power:
+			continue
+		logger.info(f'Check energy capacity for storage {s}')
+		capacity_to_energy_settings = None
+		capacity_to_energy_data = None
+		if s in capacity_to_energy.index:
+			capacity_to_energy_data = capacity_to_energy.loc[s]
+		if s in cfg['StorageMappings'].keys():
+			if 'StorageRatio' in cfg['StorageMappings'][s].keys():
+				capacity_to_energy_settings = cfg['StorageMappings'][s]['StorageRatio']
+		capacity_to_energy_data_invalid = (capacity_to_energy_data is None) or (fabs(capacity_to_energy_data)<=1e-6)
+		capacity_to_energy_settings_invalid = (capacity_to_energy_settings is None) or (fabs(capacity_to_energy_settings)<=1e-6)
+		if capacity_to_energy_data is None:
+			logger.warning(f'/!\ Could not estimate capacity to energy ratio for storage {s}')
+		if fabs(capacity_to_energy_data)<=1e-6:
+			logger.warning(f'/!\ Capacity to energy ratio for storage computed from data is 0')
+		if capacity_to_energy_data_invalid:
+			if capacity_to_energy_settings is None:
+				logger.warning(f'/!\ No value provided in setting file at StorageMappings>{s}>StorageRatio.')
+				query=input('Continue creation of IAMC data? [y]/n\n')
+				if query=='n':
+					log_and_exit(1, os.getcwd())
+			if fabs(capacity_to_energy_settings)<=1e-6:
+				logger.warning(f'/!\ Value in setting file at StorageMappings>{s}>StorageRatio is 0.')
+				query=input('Continue creation of IAMC data? [y]/n\n')
+				if query=='n':
+					log_and_exit(1, os.getcwd())
+			else:
+				logger.info(f'Value provided in setting file at StorageMappings>{s}>StorageRatio is {cfg["StorageMappings"][s]["StorageRatio"]}')
+	if capacity_to_energy_data_invalid and capacity_to_energy_settings_invalid:
+		logger.warning(f'/!\ Storage ratio infered from input GENeSYS-MOD data {gen_val} is different from value {settings_val} indicated in settings file (parameter StorageMappings>{s}>StorageRatio).')
+		query=input('Continue creation of IAMC data? [y]/n\n')
+		if query=='n':
+			log_and_exit(1, os.getcwd())
 		
 nbargs=len(sys.argv)	
 if nbargs>1: 
 	settings=sys.argv[1]
 else:
 	settings="settingsLinkageGENeSYS.yml"
-if os.path.abspath(settings):
-	settings = os.path.relpath(settings, path)
+if osp.abspath(settings):
+	settings = osp.relpath(settings, path)
 
 cfg={}
-with open(os.path.join(path, settings),"r") as mysettings:
+with open(osp.join(path, settings),"r") as mysettings:
 	cfg=yaml.load(mysettings,Loader=yaml.FullLoader)
 
 # replace name of current dataset by name given as input
@@ -47,26 +185,26 @@ if nbargs>1:
 	if 'path' in cfg:
 		cfg['path']=cfg['path'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
-		cfg['path']=os.path.join(path, 'data', namedataset)
+		cfg['path']=osp.join(path, 'data', namedataset)
 	if 'p4rpath' in cfg:
 		cfg['p4rpath']=cfg['p4rpath'].replace(cfg['path'].split('/')[len(cfg['path'].split('/'))-1],namedataset)
 	else:
 		cfg['p4rpath']=p4rpath
 		
-if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings/')
-if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath']=os.path.join(cfg['path'], 'GENeSYS-MOD/inputs/')
-if 'genesys_resultspath' not in cfg: cfg['genesys_resultspath']=os.path.join(cfg['path'], 'GENeSYS-MOD/outputs/')
-if 'genesys_git' not in cfg: cfg['genesys_gitpath']=os.path.join(cfg['path'], 'GENeSYS-MOD/GENeSYS_MOD.data/Data/')
-if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'], 'TimeSeries/')
-if 'mappingspath' not in cfg: cfg['mappingspath']=os.path.join(cfg['path'], 'settings/mappings_genesys/')
-if 'outputpath' not in cfg: cfg['outputpath']=os.path.join(cfg['path'], 'IAMC/')
+if 'configDir' not in cfg: cfg['configDir']=osp.join(cfg['path'], 'settings/')
+if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath']=osp.join(cfg['path'], 'GENeSYS-MOD/inputs/')
+if 'genesys_resultspath' not in cfg: cfg['genesys_resultspath']=osp.join(cfg['path'], 'GENeSYS-MOD/outputs/')
+if 'genesys_git' not in cfg: cfg['genesys_gitpath']=osp.join(cfg['path'], 'GENeSYS-MOD/GENeSYS_MOD.data/Data/')
+if 'timeseriespath' not in cfg: cfg['timeseriespath']=osp.join(cfg['path'], 'TimeSeries/')
+if 'mappingspath' not in cfg: cfg['mappingspath']=osp.join(cfg['path'], 'settings/mappings_genesys/')
+if 'outputpath' not in cfg: cfg['outputpath']=osp.join(cfg['path'], 'IAMC/')
 if 'outputfile' not in cfg: cfg['outputfile']=namedataset+'.csv'
-if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
-if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
+if 'pythonDir' not in cfg: cfg['pythonDir']=osp.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
+if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=osp.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
 
-if not os.path.isdir(cfg['outputpath']): os.mkdir(cfg['outputpath'])
-if not os.path.isdir(cfg['timeseriespath']): os.mkdir(cfg['timeseriespath'])
-if os.path.exists(cfg['outputfile']):
+if not osp.isdir(cfg['outputpath']): os.mkdir(cfg['outputpath'])
+if not osp.isdir(cfg['timeseriespath']): os.mkdir(cfg['timeseriespath'])
+if osp.exists(cfg['outputfile']):
 	os.remove(cfg['outputfile'])
 
 if 'treat' in cfg:
@@ -88,10 +226,26 @@ if 'input_from_git' in cfg:
 
 if CreateInputFromGit:
 	cfg['genesys_datafiles']['input']='InputDataGenesysFromGit.xlsx'
-	if not os.path.isdir(cfg['genesys_inputpath']):os.mkdir(cfg['genesys_inputpath'])
+	if not osp.isdir(cfg['genesys_inputpath']):os.mkdir(cfg['genesys_inputpath'])
+
+# To help define missing mappings in settings if necessary
+genesys_mappings = dict()
+genesys_mappings_dir = None
+if 'genesys_mappings' in cfg.keys():
+	if not osp.isdir(cfg['genesys_mappings']):
+		logger.warning('Error: key "genesys_mappings" in configuration fail does not point to a valid directory ('+cfg['genesys_mappings']+')')
+	else:
+		genesys_mappings_dir = cfg['genesys_mappings']
+		logger.info('Read GENeSYS-MOD to IAMC mappings in '+cfg['genesys_mappings'])
+		logger.info('NB: these mappings do not supersede mappings defined in the settings file. They are only used to propose new mappings in case of missing data')
+		genesys_mappings['Technology'] = pd.read_csv(osp.join(cfg['genesys_mappings'], 'capacity_technologies.csv'),index_col=0,header=None)[1]
+		genesys_mappings['Storage'] = pd.read_csv(osp.join(cfg['genesys_mappings'], 'storages.csv'),index_col=0,header=None)[1]
+		genesys_mappings['Emissions'] = pd.read_csv(osp.join(cfg['genesys_mappings'], 'emissions_technologies.csv'),index_col=0,header=None)[1]
+
 
 if treatFix:
 	logger.info('create IAMC file for GENeSYS-MOD outputs in '+cfg['outputpath'])
+	check_required_inputs(cfg)
 
 	# loop on the different variables
 	BigOut=pd.DataFrame()
@@ -107,26 +261,35 @@ if treatFix:
 	data=pd.Series(index=[f'input_{elem}' for elem in cfg['genesys_datafiles']['input']['Sheets']])
 	file=cfg['genesys_datafiles']['input']['inputfile']
 	logger.info('read '+file)
-	xls=pd.ExcelFile(os.path.join(cfg['genesys_inputpath'],file),engine='openpyxl')
+	xls=pd.ExcelFile(osp.join(cfg['genesys_inputpath'],file),engine='openpyxl')
+	scen = None
 	if 'Scenario' in cfg:
 		scen=cfg['Scenario']
 	for sheet in cfg['genesys_datafiles']['input']['Sheets']:
 		logger.info('  treat sheet '+sheet)
+		if not sheet in xls.sheet_names:
+			logger.warning(f'/!\ sheet {sheet} listed in genesys_datafiles>input>Sheets is absent from input data {file}.')
+			data.drop('input_'+sheet, inplace=True)
+			query=input('Continue creation of IAMC data? [y]/n\n')
+			if query=='n':
+				log_and_exit(1, os.getcwd())
+			continue
 		df=pd.read_excel(xls,sheet_name=sheet)
 		if pd.isna(data['input_'+sheet]):
 			data['input_'+sheet]=df
 		else:
 			data['input_'+sheet]=pd.concat(data['input_'+sheet],df)
 		if 'Scenario' not in data['input_'+sheet].columns and 'PathwayScenario' not in data['input_'+sheet].columns:
-			data['input_'+sheet]['Scenario']=scen
+			data['input_'+sheet]['Scenario']= cfg['genesys_datafiles']['input']['scenario'] if 'scenario' in cfg['genesys_datafiles']['input'].keys() else scen
+			
 		if 'PathwayScenario' in data['input_'+sheet].columns:
 			data['input_'+sheet].rename(columns={'PathwayScenario': 'Scenario'}, inplace=True)
 
 
 	if 'output' in cfg['genesys_datafiles']:
 		for file in cfg['genesys_datafiles']['output']:
-			logger.info('read '+os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
-			data.loc[file]=pd.read_csv(os.path.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+			logger.info('read '+osp.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+			data.loc[file]=pd.read_csv(osp.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
 			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
 				if 'Model Version' in data[file].columns:					
 					data[file]['Model Version'] = data[file]['Model Version'].str.split('_').str[1]
@@ -150,11 +313,16 @@ if treatFix:
 	mappings=pd.Series()
 	logger.info('read mappings')
 	mappings.loc['technos']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'TechnoIAMC']).set_index('Technology')
+	interactive_check_if_set_is_in_mapping(data.loc['input_Sets'], 'Technology', mappings, 'technos', data, cfg['TechnosMappings'])
 	mappings.loc['technosfuels']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'TechnoIAMC']).set_index('Technology')
 	mappings.loc['finalenergy_sector']=pd.DataFrame([(tech, details['Sector']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'Sector']).set_index('Technology')
 	mappings.loc['emissions']=pd.DataFrame([(tech, details['Emission']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'Emission']).set_index('Technology')
 	mappings.loc['storages_ratios']=pd.DataFrame([(details['TechnoIAMC'], details['StorageRatio']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['TechnoIAMC', 'StorageRatio']).set_index('TechnoIAMC')
 	mappings.loc['storages']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['Technology', 'TechnoIAMC']).set_index('Technology')
+	interactive_check_if_set_is_in_mapping(data.loc['input_Sets'], 'Storage', mappings, 'storages', data, cfg['StorageMappings'])
+	# Check value of storage ratios against values found in input data
+	estimate_storage_energy_capacity(data, cfg)
+
 	out=pd.DataFrame()
 	isFirst=True
 	IAMCcols=['Model','Scenario','Region','Variable','Unit','Year','Value']
@@ -173,6 +341,7 @@ if treatFix:
 					reg=str(region1)+'>'+str(region2)
 					if reg not in regions_interco and region2!=region1:
 						regions_interco.append(reg)
+	logger.info('\n')
 	logger.info('regions in dataset '+str(regions))
 	logger.info('interco in dataset '+str(regions_interco))
 
@@ -210,7 +379,7 @@ if treatFix:
 		elif 'sources' in cfg['variables'][var]:
 			if cfg['variables'][var]['sources']=='input':
 				logger.error('input cannot be in multiple source')
-				log_and_exit(1, cfg['path'])
+				log_and_exit(1, os.getcwd())
 			else:
 				firstFile=True
 				for file in cfg['variables'][var]['sources']:
@@ -421,7 +590,7 @@ if treatFix:
 			
 			elif rulecat=='combineWithOtherSources':
 				for subrule in cfg['variables'][var]['rules'][rulecat]:
-					logger.info('        apply '+subrule)
+					logger.info('		apply '+subrule)
 					if 'source' in cfg['variables'][var]['rules'][rulecat][subrule]:
 						if cfg['variables'][var]['rules'][rulecat][subrule]['source']!='input':
 							newdata=data.loc[cfg['variables'][var]['rules'][rulecat][subrule]['source']]
@@ -494,14 +663,21 @@ if treatFix:
 							for col in cfg['variables'][var]['rules'][rulecat][subrule]['product_cols']: 
 								col2=cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]
 								if debug: 
-									print( '     product by ',col2)
+									print( ' 	product by ',col2)
 									print( ' vardata[',col,'] before product')
 									print(vardata[col])
 									print( 'multiplied by:')
 									print( vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]])
 									for i in vardata[col].index:
 										print(i,vardata['Technology'].loc[i],vardata['Year'].loc[i],vardata[col].loc[i],vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]].loc[i])
-								vardata[col]=vardata[col]*vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]]
+									vardata[col]=vardata[col].astype(float)*vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]].astype(float)
+									print(var)
+									print(rulecat)
+									print(subrule)
+									print(col)
+									print(cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col])
+									print(vardata[col])
+									print(vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]])
 								if debug: print(vardata[col])
 					elif subrule=='changeValue':
 						colref=cfg['variables'][var]['rules'][rulecat][subrule]['column']
@@ -684,6 +860,7 @@ if treatFix:
 
 
 			if debug:
+				print('Selected years = ', str(Years))
 				print('after year')
 				print(vardata)
 				
@@ -735,7 +912,7 @@ if treatFix:
 		else: logger.info('empty data')
 	
 	# change country names from iso2 to real names
-	with open(os.path.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
+	with open(osp.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
 		countries=yaml.safe_load(nutsreg)
 	iso2_to_country = {}
 	for country in countries[0]['Countries']:
@@ -751,8 +928,7 @@ if treatFix:
 			iso2_to_country2[reg1+'>'+reg2]=iso2_to_country[reg1]+'>'+iso2_to_country[reg2]
 			iso2_to_country2[reg2+'>'+reg1]=iso2_to_country[reg2]+'>'+iso2_to_country[reg1]
 	iso2_to_country={**iso2_to_country, **iso2_to_country2}
-	
-	out['Region'] = out['Region'].map(iso2_to_country)
+	out['Region'] = out['Region'].map(lambda _ : _ if _ not in iso2_to_country.keys() else _)
 	out.to_csv(cfg['outputpath']+cfg['outputfile'],index=False)	
 
 	# check for duplicated and output synthesis of data
@@ -785,7 +961,7 @@ if treatFix:
 	 
 	#filter on unwanted variables
 	def filter_variable_list(variable_list):
-		removed_variables = cfg['removed_variables']
+		removed_variables = [] if 'removed_variables' not in cfg.keys() else cfg['removed_variables']
 		filtered_list = []
 		for variable in variable_list:
 			exclude = False
@@ -819,6 +995,7 @@ if treatFix:
 	BigIAM.to_excel(cfg['outputpath']+cfg['outputfile'].replace('csv','xlsx'))
 
 if treatHourly:
+	logger.info('treat hourly data')
 	# dates treatments
 	dates=pd.Series()
 	beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
@@ -841,7 +1018,7 @@ if treatHourly:
 		datesTS.loc[i]=[start,start+durationTimeStep]
 		start=start+durationTimeStep
 	#TimeSeriesTemplate=pd.DataFrame(columns=['Timestamp [UTC]'])
-	TimeSeriesTemplate=pd.read_csv(os.path.join(cfg['timeseriespath'],'Example.csv'))
+	TimeSeriesTemplate=pd.read_csv(osp.join(cfg['timeseriespath'],'Example.csv'))
 	# start=dates['BeginTS']
 	# i=0
 	# while start<=dates['EndTS']:
@@ -858,7 +1035,7 @@ if treatHourly:
 	for sheet in cfg['genesys_datafiles']['timeseries']['sheets']:
 		sheetname=cfg['genesys_datafiles']['timeseries']['sheets'][sheet]
 		logger.info('  sheet '+sheetname)
-		df=pd.read_excel(os.path.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['timeseries']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
+		df=pd.read_excel(osp.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['timeseries']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
 		df=df.reset_index()
 		if sheetname in cfg['TimeSeriesFactor']:
 			multfactor=(1/cfg['TimeSeriesFactor'][sheetname])
@@ -877,4 +1054,7 @@ if treatHourly:
 					else:
 						timeseries[scenario]=timeseries['Base']
 				nameserie=sheetname+'_'+region+'.csv'
-				timeseries.to_csv(os.path.join(cfg['timeseriespath'],nameserie),index=False)
+				timeseries.to_csv(osp.join(cfg['timeseriespath'],nameserie),index=False)
+
+logger.info('Completed')
+log_and_exit(0, os.getcwd())
