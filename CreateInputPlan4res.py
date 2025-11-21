@@ -1414,9 +1414,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if isSecondary and 'SecondaryRho' in listSS: listcols.append('SecondaryRho')
 
 			BigSS=BigSS[ listcols ]
-			
 			BigSS=BigSS[ BigSS['Zone'].isin(cfg['partition'][partitionDemand]) ]
-			BigSS.to_csv(os.path.join(outputdir, cfg['csvfiles']['SS_SeasonalStorage']), index=False)
+		if BigSS.empty:
+			BigSS=pd.DataFrame(columns=['Name','Zone'])
+		BigSS.to_csv(os.path.join(outputdir, cfg['csvfiles']['SS_SeasonalStorage']), index=False)
 
 	# filling sheet STS_ShortTermStorage
 	###############################################################	
@@ -1946,9 +1947,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					query=input('Continue creation of plan4res input files? [y]/n\n')
 					if query!='n':
 						continue
-					filetimeserie=timeseriesdict['RES'][oetechno][row]
-					RES.loc[row, 'MaxPowerProfile']=filetimeserie
-					
+				filetimeserie=timeseriesdict['RES'][oetechno][row]
+				RES.loc[row, 'MaxPowerProfile']=filetimeserie
+				logger.info(RES.loc[row, 'MaxPowerProfile'])
+				
 			if v==0:
 				BigRES=RES
 				v=1
