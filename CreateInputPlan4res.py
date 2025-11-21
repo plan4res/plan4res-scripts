@@ -72,10 +72,10 @@ if 'outputpath' not in cfg:
 		cfg['outputpath']=os.path.join(cfg['path'], 'csv_invest')
 	else:
 		cfg['outputpath']=os.path.join(cfg['path'], 'csv_simul')
-if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 'TimeSeries')
-if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs')
-if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries')
-if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings')
+if 'dirTimeSeries' not in cfg: cfg['dirTimeSeries'] = os.path.join(cfg['path'], 'TimeSeries/')
+if 'genesys_inputpath' not in cfg: cfg['genesys_inputpath'] = os.path.join(cfg['path'], 'genesys_inputs/')
+if 'timeseriespath' not in cfg: cfg['timeseriespath'] = os.path.join(cfg['path'], 'TimeSeries/')
+if 'configDir' not in cfg: cfg['configDir']=os.path.join(cfg['path'], 'settings/')
 if 'pythonDir' not in cfg: cfg['pythonDir']=os.path.join(cfg['p4rpath'],'scripts/python/plan4res-scripts/settings/')
 if 'nomenclatureDir' not in cfg: cfg['nomenclatureDir']=os.path.join(cfg['p4rpath'],'scripts/python/openentrance/definitions/')
 
@@ -579,6 +579,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 									for part in cfg['CouplingConstraints']['ActivePowerDemand']:
 										if vardict['Input']['Var'+typeData][part] in AnnualDataFrame['Variable'].unique():
 											valTS=valTS-AnnualDataFrame[ (AnnualDataFrame['Variable']==timeseriesdict['ZV'][part]) & (df['Region']==region) ][str(current_year)].unique()[0]
+							 
 							if valTS==0.0: valTS=cfg['ParametersCreate']['zerocapacity'] 
 							if firstSerie: 
 								newSerie=valTS*timeserie
@@ -1108,16 +1109,30 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							TU['CapitalCost']=0
 					else:
 						TU['CapitalCost']=0
+				
 				if oetechno in cfg['ParametersCreate']['CapacityExpansion']['thermal']:
-					#replace 0 capacity with investment minimal capacity
-					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=cfg['ParametersCreate']['zerocapacity']
-					# create MaxAddedCapacity, bounded to the MaxCapacity if in dataset
-					if 'MaxCapacity' in TU.columns:
+					# it is allowed to invest in oetechno
+					isMaxAddConfig=False
+					if 'MaxAdd' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
+						# the user defined a maximum investment in the settings
+						isMaxAddConfig=True
 						maxaddconfig=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
-						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if row['Capacity'] < row['MaxCapacity'] < row['Capacity']+maxaddconfig else maxaddconfig, axis=1)
+					if 'MaxRet' in cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]:
+						maxretconfig=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
 					else:
-						TU['MaxAddedCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxAdd']
-					TU['MaxRetCapacity']=cfg['ParametersCreate']['CapacityExpansion']['thermal'][oetechno]['MaxRet']
+						maxretconfig=0
+					
+					if 'MaxCapacity' in TU.columns and isMaxAddConfig:
+						# MaxCapacity, if >0 defines the existing investment potential
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity'] and row['MaxCapacity'] < row['Capacity']+maxaddconfig) else maxaddconfig, axis=1)
+					elif 'MaxCapacity' in TU.columns:
+						TU['MaxAddedCapacity']= TU.apply(lambda row: row['MaxCapacity'] - row['Capacity'] if (row['Capacity'] < row['MaxCapacity'] and row['MaxCapacity'] < 999999 ) else 0, axis=1)
+					elif isMaxAddConfig:
+						TU['MaxAddedCapacity']= maxaddconfig
+					else:
+						TU['MaxAddedCapacity']=0
+					TU['MaxRetCapacity']=maxretconfig
+					TU.loc[ TU['Capacity'] == 0, 'Capacity' ]=TU.apply(lambda row: cfg['ParametersCreate']['zerocapacity'] if row['MaxAddedCapacity'] > 0  else 0, axis=1)
 				else:
 					TU['MaxAddedCapacity']=0
 					TU['MaxRetCapacity']=0
@@ -1291,10 +1306,15 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						if (row in cfg['aggregateregions'] and SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['ParametersCreate']['reservoir']['minpowerMWh']):
 							Rate=0
 							N=0
-							for reg in cfg['aggregateregions'][row]:
-								if reg in cfg['ParametersCreate']['InitialFillingrate']:
-									Rate=Rate+cfg['ParametersCreate']['InitialFillingrate'][reg]
-									N=N+1
+							if row in  cfg['ParametersCreate']['InitialFillingrate']:
+								Rate=Rate+cfg['ParametersCreate']['InitialFillingrate'][row]
+								N=1
+       
+							else :
+								for reg in cfg['aggregateregions'][row]:
+									if reg in cfg['ParametersCreate']['InitialFillingrate']:
+										Rate=Rate+cfg['ParametersCreate']['InitialFillingrate'][reg]
+										N=N+1
 							if N>0:
 								Rate=Rate/N
 							SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*Rate
@@ -1484,7 +1504,10 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			STS['NumberUnits']=1	
 			STS['Inflows']=0	
 			STS['MinVolume']=0	
+				 
+											
 			STS['InitialVolume']=0	
+			STS['VolumeLevelTarget']=0
 			STS['Zone']=STS.index
 			if 'PrimaryRho' in STS.columns: STS['MaxPrimaryPower']=STS['MaxPower']*STS['PrimaryRho']
 			if 'SecondaryRho' in STS.columns: STS['MaxSecondaryPower']=STS['MaxPower']*STS['SecondaryRho']
@@ -1894,7 +1917,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				if row in timeseriesdict['RES'][oetechno].keys():
 					filetimeserie=timeseriesdict['RES'][oetechno][row]
 					RES.loc[row, 'MaxPowerProfile']=filetimeserie
-					
+					# compute energy scaling coefficient in inflows
+					timeserie=pd.read_csv(cfg['dirTimeSeries']+filetimeserie,header=0)
+					energy=timeserie[cfg['StochasticScenarios']].sum(axis=0)
+					Energy=energy.mean()
+					RES.loc[row, 'Energy_Timeserie']=Energy  
+	 
 			if v==0:
 				BigRES=RES
 				v=1
@@ -1914,6 +1942,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			if 'MaxAddedCapacity' in BigRES.columns: listcols.append('MaxAddedCapacity')
 			if 'MaxRetCapacity' in BigRES.columns: listcols.append('MaxRetCapacity')
 			if 'InvestmentCost' in BigRES.columns: listcols.append('InvestmentCost')
+			if 'Energy_Timeserie' in BigRES.columns: listcols.append('Energy_Timeserie')      
 
 		BigRES=BigRES[ listcols ]
 		BigRES=BigRES[ BigRES['Zone'].isin(cfg['partition'][partitionDemand]) ]

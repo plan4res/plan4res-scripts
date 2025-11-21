@@ -19,7 +19,21 @@ def check_distances(csv_directory, solution_out_file, epsilon):
     RES_file = os.path.join(csv_directory, 'RES_RenewableUnits.csv')
     STS_file = os.path.join(csv_directory, 'STS_ShortTermStorage.csv')
     IN_file = os.path.join(csv_directory, 'IN_Interconnections.csv')
+    list_fileSave=[]
+    for savefile in ['TU_ThermalUnits','RES_RenewableUnits','STS_ShortTermStorage','IN_Interconnections']:
+        indexSave=0    
+        while os.path.isfile(os.path.join(csv_directory, savefile+'_save_'+str(indexSave)+'.csv')):
+            fileSave= os.path.join(csv_directory, savefile+'_save_'+str(indexSave)+'.csv')
+            indexSave=indexSave+1
+        if indexSave ==0:
+            fileSave= os.path.join(csv_directory, savefile+'.csv')
+        list_fileSave.append(fileSave)   
 
+
+    TU_fileSave=list_fileSave[0]
+    RES_fileSave=list_fileSave[1]
+    STS_fileSave=list_fileSave[2]
+    IN_fileSave=list_fileSave[3]
     # Try loading all the required CSV files
     try:
         TU = pd.read_csv(TU_file)
@@ -30,7 +44,16 @@ def check_distances(csv_directory, solution_out_file, epsilon):
         print(f'Error loading file: {e}')
         return
 
-    capacity_before = []
+    try:
+        TU_Save = pd.read_csv(TU_fileSave)
+        RES_Save = pd.read_csv(RES_fileSave)
+        STS_Save = pd.read_csv(STS_fileSave)
+        IN_Save = pd.read_csv(IN_fileSave)
+    except FileNotFoundError as e:
+        print(f'Error loading file: {e}')
+        return
+
+    capacity_init = []
     capacity_after = []
     index_sol_invest = 0  # Local variable to track index in sol_invest
 
@@ -42,7 +65,7 @@ def check_distances(csv_directory, solution_out_file, epsilon):
             if 'MaxAddedCapacity' in df.columns: maxadded=row['MaxAddedCapacity']
             if 'MaxRetCapacity' in df.columns: maxret=row['MaxAddedCapacity']
             if maxadded > 0 or maxret > 0:
-                capacity_before.append(row[column_name])
+                capacity_init.append(row[column_name])
                 try:
                     # Check if the index exists in sol_invest before accessing it
                     capacity_after_value = sol_invest.iloc[index_sol_invest, 0] * row[column_name]
@@ -59,6 +82,19 @@ def check_distances(csv_directory, solution_out_file, epsilon):
     index_sol_invest = calculate_capacities(STS, 'MaxPower', sol_invest, index_sol_invest)
     index_sol_invest = calculate_capacities(IN, 'MaxPowerFlow', sol_invest, index_sol_invest)
 
+    capacity_before = []
+    
+    index_sol_invest = 0  # Local variable to track index in sol_invest
+    def calculate_capacities_before(df, column_name):
+        for _, row in df.iterrows():
+            if ('MaxAddedCapacity' in df.columns and row['MaxAddedCapacity'] > 0 ) or ( 'MaxRetCapacity' in df.columns and row['MaxRetCapacity'] > 0):
+                capacity_before.append(row[column_name])
+        return
+    
+    calculate_capacities_before(TU_Save, 'MaxPower')
+    calculate_capacities_before(RES_Save, 'MaxPower')
+    calculate_capacities_before(STS_Save, 'MaxPower')
+    calculate_capacities_before(IN_Save, 'MaxPowerFlow')
     # Ensure there's no division by zero
     if np.sum(capacity_before) == 0:
         print('Error: Sum of capacity_before is zero, cannot compute relative distance.')

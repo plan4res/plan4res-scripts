@@ -292,7 +292,7 @@ if treatFix:
 			data.loc[file]=pd.read_csv(osp.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
 			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
 				if 'Model Version' in data[file].columns:					
-					data[file]['Model Version'] = data[file]['Model Version'].str.split('_').str[1]
+					#data[file]['Model Version'] = data[file]['Model Version'].str.split('_').str[1]
 					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 					data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
 				elif 'Scenario' in cfg['genesys_datafiles']:
