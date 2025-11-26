@@ -96,7 +96,7 @@ if 'SYN_SynchCond' in cfg['csvfiles']:
 	cfg['treat']['SYN']=cfg['csvfiles']['SYN_SynchCond']
 
 
-if not os.path.isdir(cfg['outputpath']):os.mkdir(cfg['outputpath'])
+if not os.path.isdir(cfg['outputpath']):os.makedirs(cfg['outputpath'])
 
 format=cfg['inputformat']
 if format=='excel':
@@ -805,7 +805,7 @@ def read_deterministic_timeseries(IsDT):
 	
 def create_demand_scenarios():
 	seriespath=os.path.join(cfg['outputpath'],'Series')
-	if not os.path.isdir(seriespath):os.mkdir(seriespath)	
+	if not os.path.isdir(seriespath):os.makedirs(seriespath)	
 	DemandScenarios=pd.Series(dtype=object)
 	isEnergy=(cfg['ParametersFormat']['ScenarisedData']['ActivePowerDemand']['MultiplyTimeSerieBy']=='Energy')
 	for node in Nodes:
@@ -858,7 +858,7 @@ def create_demand_scenarios():
 	
 def create_inflows_scenarios():
 	seriespath=os.path.join(cfg['outputpath'],'Series')
-	if not os.path.isdir(seriespath):os.mkdir(seriespath)
+	if not os.path.isdir(seriespath):os.makedirs(seriespath)
 	isEnergy=(cfg['ParametersFormat']['ScenarisedData']['Hydro:Inflows']['MultiplyTimeSerieBy']['reservoir']=='Energy')
 	InflowsScenarios=pd.Series(dtype=object,index=SS.index)
 	
@@ -891,7 +891,7 @@ def create_inflows_scenarios():
 	
 def create_res_scenarios():
 	seriespath=os.path.join(cfg['outputpath'],'Series')
-	if not os.path.isdir(seriespath):os.mkdir(seriespath)												
+	if not os.path.isdir(seriespath):os.makedirs(seriespath)												
 	ResScenarios=pd.Series(dtype=object,index=RES.index)
 	newIndex=[]
 	for res in RES.index:
@@ -2439,7 +2439,6 @@ def createSDDPBlock(filename):
 					ScenarioData.loc[t]=np.concatenate([ScenarioData.loc[t],np.concatenate([ RESScenarios.loc[res][scenario][ (RESScenarios.loc[res][scenario].index >=datesSSV.loc[t]['start'] ) & (RESScenarios.loc[res][scenario].index <=datesSSV.loc[t]['end'] ) ] for res in RESScenarios.index ]  )])
 			elif Nb_RGP>0:
 				ScenarioData.loc[t]=np.concatenate([ RESScenarios.loc[res][scenario][ (RESScenarios.loc[res][scenario].index >=datesSSV.loc[t]['start'] ) & (RESScenarios.loc[res][scenario].index <=datesSSV.loc[t]['end'] ) ] for res in RESScenarios.index ]  )
-			
 		datascenario=np.concatenate([ScenarioData.loc[t] for t in range(NumberSSVTimeSteps)   ])
 
 		Scenarios[indexScenario,:]=datascenario
