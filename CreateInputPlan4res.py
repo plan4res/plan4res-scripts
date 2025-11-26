@@ -92,7 +92,7 @@ for datagroup in cfg['datagroups']:
 cfg['dirTimeSeries']=cfg['timeseriespath']	
 
 if not os.path.isdir(cfg['outputpath']):
-	os.mkdir(cfg['outputpath'])
+	os.makedirs(cfg['outputpath'])
 logger.info('results of this script will be available in: '+cfg['outputpath'])
 
 isInertia= ( 'InertiaDemand' in cfg['CouplingConstraints'] )
@@ -172,15 +172,15 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 	if len(cfg['scenarios'])==1 and len(cfg['years'])==1 and len(cfg['options'])<2:
 		outputdir=cfg['outputpath']
 		if not os.path.isdir(outputdir):
-			os.mkdir(outputdir)
+			os.makedirs(outputdir)
 	elif not current_option=='None':
 		outputdir=os.path.join(cfg['outputpath'], 'plan4res-'+cfg['scenario']+'-'+str(cfg['year'])+'-'+current_option)
 		if not os.path.isdir(outputdir):
-			os.mkdir(outputdir)
+			os.makedirs(outputdir)
 	else:
 		outputdir=os.path.join(cfg['outputpath'], 'plan4res-'+cfg['scenario']+'-'+str(cfg['year']))
 		if not os.path.isdir(outputdir):
-			os.mkdir(outputdir)
+			os.makedirs(outputdir)
 
 	# upload of relevant Scenario data from platform
 	# creation of a csv file and a pandas dataframe containing all necessary data
