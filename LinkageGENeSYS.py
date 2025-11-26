@@ -290,9 +290,11 @@ if treatFix:
 		for file in cfg['genesys_datafiles']['output']:
 			logger.info('read '+osp.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
 			data.loc[file]=pd.read_csv(osp.join(cfg['genesys_resultspath'],cfg['genesys_datafiles']['output'][file]))
+			if 'removecols' in cfg['genesys_datafiles']['output']:
+				for col in cfg['genesys_datafiles']['output']['removecols']:
+					data[file]=data[file].drop(columns=col)	
 			if 'Scenario' not in data[file].columns and 'PathwayScenario' not in data[file].columns:
 				if 'Model Version' in data[file].columns:					
-					#data[file]['Model Version'] = data[file]['Model Version'].str.split('_').str[1]
 					data[file]['Model Version'] = data[file]['Model Version'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 					data[file].rename(columns={'Model Version': 'Scenario'}, inplace=True)
 				elif 'Scenario' in cfg['genesys_datafiles']:
@@ -307,6 +309,13 @@ if treatFix:
 				
 			if 'Scenario' in data[file].columns:
 				data[file]['Scenario']=data[file]['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
+				if 'PathwayScenario' in data[file].columns:
+					data[file]=data[file].drop(columns='PathwayScenario')
+				if 'Model Version' in data[file].columns:
+					data[file]=data[file].drop(columns='Model Version')		
+
+			if 'Value ' in data[file].columns:
+				data[file]=data[file].rename(columns={'Value ':'Value'})
 
 
 	# read mappings
@@ -314,14 +323,38 @@ if treatFix:
 	logger.info('read mappings')
 	mappings.loc['technos']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'TechnoIAMC']).set_index('Technology')
 	interactive_check_if_set_is_in_mapping(data.loc['input_Sets'], 'Technology', mappings, 'technos', data, cfg['TechnosMappings'])
-	mappings.loc['technosfuels']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'TechnoIAMC']).set_index('Technology')
 	mappings.loc['finalenergy_sector']=pd.DataFrame([(tech, details['Sector']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'Sector']).set_index('Technology')
 	mappings.loc['emissions']=pd.DataFrame([(tech, details['Emission']) for tech, details in cfg['TechnosMappings'].items()],columns=['Technology', 'Emission']).set_index('Technology')
 	mappings.loc['storages_ratios']=pd.DataFrame([(details['TechnoIAMC'], details['StorageRatio']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['TechnoIAMC', 'StorageRatio']).set_index('TechnoIAMC')
+	mappings.loc['IAMCstorages']=   list(set([ details['TechnoIAMC'] for tech, details in cfg['StorageMappings'].items() ] ))
+	mappings.loc['IAMCtechnos']=  list(set([details['TechnoIAMC'] for tech, details in cfg['TechnosMappings'].items() ] ))
 	mappings.loc['storages']=pd.DataFrame([(tech, details['TechnoIAMC']) for tech, details in cfg['StorageMappings'].items() ] ,columns=['Technology', 'TechnoIAMC']).set_index('Technology')
 	interactive_check_if_set_is_in_mapping(data.loc['input_Sets'], 'Storage', mappings, 'storages', data, cfg['StorageMappings'])
-	# Check value of storage ratios against values found in input data
-	estimate_storage_energy_capacity(data, cfg)
+	if 'Par_StorageE2PRatio' not in cfg['genesys_datafiles']['input']['Sheets']:
+		estimate_storage_energy_capacity(data, cfg)
+	technologies = []
+	fuels = []
+	variables = []	
+	mappings.loc['FuelPerIAMCtech']={}
+	for tech, props in cfg['TechnosMappings'].items():
+		if "TechnosIAMCperFuel" in props:
+			for fuel, variable in props["TechnosIAMCperFuel"].items():
+				technologies.append(tech)
+				fuels.append(fuel)
+				variables.append(variable)
+				mappings.loc['FuelPerIAMCtech'][variable]=fuel
+		else:
+			continue
+	mappings.loc['technofuels'] = pd.DataFrame({"Technology": technologies,"Fuel": fuels,"TechnosIAMCperFuel": variables})
+	mappings.loc['technofuels']['TechnoIAMC'] = mappings.loc['technofuels']['Technology'].map(lambda x: cfg['TechnosMappings'][x]['TechnoIAMC'])
+	mappings.loc['technofuels'].set_index(["Technology", "Fuel"], inplace=True)
+	df1=mappings.loc['technofuels'].reset_index()
+	df1=df1.drop(columns=['Fuel','TechnoIAMC'])
+	df1['TechnoIAMC']=df1['TechnosIAMCperFuel']
+	df1=df1.drop(columns=['TechnosIAMCperFuel'])
+	df2=mappings.loc['technos'][~mappings.loc['technos']['TechnoIAMC'].isin(mappings.loc['technofuels']['TechnoIAMC'].unique().tolist())].reset_index()
+	mappings.loc['technoandfuels'] = pd.concat([df1,df2],axis=0).set_index('Technology')
+	mappings.loc['IAMCtechnosWithFuels']=  list(set( mappings.loc['technoandfuels']['TechnoIAMC'].unique() ))
 
 	out=pd.DataFrame()
 	isFirst=True
@@ -343,7 +376,6 @@ if treatFix:
 						regions_interco.append(reg)
 	logger.info('\n')
 	logger.info('regions in dataset '+str(regions))
-	logger.info('interco in dataset '+str(regions_interco))
 
 	Yearsdf=pd.Series(data.loc['input_Sets']['Year']).dropna()
 	Yearsdf=Yearsdf.drop(Yearsdf.loc[Yearsdf ==0].index,axis=0 ).astype(int)
@@ -358,7 +390,7 @@ if treatFix:
 		isInternal=False
 		logger.info('treat '+var)
 		if debug: 
-			print('\n treat '+var)
+			print('\n ================> treat '+var)
 		
 		if 'source' in cfg['variables'][var]:
 			if cfg['variables'][var]['source']=='internal':
@@ -385,7 +417,6 @@ if treatFix:
 				for file in cfg['variables'][var]['sources']:
 					logger.info(' read '+file)
 					vardatafile=pd.DataFrame(data=data.loc[file])
-					#if 'Unit' not in vardatafile.columns: vardatafile['Unit']=cfg['variables'][var]['unit']
 					vardatafile['Unit']=cfg['variables'][var]['unit']
 						
 					if firstFile:
@@ -406,7 +437,6 @@ if treatFix:
 		if 'Region2' in vardata.columns:
 			vardata=vardata[ vardata['Region'].isin(regions) ]
 				
-		#if 'Unit' not in vardata.columns:
 		vardata['Unit']=cfg['variables'][var]['unit']		
 				
 		# replace scenario nameserie
@@ -421,14 +451,30 @@ if treatFix:
 			logger.info('   apply '+rulecat)
 			if debug: 
 				print('\n apply '+rulecat)
+			
+			if rulecat=='removecols':
+				keepcols=[]
+				for col in IAMCcols:
+					if col in vardata.columns:
+						keepcols.append(col)
+				vardata=vardata[ keepcols ]
 			if rulecat=='selectAndMap':
 				if debug: 
 					print('\n before selectandmap')
 					print(vardata.columns)
 					print(vardata)
 				# select rows 
-				colmap=cfg['variables'][var]['rules'][rulecat]['column']
-				if colmap not in colsdata: colsdata.append(colmap)
+				if 'column' in cfg['variables'][var]['rules'][rulecat]:
+					colmap=cfg['variables'][var]['rules'][rulecat]['column']
+					if colmap not in colsdata: colsdata.append(colmap)
+				elif 'columns' in cfg['variables'][var]['rules'][rulecat]:
+					colmaps=cfg['variables'][var]['rules'][rulecat]['columns']
+					for colmap in colmaps: 
+						if colmap not in colsdata: colsdata.append(colmap)
+				else:
+					logger.error('missing column or columns in rule selectAndMap for variable ',var)
+					log_and_exit(1, cfg['path'])
+				
 				firstMap=True
 				strmaps=""
 				for map in cfg['variables'][var]['rules'][rulecat]['mappings']:
@@ -439,26 +485,34 @@ if treatFix:
 						firstMap=False
 					else:
 						fullmapping=pd.concat([fullmapping,mappingpart],axis=0)
-				vardata=vardata[ vardata[colmap].isin(list(fullmapping.index)) ]
-				non_mapped_values = vardata[~vardata[colmap].isin(list(fullmapping.index))][colmap].unique()
-				if len(non_mapped_values) >0:
-					print("############")
-					print(" --- The following values of column ",colmap," are not present in mappings ",strmaps)
-					print(non_mapped_values)
-					print("############")
+				if 'column' in cfg['variables'][var]['rules'][rulecat]:
+					vardata=vardata[ vardata[colmap].isin(list(fullmapping.index)) ]
+					non_mapped_values = vardata[~vardata[colmap].isin(list(fullmapping.index))][colmap].unique()
+					if len(non_mapped_values) >0:
+						logger.warning("############")
+						logger.warning(" --- The following values of column ",colmap," are not present in mappings ",strmaps)
+						logger.warning(non_mapped_values)
+						logger.warning("############")
+				elif 'columns' in cfg['variables'][var]['rules'][rulecat]:
+					vardata=vardata[ vardata[colmaps[0]].isin(list(fullmapping.index[0])) ]				
 				if debug: 
 					print('\n in select andmap after  mapping')
 					print(vardata.columns)
 					print(vardata)
 				# create variable name
-				dict={fullmapping.index[i]: fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}			
-				vardata['Variable']=vardata[colmap].map(lambda a: dict[a])
+				if "technofuels" in cfg['variables'][var]['rules'][rulecat]['mappings']:
+					dict={(fullmapping.index[i][0],fullmapping.index[i][1]):fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}
+					vardata['Variable'] = vardata.apply(lambda row: dict.get((row[colmaps[0]], row[colmaps[1]])), axis=1)
+				else:
+					dict={fullmapping.index[i]: fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}			
+					vardata['Variable']=vardata[colmap].map(lambda a: dict[a])
 				if debug: 
 					print('\n in select andmap after  name change')
 					print(vardata.columns)
 					print(vardata)
 				# compute variable
-				ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:										 
+					ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
 				
 				colsToAggr=[]			
 				for coldata in vardata.columns:
@@ -471,21 +525,13 @@ if treatFix:
 					print('colsToAggr:',colsToAggr)
 					print(vardata.columns)
 					print(vardata)
-				vardata=pd.DataFrame(data=pd.DataFrame(data=vardata).groupby(colsToAggr).agg(ruleagg).reset_index())
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:
+					vardata=pd.DataFrame(data=pd.DataFrame(data=vardata).groupby(colsToAggr).agg(ruleagg).reset_index())
 				if debug: 
 					print('\n after select andmap')
 					print(vardata)
-
-				colsKeep=[]
-				for coldata in vardata.columns:
-					if coldata in IAMCcols:
-						colsKeep.append(coldata)
-				if debug: 
-					print('colsKeep:',colsKeep)
-				vardata=vardata[ colsKeep ]
-				if debug: 
-					print('\n after select andmap')
-					print(vardata)
+					print(vardata.columns)
+					
 
 			elif rulecat=='addyear':
 				firstYear=True
@@ -498,10 +544,18 @@ if treatFix:
 					else:
 						vardataout=pd.concat([vardataout,vardatayear],axis=0)
 				vardata=vardataout
+				if debug: 
+					print('\n after addyear')
+					print(vardata)
+					print(vardata.columns)
 			
 			elif rulecat=='apply_abs':
 				if debug: print(vardata)
 				vardata['Value']=vardata['Value'].abs()
+				if debug: 
+					print('\n after applyabs')
+					print(vardata)
+					print(vardata.columns)
 			
 			elif rulecat=='selectFromMapping':
 				# select rows 
@@ -515,6 +569,10 @@ if treatFix:
 					else:
 						vardataout=pd.concat([vardataout,vardatamap],axis=0)
 				vardata=vardataout
+				if debug: 
+					print('\n after selectfrommapping')
+					print(vardata)
+					print(vardata.columns)
 			
 			elif rulecat=='map':
 				colmap=cfg['variables'][var]['rules'][rulecat]['column']
@@ -528,7 +586,8 @@ if treatFix:
 				vardata=vardata.drop( vardata[vardata['Variable']=='None'].index  )
 
 				# compute variable
-				ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:
+					ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
 				
 				colsKeep=[]
 				for col in vardata.columns:
@@ -536,12 +595,61 @@ if treatFix:
 						colsKeep.append(col)
 				vardata=vardata[ colsKeep ]
 
-				colsToAggr=[]			
-				for coldata in vardata.columns:
-					if coldata != 'Value' and coldata not in colsToAggr:
-						colsToAggr.append(coldata)
-				vardata=vardata.groupby(colsToAggr).agg(ruleagg).reset_index()
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:
+					colsToAggr=[]			
+					for coldata in vardata.columns:
+						if coldata != 'Value' and coldata not in colsToAggr:
+							colsToAggr.append(coldata)
+					vardata=vardata.groupby(colsToAggr).agg(ruleagg).reset_index()
+				
+				if debug: 
+					print('\n after map')
+					print(vardata)
+					print(vardata.columns)
 			
+			elif rulecat=='replacecolname':
+				vardata.rename(columns={str(cfg['variables'][var]['rules'][rulecat]['oldname']): str(cfg['variables'][var]['rules'][rulecat]['newname'])}, inplace=True)
+			
+			elif rulecat=='techfuelmap':	
+				if debug:
+					print("before techfuelmap")
+					print(vardata)
+					print(vardata.columns)
+				vardata = vardata.merge(mappings.loc['technofuels'].reset_index().rename(columns={'TechnosIAMCperFuel':'Variable'}), on=['Technology', 'Fuel'], how='inner')
+				if debug:
+					print("after techfuelmap")
+					print(vardata)
+					print(vardata.columns)
+					
+				# compute variable
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:
+					ruleagg=str(cfg['variables'][var]['rules'][rulecat]['rule'])
+				
+				if 'rule' in cfg['variables'][var]['rules'][rulecat]:
+					colsToAggr=[]			
+					for coldata in vardata.columns:
+						if coldata != 'Value' and coldata not in colsToAggr:
+							colsToAggr.append(coldata)
+					vardata=vardata.groupby(colsToAggr).agg(ruleagg).reset_index()
+				if debug: 
+					print('\n after techfuelmap')
+					print(vardata)
+					print(vardata.columns)
+			
+			elif rulecat=='removefuel':
+				if debug:
+					print("before removefuel")
+					print(vardata)
+					print(vardata['Variable'].unique())
+				variables_to_exclude = mappings.loc['technofuels']['TechnoIAMC'].unique()
+				if debug:
+					print(variables_to_exclude)
+				vardata = vardata[~vardata['Variable'].isin(variables_to_exclude)].copy()				
+				if debug:
+					print("after removefuel")
+					print(vardata)
+					print(vardata.columns)
+					print(vardata['Variable'].unique())
 			elif rulecat=='select':
 				if debug: 
 					print('\n before select')
@@ -552,6 +660,7 @@ if treatFix:
 				if debug: 
 					print('\n after select')
 					print(vardata)
+					print(vardata.columns)
 					
 			elif rulecat=='group':
 				if debug: 
@@ -581,6 +690,10 @@ if treatFix:
 				vardata['startVar']=var
 				vardata['Variable']=vardata['startVar'].str.cat(vardata['Variable'])
 				vardata=vardata.drop(['startVar'],axis=1)
+				if debug: 
+					print('\n after concatvarname')
+					print(vardata)
+					print(vardata.columns)
 				
 			elif rulecat=='complete_variable_name':
 				completion=cfg['variables'][var]['rules'][rulecat]
@@ -588,9 +701,56 @@ if treatFix:
 				vardata['Variable']=vardata['Variable'].str.cat(vardata['endVar'])
 				vardata=vardata.drop(['endVar'],axis=1)
 			
+			elif rulecat=='duplicatefuels':
+				if debug: vardata.to_csv(var.replace('|','').replace(' ','')+'_beforedupl.csv')
+				mask = vardata['Variable'].isin(mappings.loc['technofuels']['TechnoIAMC'])
+				if debug: print(mappings.loc['technofuels']['TechnoIAMC'])
+				df_to_expand = vardata[mask]
+				df_to_expand['TechnoIAMC']=df_to_expand['Variable']
+				df_to_expand['Dupl']=1
+				expanded_rows = []
+				
+				if debug:
+					print('to_expand')
+					print(df_to_expand)
+
+				for idx, row in df_to_expand.iterrows():
+					matches = mappings.loc['technofuels'][mappings.loc['technofuels']['TechnoIAMC'] == row['Variable']]
+					for _, match in matches.iterrows():
+						new_row = row.copy()
+						new_row['TechnoIAMC']=new_row['Variable']
+						new_row['Variable'] = match['TechnosIAMCperFuel']
+						expanded_rows.append(new_row)
+				dfs_expanded = pd.DataFrame(expanded_rows, columns=df_to_expand.columns)
+				if debug:
+					print('after duplicate before concat')
+					print(dfs_expanded)
+					print(dfs_expanded['Variable'])					
+				
+				vardata=dfs_expanded.reset_index()
+				if debug: vardata.to_csv(var.replace('|','').replace(' ','')+'_beforeAddFuel.csv')
+				if debug:
+					print('before add fuel in duplicate')
+					print(vardata)
+					print(vardata.columns)
+					print(vardata['Variable'])
+					print(vardata['Variable'].unique())
+					print("mappings: ", mappings.loc['FuelPerIAMCtech'])
+					print("     map fuel \n", mappings.loc['FuelPerIAMCtech'])
+				
+				vardata['Fuel'] = vardata['Variable'].map(mappings.loc['FuelPerIAMCtech'])
+				
+				if debug:
+					print('after add fuel in duplicate')
+					print(vardata)
+					print(vardata['Variable'])
+				
+				
+				if debug: vardata.to_csv(var.replace('|','').replace(' ','')+'_duplicated.csv')
+			
 			elif rulecat=='combineWithOtherSources':
 				for subrule in cfg['variables'][var]['rules'][rulecat]:
-					logger.info('		apply '+subrule)
+					logger.info('        apply '+subrule)
 					if 'source' in cfg['variables'][var]['rules'][rulecat][subrule]:
 						if cfg['variables'][var]['rules'][rulecat][subrule]['source']!='input':
 							newdata=data.loc[cfg['variables'][var]['rules'][rulecat][subrule]['source']]
@@ -616,8 +776,8 @@ if treatFix:
 						newdata=newdata[ newdata[colmap].isin(list(fullmapping.index)) ]
 						non_mapped_values = newdata[~newdata[colmap].isin(list(fullmapping.index))][colmap].unique()
 						if len(non_mapped_values) >0:
-							print(" --- The following values of column ",colmap," are not present in mappings ",strmaps)
-							print(non_mapped_values)
+							logger.warning(" --- The following values of column ",colmap," are not present in mappings ",strmaps)
+							logger.warning(non_mapped_values)
 						dict={fullmapping.index[i]: fullmapping.iloc[i,0] for i in range(len(fullmapping.index))}			
 						newdata['Variable']=newdata[colmap].map(lambda a: dict[a])
 						ruleagg=str(cfg['variables'][var]['rules'][rulecat][subrule]['rule'])
@@ -663,28 +823,23 @@ if treatFix:
 							for col in cfg['variables'][var]['rules'][rulecat][subrule]['product_cols']: 
 								col2=cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]
 								if debug: 
-									print( ' 	product by ',col2)
+									print( '     product by ',col2)
 									print( ' vardata[',col,'] before product')
 									print(vardata[col])
 									print( 'multiplied by:')
 									print( vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]])
-									for i in vardata[col].index:
-										print(i,vardata['Technology'].loc[i],vardata['Year'].loc[i],vardata[col].loc[i],vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]].loc[i])
 									vardata[col]=vardata[col].astype(float)*vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]].astype(float)
-									print(var)
-									print(rulecat)
-									print(subrule)
-									print(col)
-									print(cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col])
-									print(vardata[col])
-									print(vardata[cfg['variables'][var]['rules'][rulecat][subrule]['product_cols'][col]])
 								if debug: print(vardata[col])
 					elif subrule=='changeValue':
 						colref=cfg['variables'][var]['rules'][rulecat][subrule]['column']
 						colval=cfg['variables'][var]['rules'][rulecat][subrule]['value']
 						colmap=cfg['variables'][var]['rules'][rulecat][subrule]['map']
 						newvalue=newdata[['Value',colmap]].groupby([colref]).first().reset_index()
+						if debug: 
+							print(newvalue)
+							vardata.to_csv(var.replace('|','').replace(' ','')+'_changevalue.csv')
 						valuedict={newvalue.iloc[i,0]: newvalue.iloc[i,1] for i in range(len(newvalue.index))}
+						if debug: print(valuedict)
 						rows_to_remove=[]
 						if cfg['variables'][var]['rules'][rulecat][subrule]['rule']=='mult':
 							for row in vardata.index:
@@ -707,35 +862,184 @@ if treatFix:
 								colsToAggr.append(coldata)
 						vardata=vardata.groupby(colsToAggr).agg(ruleagg).reset_index()
 			
+					if debug: 
+						print('\n after combineothersources')
+						print(vardata)
+						print(vardata.columns)
 			elif rulecat=='convert_unit':
 				vardata['Value']=vardata['Value']*cfg['variables'][var]['rules'][rulecat]['factor']
 				vardata['Unit']=cfg['variables'][var]['rules'][rulecat]['to']
+				
+			elif rulecat=='combinewithOtherVariable':
+				for component in cfg['variables'][var]['rules'][rulecat]:
+					map=mappings.loc[cfg['variables'][var]['rules'][rulecat][component]['mapping']]
+					serieElems=pd.Series([[] for _ in range(len(map.index))], index=map.index)
+					listComponents=[]
+					isManyVar=False
+					if component[-1]=='|':
+						isManyVar=True
+						
+						# add mapping list to variable name	
+						if cfg['variables'][var]['rules'][rulecat][component]['mapping']=="technos" or cfg['variables'][var]['rules'][rulecat][component]['mapping']=="storages":
+							componentmap="TechnoIAMC"
+						elif cfg['variables'][var]['rules'][rulecat][component]['mapping']=="technofuels":
+							componentmap="TechnosIAMCperFuel"	
+						for elem in map.index:
+							if component+map[componentmap][elem] not in listComponents:
+								listComponents.append(component+map[componentmap][elem]) 
+					else:
+						listComponents.append(component)
+					otherdata=out[ out['Variable'].isin(listComponents) ]
+					
+					if debug: 
+						print('listComponents')
+						print(listComponents)
+						print(otherdata)	
+						print(str(component))
+						print(otherdata['Variable'].unique())
+						print(var)
+					
+					otherdata['Variable'] = otherdata['Variable'].str.replace(str(component), '', regex=True)
+					otherdata['Variable'] = otherdata['Variable'].str.lstrip('|')
+					otherdata['Unit']=cfg['variables'][var]['unit']
+					vardata['Variable'] = vardata['Variable'].str.replace(str(var), '', regex=True)
+					vardata['Variable'] = vardata['Variable'].str.lstrip('|')
+					if debug: 
+						print(str(component))
+						print(otherdata['Variable'].unique())
+					
+					# Merge
+					otherdata = otherdata.rename(columns={'Value':'coef'})
+					if debug: 
+						print("before combination")
+						print(otherdata)
+						print(otherdata.columns)
+						print(vardata)
+						print(vardata.columns)
+						print(otherdata['coef'])
+						print(vardata['Variable'].unique())
+						otherdata.to_csv(str(var.replace('|','').replace(' ',''))+'_otherdata.csv')
+						vardata.to_csv(str(var.replace('|','').replace(' ',''))+'_vardata.csv')
+					
+					keys_cols = ['Scenario','Region','Year','Variable']
+					if 'keep' in cfg['variables'][var]['rules'][rulecat][component]:
+						vardata = pd.merge(vardata.reset_index(),otherdata.reset_index()[keys_cols + ['coef']],on=keys_cols,how='left')  
+						vardata['coef'] = vardata['coef'].fillna(0)
+					else:
+						vardata = pd.merge(vardata.reset_index(),otherdata.reset_index()[keys_cols + ['coef']],on=keys_cols,how='inner') 
+					if debug: vardata.to_csv(str(var.replace('|','').replace(' ',''))+'_vardataAfterMerge.csv')	
+					
+					def update_values(df):
+						
+						if debug:
+							print('grouped')
+							print(df[ df['Region']=="AT" ][ df['Scenario']=="NECP Essentials v1.2" ]['Variable'])
+							print(df[ df['Region']=="AT" ][ df['Scenario']=="NECP Essentials v1.2" ]['TechnoIAMC'])
+							print(df[ df['Region']=="AT" ][ df['Scenario']=="NECP Essentials v1.2" ]['coef'])
+							print(df[ df['Region']=="AT" ][ df['Scenario']=="NECP Essentials v1.2" ].groupby(['Region','Year','Scenario','TechnoIAMC']))
+							
+						
+						coef_sum = df.groupby(['Region','Year','Scenario','TechnoIAMC'])['coef'].transform('sum')
+						df = df.copy()
+						df['coef_sum'] = coef_sum
+						if debug:
+							print(df[ df['Region']=="AT" ][ df['Scenario']=="NECP Essentials v1.2" ][ ['coef_sum','coef'] ])
+						df.loc[df['coef_sum'] == 0, 'coef_sum'] = float('nan')
+						df.loc[df['coef'] == 0, 'coef'] = float('nan')
+						df = df.sort_values(['Region','Scenario','TechnoIAMC','Year'])
+						if debug: 
+							df.to_csv('df_sortedsum.csv')
+						df['coef_sum_ff'] = df.groupby(['Region','Scenario','TechnoIAMC'])['coef_sum'].ffill()
+						if debug: 
+							df.to_csv('df_fillsum.csv')
+						df = df.sort_values(['Region','Scenario','Variable','Year'])
+						if debug: 
+							df.to_csv('df_sorted.csv')
+						df['coef_ff'] = df.groupby(['Region','Scenario','Variable'])['coef'].ffill()
+						
+						if debug: df.to_csv('df_fillcoef.csv')
+						df['coef_sum_ff'] = df['coef_sum_ff'].fillna(0)
+						df['coef_ff'] = df['coef_ff'].fillna(0)
+						
+						df['poids'] = df['coef_ff'] / df['coef_sum_ff'].replace(0, float('nan'))
+						if debug: 
+							df.to_csv('df_recalc.csv')
+							
+						mask = df['Dupl'] == 1
+						df.loc[mask, 'Value'] = df.loc[mask, 'Value'] * df.loc[mask, 'poids']
+						return df
+					
+					if debug: 
+						print("after combination")
+						print(vardata)
+						print(vardata.columns)
+						print(vardata['Value'])
+					
+					if 'rule' in cfg['variables'][var]['rules'][rulecat][component]:
+						if cfg['variables'][var]['rules'][rulecat][component]['rule']=='add':
+							vardata['Value']=vardata['Value']+vardata['coef']
+						elif cfg['variables'][var]['rules'][rulecat][component]['rule']=='mult':
+							vardata['Value']=vardata['Value']*vardata['coef']
+						elif cfg['variables'][var]['rules'][rulecat][component]['rule']=='divide':
+							vardata['Value']=vardata['Value']/vardata['coef']
+						elif cfg['variables'][var]['rules'][rulecat][component]['rule']=='weight':
+							vardata = update_values(vardata)
+						else:
+							print('no rule defined')
+						vardata=vardata.drop(columns='coef')
+					
+					if debug: 
+						print("after combineotherdata")
+						print(vardata)
+						print(vardata.columns)
+						print(vardata['Value'])
 			elif rulecat=='compute':
 				if isInternal:
 					if 'mapping' in cfg['variables'][var]['rules'][rulecat]:
 						map=mappings.loc[cfg['variables'][var]['rules'][rulecat]['mapping']]
-						dict={map.index[i]: map.iloc[i,0] for i in range(len(map.index))}
-						serieElems=pd.Series([[] for _ in range(len(map.index))], index=map.index)
+						if debug: print(map)
+						if debug: 
+							if isinstance(map,list): print("list")
+							elif isinstance(map,pd.DataFrame): print("dataframe")
+						if isinstance(map,list): 
+							serieElems = pd.Series([[] for _ in map], index=map)
+						elif isinstance(map,pd.DataFrame):
+							serieElems = pd.Series([[] for _ in map.index], index=map.index)
+						if debug: 
+							for elem in serieElems.index:
+								print('index:',elem,'val:',serieElems[elem])
 					listComponents=[]
 					isManyVar=False
 					listElem=[]
 					firstComponent=True
 					
 					for component in cfg['variables'][var]['rules'][rulecat]['from']:
+						if debug: print(component)
 						if component[-1]=='|':
 							isManyVar=True
 							# add mapping list to variable name
-							for elem in map.index:
+							for elem in map:
+								if debug: print("elem:",elem)
 								if firstComponent: 
 									if not elem in listElem: listElem.append(elem)
 								if 'ruleaggr' in cfg['variables'][var]['rules']['compute']:
-									if component+dict[elem] not in listComponents:
-										listComponents.append(component+dict[elem])
-									if component+dict[elem] not in serieElems[elem]:
-										serieElems[elem].append(component+dict[elem])
+									if component+elem not in listComponents:
+										listComponents.append(component+elem)
+									if component+elem not in serieElems[elem]:
+										if debug: 
+											print("elem:",elem, "serie:",serieElems[elem])
+										if firstComponent: 
+											serieElems.loc[elem]=[component+elem]
+										else:
+											serieElems[elem].append(component+elem)
+										if debug: 
+											print("elem:",elem, "serie:",serieElems[elem])
+
 								else:
 									if component+elem not in listComponents:
 										listComponents.append(component+elem)
+							if debug:
+								print(listComponents)
 						else:
 							listComponents.append(component)
 						firstComponent=False
@@ -749,48 +1053,17 @@ if treatFix:
 						ruleagg=cfg['variables'][var]['rules']['compute']['ruleaggr']
 						if isManyVar:
 							firstElem=True
-							# for elem in listElem:
-								# listpossible=[el+str(dict[elem]) for el in cfg['variables'][var]['rules'][rulecat]['from']]
-								# vardataelem = pd.DataFrame(vardata[vardata['Variable'].isin(listpossible)]).reset_index().drop(columns='index')
-								# colsToAggr=[]
-								# vardataelem=vardataelem.drop(columns='Variable')
-								# for col in vardataelem.columns:
-									# if col != 'Value':
-										# colsToAggr.append(col)
-								# if len(vardataelem.index)>0:
-									# vardataelem=vardataelem.groupby(colsToAggr).agg(ruleagg).reset_index()
-								# vardataelem['Variable']=var+dict[elem]
-								# if firstElem: 
-									# if len(vardataelem.index)>0:
-										# vardatanew=pd.DataFrame(vardataelem)
-										# firstElem=False
-								# else:
-									# if len(vardataelem.index)>0:
-										# vardatanew = pd.concat([vardatanew, vardataelem],ignore_index=True)
-							# vardata=pd.DataFrame(vardatanew)							
-							for elem in map.index:
+							
+							for elem in map:
 								vardataelem = pd.DataFrame(vardata[vardata['Variable'].isin( serieElems[elem] )]).reset_index().drop(columns='index')
 								colsToAggr=[]
-								if 'PHS' in elem: 
-									if debug:
-										print(elem)
-										print('phs 1')
-										print(vardataelem)
 								vardataelem=vardataelem.drop(columns='Variable')
 								for col in vardataelem.columns:
 									if col != 'Value':
 										colsToAggr.append(col)
-								if 'PHS' in elem: 
-									if debug:
-										print('phs 2')
-										print(vardataelem)
 								if len(vardataelem.index)>0:
 									vardataelem=vardataelem.groupby(colsToAggr).agg(ruleagg).reset_index()
-								if 'PHS' in elem: 
-									if debug:
-										print('phs 3')
-										print(vardataelem)
-								vardataelem['Variable']=var+dict[elem]
+								vardataelem['Variable']=var+elem
 								if firstElem:
 									if len(vardataelem.index)>0:
 										vardatanew=pd.DataFrame(vardataelem)
@@ -810,26 +1083,49 @@ if treatFix:
 							vardata['Variable']=var
 
 					elif 'rulemap' in cfg['variables'][var]['rules']['compute']:
+						if debug:
+							print('rulemap')
+							print(vardata)
+							print(vardata['Variable'].unique())
+							print(vardata.columns)
+						for row in vardata.index:
+							for componentfrom in cfg['variables'][var]['rules']['compute']['from']:
+								if debug: 
+									print(componentfrom)
+								if componentfrom in vardata.loc[row,'Variable']:
+									if cfg['variables'][var]['rules']['compute']['rulemap']=='mult':
+										if debug: 
+											print(vardata.loc[row,'Value'])
+											print(vardata.loc[row,'Variable'])
+										vardata.loc[row,'Value']=vardata.loc[row,'Value']*dict[vardata.loc[row,'Variable'].replace(componentfrom,'')]
+									vardata.loc[row,'Variable']=vardata.loc[row,'Variable'].replace(componentfrom,var)							
+					else:
 						for row in vardata.index:
 							for componentfrom in cfg['variables'][var]['rules']['compute']['from']:
 								if componentfrom in vardata.loc[row,'Variable']:
-									if cfg['variables'][var]['rules']['compute']['rulemap']=='mult':
-										vardata.loc[row,'Value']=vardata.loc[row,'Value']*dict[vardata.loc[row,'Variable'].replace(componentfrom,'')]
-									vardata.loc[row,'Variable']=vardata.loc[row,'Variable'].replace(componentfrom,var)							
+									vardata.loc[row,'Variable']=vardata.loc[row,'Variable'].replace(componentfrom,var)
 				if debug:
 					print('end compute')
 					print(vardata)
 					print(vardata['Variable'].unique())
+					print(vardata.columns)
 			elif rulecat=='create_interco':	
 				vardata['>']='>'
 				vardata['Region']=vardata['Region'].str.cat(vardata['>']).str.cat(vardata['Region2'])
 			
+			elif rulecat=='changevariablename':
+				vardata['Variable'] = vardata['Variable'].str.replace(var, cfg['variables'][var]['rules'][rulecat]['newname'], regex=False)
+			
 			elif rulecat=='global':
+				if debug:
+					print('global')
+					print(vardata)
+					print(vardata.columns)
 				globaldata=pd.DataFrame(data=vardata)
 				globalreg=cfg['global_region']
 				isFirstRegion=True
 				# case of interconnection variable
-				regions_use=[globalreg]
+				regions_use=regions
 				if 'Network' in var:				
 					regions_use=regions_interco
 				for region in regions_use:
@@ -840,13 +1136,22 @@ if treatFix:
 					else:
 						vardataout=pd.concat([vardataout,globaldata],axis=0,ignore_index=True)
 				vardata=vardataout
+				if debug:
+					print('end global')
+					print(vardata)
+					if 'Region' in vardata.columns: print(vardata['Region'].unique())
+					else: print('no region')
+					print(vardata.columns)
 		
 		if debug:
 			print('after rules')
 			print(vardata)
+			vardata.to_csv(str(var.replace('|','').replace(' ',''))+'.csv')
 
 		if not vardata.empty:
+			vardata=vardata[ vardata['Scenario']==cfg['Scenario'] ]
 			if 'Year' not in vardata.columns:
+				print('duplicating data on all years') 
 				firstYear=True
 				for year in Years:
 					if year in vardata.columns:
@@ -860,28 +1165,18 @@ if treatFix:
 
 
 			if debug:
-				print('Selected years = ', str(Years))
 				print('after year')
 				print(vardata)
 				
-			#fill scenario
-			if 'PathwayScenario' in vardata.columns:
-				vardata['Scenario']=vardata['PathwayScenario']
-			
-			if debug:
-				print('after scenario')
-				print(vardata)
 				
 			if 'Unit' not in vardata.columns:
 				vardata['Unit']=cfg['variables'][var]['unit']
-			if debug:
-				print('after unit')
-				print(vardata)
 				
-			#select columns to keep
 			colsKeep=[]
 			for col in vardata.columns:
 				if col in IAMCcols:
+					colsKeep.append(col)
+				elif col in ['Fuel','Technology','TechnoIAMC','TechnosIAMCperFuel']:
 					colsKeep.append(col)
 			vardata=vardata[ colsKeep ]
 			
@@ -894,8 +1189,7 @@ if treatFix:
 				if col not in colsKeep:
 					if col == 'Model': 
 						vardata[col]=cfg['Model']
-					elif col == 'Scenario':
-						vardata[col]=vardata[col].map(scenarios_names_dict)
+					
 					
 			if debug:
 				print('after misscols')
@@ -909,7 +1203,18 @@ if treatFix:
 			else:
 				out=pd.concat([out,vardata],axis=0,ignore_index=True)
 		
-		else: logger.info('empty data')
+		else: 
+			logger.warning('empty data')
+			if debug: print('empty data')
+	
+	colsKeep=[]
+	for coldata in out.columns:
+		if coldata in IAMCcols:
+			colsKeep.append(coldata)
+	if len(cfg['debug'])>0: 
+		print('colsKeep:',colsKeep)
+		print(out['Variable'].unique())
+	out=out[ colsKeep ]
 	
 	# change country names from iso2 to real names
 	with open(osp.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
@@ -928,13 +1233,14 @@ if treatFix:
 			iso2_to_country2[reg1+'>'+reg2]=iso2_to_country[reg1]+'>'+iso2_to_country[reg2]
 			iso2_to_country2[reg2+'>'+reg1]=iso2_to_country[reg2]+'>'+iso2_to_country[reg1]
 	iso2_to_country={**iso2_to_country, **iso2_to_country2}
+	
 	out['Region'] = out['Region'].map(lambda _ : _ if _ not in iso2_to_country.keys() else _)
 	out.to_csv(cfg['outputpath']+cfg['outputfile'],index=False)	
 
 	# check for duplicated and output synthesis of data
 	logger.info('scenarios in data '+', '.join([str(_) for _ in out['Scenario'].unique()]))
 	logger.info('models in data '+', '.join([str(_) for _ in out['Model'].unique()]))
-	logger.info('regions in data '+', '.join([str(_) for _ in out['Region'].unique()]))
+	logger.info('regions in data '+', '.join([str(_) for _ in out['Region'].unique() if '>' not in _ ]))
 	#logger.info('variables in data '+', '.join([str(_) for _ in out['Variable'].unique()]))
 	logger.info('years in data '+', '.join([str(_) for _ in out['Year'].unique()]))
 
@@ -952,7 +1258,7 @@ if treatFix:
 	else:
 		logger.info('no duplicated rows')
 		
-	df=pd.read_csv(cfg['outputpath']+cfg['outputfile'],index_col=0)
+	df=pd.read_csv(cfg['outputpath']+cfg['outputfile'])
 	df['Scenario']=df['Scenario'].apply(replace_scenario_names, args=(scenarios_names_dict,))
 
 	 
@@ -980,7 +1286,6 @@ if treatFix:
 	logger.info('list of all variables')	
 	variable_list=list(df['Variable'].unique())
 	print(variable_list)
-	#new_variable_list=[item for item in variable_list if item not in cfg['removed_variables']]
 	removed_variable_list=filter_variable_list(variable_list)
 	logger.info('filtering on variables')
 	print(removed_variable_list)
@@ -1017,14 +1322,7 @@ if treatHourly:
 	for i in range(NumberTimeSteps):
 		datesTS.loc[i]=[start,start+durationTimeStep]
 		start=start+durationTimeStep
-	#TimeSeriesTemplate=pd.DataFrame(columns=['Timestamp [UTC]'])
 	TimeSeriesTemplate=pd.read_csv(osp.join(cfg['timeseriespath'],'Example.csv'))
-	# start=dates['BeginTS']
-	# i=0
-	# while start<=dates['EndTS']:
-		# TimeSeriesTemplate.loc[i]=[start]
-		# start=start+durationTimeStep
-		# i=i+1
 	
 	# read genesys-mod timeseries and create plan4res timeseries
 	NumberScenarios=1+len(cfg['AdditionnalScenarios'])
@@ -1046,8 +1344,6 @@ if treatHourly:
 		for region in df.columns:
 			if not region=='HOUR':
 				timeseries = pd.DataFrame({'Timestamp [UTC]': TimeSeriesTemplate['Timestamp [UTC]'],'Base':df[region]*multfactor})
-				#timeseries=pd.DataFrame(TimeSeriesTemplate['Timestamp [UTC]'])
-				#timeseries['Base']=df[region]
 				for scenario in cfg['AdditionnalScenarios']:
 					if sheet in cfg['AdditionnalScenarios'][scenario]:
 						timeseries[scenario]=timeseries['Base']*cfg['AdditionnalScenarios'][scenario][sheet]
