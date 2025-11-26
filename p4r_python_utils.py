@@ -22,7 +22,7 @@ def log_and_exit(code, rep): # temporary code to store the return status in file
 def read_input_csv(cfg, file_name_key,input='inputpath', **kwargs):
 	file = os.path.join(cfg[input], cfg['csvfiles'][file_name_key])
 	if not os.path.isfile(file):
-		logger.error('File '+file+' does not exist. Use key ', input ,' in configuration file to specify input directory.')
+		logger.error(f'File {file} does not exist. Use key {input} in configuration file to specify input directory.')
 		log_and_exit(2, cfg['path'])
 	if 'csv_delim' in cfg.keys():
 		kwargs.update({'sep' : cfg['csv_delim']})
