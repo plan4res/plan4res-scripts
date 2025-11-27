@@ -2672,7 +2672,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if(cfg['PostTreat']['SpecificPeriods']['latex']): bodylatex_Det=bodylatex_Det+"\\chapter{Detailed Results on Scenario "+str(NumScen)+"}\n"
 		
 			
-			ScenIndex=str(scen)
+			ScenIndex=str(NumScen)
 			if 'FileNumScenPrefix' in cfg: ScenIndex=cfg['FileNumScenPrefix']+ScenIndex
 			if 'FileNumScenPostfix' in cfg: ScenIndex=ScenIndex+cfg['FileNumScenPostfix']			
 			
@@ -3369,4 +3369,5 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			myfile.close()
 
 log_and_exit(0, cfg['path'])
+
 
