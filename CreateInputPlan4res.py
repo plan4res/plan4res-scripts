@@ -222,6 +222,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 		iso=countries[0]['Countries'][k][countryname]['iso2']
 		iso2[iso]=countryname
 		listcountries.append(countryname)
+		for k2 in range(len(countries[0]['Countries'])):
+			countryname2=next(iter(countries[0]['Countries'][k2]))
+			iso_2=countries[0]['Countries'][k2][countryname2]['iso3']
+			iso3[iso+'>'+iso_2]=countryname+'>'+countryname2
+			iso_2=countries[0]['Countries'][k2][countryname2]['iso2']
+			iso2[iso+'>'+iso_2]=countryname+'>'+countryname2
 	dict_iso3=iso3.to_dict()
 	dict_iso2=iso2.to_dict()
 	rev_dict_iso3={v:k for k,v in dict_iso3.items()}
@@ -349,8 +355,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				scenario=scenget)
 						
 			# rename regions if necessary
-			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
-			if cfg['datagroups'][datagroup]['regions']['local']=='countries_ISO2':groupdf.rename(dict_iso2,inplace=True)
+			if cfg['datagroups'][datagroup]['regions']['rename']=='countries_ISO3':groupdf.rename(dict_iso3,inplace=True)
+			if cfg['datagroups'][datagroup]['regions']['rename']=='countries_ISO2':groupdf.rename(dict_iso2,inplace=True)
 
 			if cfg['datagroups'][datagroup]['subannual']:
 				if not ExistsSubAnnualData:
@@ -397,13 +403,15 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					if len(df['Subannual'].unique()==1): df=df.drop(['Subannual'],axis=1)
 				dfdatagroup=pyam.IamDataFrame(data=df)
 
-				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['local']:				
+				if 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:				
 					log_debug('renaming ISO3')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso3)
-				if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['local']:
+				if 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:
 					log_debug('renaming ISO2')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso2)
-				
+				if 'added' in cfg['datagroups'][datagroup]['regions']['rename']:
+					for reg in cfg['datagroups'][datagroup]['regions']['rename']['added']:
+						dfdatagroup=dfdatagroup.rename(region={reg:cfg['datagroups'][datagroup]['regions']['rename']['added'][reg]})
 				log_debug('change country names')
 				excluded_data = [d for d in dfdatagroup.region if d not in listRegGet]
 				if len(excluded_data)>0:
@@ -1267,11 +1275,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			for variable in vardict['Input']['VarSS']:
 				varname=vardict['Input']['VarSS'][variable]+oetechno
 				vardf=bigdata.filter(variable=varname,region=listregions).as_pandas(meta_cols=False)
-				if vardf.empty:
-					logger.warning(f'No input data for {varname} for regions '+', '.join(listregions))
-					query=input('Continue creation of plan4res input files? [y]/n\n')
-					if query!='n':
-						continue
+				vardf=vardf.set_index('region')
+				
 				data=vardf[['value']]
 				data=data.rename(columns={"value":variable})
 				
@@ -1287,16 +1292,16 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				SS=pd.concat([SS, data], axis=1)
 				if isGlobal: SS[variable]=Global
 				
-			
 			SS=SS.fillna(value=0.0)
 			# case when no maxvolume is provides
 			isMaxVolume=False
 			if 'MaxVolume' in SS.columns and not (SS==0).all()['MaxVolume']: 
 				isMaxVolume=True
 			multfactor = None
-			if 'VolumeRate' not in  SS.columns or SS['VolumeRate'].isna().any():
+			if 'Volume2CapacityRatio' in cfg['ParametersCreate'].keys():
+				multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+			if 'VolumeRate' not in SS.columns or SS['VolumeRate'].isna().any():
 				if 'Volume2CapacityRatio' in cfg['ParametersCreate'].keys():
-					multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 					logger.warning(f'Warning: no VolumeRate data for {oetechno}. Using value {multfactor} provided in setting file at ParametersCreate>Volume2CapacityRatio>{oetechno}.')
 				else:
 					logger.error(f'Error: no VolumeRate data for {oetechno}. Please provide a default value in setting file using ParametersCreate>Volume2CapacityRatio>{oetechno}.')
@@ -1504,12 +1509,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				isMaxPower=True
 			if 'MaxVolume' in STS.columns and not (STS==0).all()['MaxVolume']: 
 				isMaxVolume=True
-			
-			# case where Maximum Power is not in the data
-			if isMaxVolume != isMaxPower:
-				if 'Volume2CapacityRatio' not in cfg['ParametersCreate'].keys():
-					logger.error(f'Error: no VolumeRate data for {oetechno}. Please provide a default value in setting file using ParametersCreate>Volume2CapacityRatio>{oetechno}.')
-					log_and_exit(2, cfg['path'])
 						
 			if isMaxVolume and not isMaxPower: 
 				STS['MaxPower']=STS['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
@@ -1623,11 +1622,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					BAT.loc[ BAT['MaxVolume'] < cfg['ParametersCreate']['zerocapacity']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno], 'MaxVolume' ]=0
 
 			# case where Maximum Discharge/Charge is not in the data
-			if not isMaxPower: 
-				BAT['MaxPower']=BAT['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
-			# case where Maximum Storage is not in the data
-			if not isMaxVolume:
-				BAT['MaxVolume']=BAT['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+			if 'Volume2CapacityRatio' in cfg['ParametersCreate'] and oetechno in cfg['ParametersCreate']['Volume2CapacityRatio']:
+				if not isMaxPower: 				
+					BAT['MaxPower']=BAT['MaxVolume']/cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+				# case where Maximum Storage is not in the data
+				if not isMaxVolume:
+					BAT['MaxVolume']=BAT['MaxPower']*cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
 
 			BAT['MaxPower']=BAT['MaxPower']*BAT['AvailabilityRate']
 			
