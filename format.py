@@ -2510,8 +2510,10 @@ def createSDDPBlock(filename):
 	logger.info('Create StochasticBlocks')
 	indexSubBlock=0
 	for indexSSV in range(NumberSSVTimeSteps):
+		logger.debug(f'\tindexSSV = {indexSSV}')
 		# create subblocks
 		for subblock in range(numberSubBlocks):
+			logger.debug(f'\t\tsubblock = {subblock}')
 			# create a subblock at SSvTimestep indexSSV corresponding to scenarios ListScenariosPerSubBlock[indexSubBlocks]
 			StochasticBlocks=Block.createGroup("StochasticBlock_"+str(indexSubBlock))
 			StochasticBlocks.type="StochasticBlock"
