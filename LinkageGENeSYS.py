@@ -246,6 +246,9 @@ if treatFix:
 	scen = None
 	if 'Scenario' in cfg:
 		scen=cfg['Scenario']
+	else:
+		logger.error('Scenario is not defined in settingsLinkageGENeSYS.yml')
+		log_and_exit(1, cfg['path'])
 	for sheet in cfg['genesys_datafiles']['input']['Sheets']:
 		logger.info('  treat sheet '+sheet)
 		if not sheet in xls.sheet_names:
@@ -1083,7 +1086,11 @@ if treatFix:
 											print(map)
 											print(vardata.loc[row,'Value'])
 											print(vardata.loc[row,'Variable'])
-										vardata.loc[row,'Value']=vardata.loc[row,'Value']*map[cfg['variables'][var]['rules'][rulecat]['mapping']].loc[vardata.loc[row,'Variable'].replace(componentfrom,'')]
+										_map_key = vardata.loc[row,'Variable'].replace(componentfrom,'')
+										if _map_key in map[cfg['variables'][var]['rules'][rulecat]['mapping']].index:
+											vardata.loc[row,'Value']=vardata.loc[row,'Value']*map[cfg['variables'][var]['rules'][rulecat]['mapping']].loc[vardata.loc[row,'Variable'].replace(componentfrom,'')]
+										else:
+											logger.warning(f"Missing mapping key '{_map_key}' in '{map}'; Value left unchanged.")
 									vardata.loc[row,'Variable']=vardata.loc[row,'Variable'].replace(componentfrom,var)							
 					else:
 						for row in vardata.index:
@@ -1341,3 +1348,4 @@ if treatHourly:
 logger.info('Completed')
 
 log_and_exit(0, os.getcwd())
+
