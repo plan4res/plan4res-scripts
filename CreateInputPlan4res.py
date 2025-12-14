@@ -404,13 +404,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					if len(df['Subannual'].unique()==1): df=df.drop(['Subannual'],axis=1)
 				dfdatagroup=pyam.IamDataFrame(data=df)
 
-				if 'rename' in cfg['datagroups'][datagroup]['regions'] and 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:				
+				if 'regions' in cfg['datagroups'][datagroup] and 'rename' in cfg['datagroups'][datagroup]['regions'] and 'countries_ISO3' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:				
 					log_debug('renaming ISO3')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso3)
-				if 'rename' in cfg['datagroups'][datagroup]['regions'] and 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:
+				if 'regions' in cfg['datagroups'][datagroup] and 'rename' in cfg['datagroups'][datagroup]['regions'] and 'countries_ISO2' in cfg['datagroups'][datagroup]['regions']['rename']['dict']:
 					log_debug('renaming ISO2')
 					dfdatagroup=dfdatagroup.rename(region=dict_iso2)
-				if 'rename' in cfg['datagroups'][datagroup]['regions'] and 'added' in cfg['datagroups'][datagroup]['regions']['rename']:
+				if 'regions' in cfg['datagroups'][datagroup] and 'rename' in cfg['datagroups'][datagroup]['regions'] and 'added' in cfg['datagroups'][datagroup]['regions']['rename']:
 					for reg in cfg['datagroups'][datagroup]['regions']['rename']['added']:
 						dfdatagroup=dfdatagroup.rename(region={reg:cfg['datagroups'][datagroup]['regions']['rename']['added'][reg]})
 				log_debug('change country names')
@@ -2131,3 +2131,4 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			BigRES.to_csv(os.path.join(outputdir, cfg['csvfiles']['RES_RenewableUnits']), index=False)
 
 log_and_exit(0, cfg['path'])
+
