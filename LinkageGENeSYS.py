@@ -65,8 +65,10 @@ def check_required_inputs(cfg):
 def get_techno_power(data, for_storage=False):
 	elements = data['input_Sets']['Storage' if for_storage else 'Technology'].dropna()
 	technos_ouput_power = data['input_Par_OutputActivityRatio'].set_index('Technology')
+	technos_with_capacity = list(set(data['capacity']['Technology'].unique()))
 	technos_ouput_power = technos_ouput_power[(technos_ouput_power['Fuel']=='Power')&technos_ouput_power['Value'].abs()>0]
-	technos_is_power = technos_ouput_power.index.unique()
+	technos_with_capacity = set(data['capacity']['Technology'].unique())
+	technos_is_power = set(technos_ouput_power.index.unique()).intersection(technos_with_capacity)
 	if for_storage:
 		storage_techno = data.loc['input_Par_TechnologyFromStorage'].set_index('Storage').loc[elements, 'Technology'].unique()
 		technos_is_power = [data.loc['input_Par_TechnologyToStorage'].set_index('Technology').loc[t, 'Storage'].unique()[0] for t in storage_techno if t in technos_is_power] # we keep storage is associated  techno is outputting power
@@ -1337,4 +1339,5 @@ if treatHourly:
 				timeseries.to_csv(osp.join(cfg['timeseriespath'],nameserie),index=False)
 
 logger.info('Completed')
+
 log_and_exit(0, os.getcwd())
