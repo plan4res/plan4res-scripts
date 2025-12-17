@@ -65,7 +65,6 @@ def check_required_inputs(cfg):
 def get_techno_power(data, for_storage=False):
 	elements = data['input_Sets']['Storage' if for_storage else 'Technology'].dropna()
 	technos_ouput_power = data['input_Par_OutputActivityRatio'].set_index('Technology')
-	technos_with_capacity = list(set(data['capacity']['Technology'].unique()))
 	technos_ouput_power = technos_ouput_power[(technos_ouput_power['Fuel']=='Power')&technos_ouput_power['Value'].abs()>0]
 	technos_with_capacity = set(data['capacity']['Technology'].unique())
 	technos_is_power = set(technos_ouput_power.index.unique()).intersection(technos_with_capacity)
@@ -78,6 +77,7 @@ def interactive_check_if_set_is_in_mapping(sets, set_col_name, mappings, mapping
 	logger.info(f'\nCheck if elements in set {set_col_name} are in settings file mappings {mapping_name}.')
 	elements = sets[set_col_name].dropna()
 	technos_ouput_power = data['input_Par_OutputActivityRatio'].set_index('Technology')
+	technos_with_capacity = list(set(data['capacity']['Technology'].unique()))
 	technos_ouput_power = technos_ouput_power[(technos_ouput_power['Fuel']=='Power')&technos_ouput_power['Value'].abs()>0]
 	technos_is_power = get_techno_power(data, mapping_name=='storages')
 	technos_to_sector = data['input_Par_TagTechnologyToSector'].set_index('Technology')

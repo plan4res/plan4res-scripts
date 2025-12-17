@@ -17,6 +17,18 @@ from p4r_python_utils import *
 path = get_path()
 logger.info('path='+path)
 
+def parse_datetime_index(index, dayfirst=None):
+    import re
+    if len(index) == 0:
+        return pd.to_datetime(index, dayfirst=dayfirst)
+    sample_date = str(index[0])
+    iso_pattern = r'^\d{4}-\d{2}-\d{2}'
+    is_iso8601 = bool(re.match(iso_pattern, sample_date))
+    if is_iso8601:
+        return pd.to_datetime(index, format='ISO8601', errors='coerce')
+    else:
+        return pd.to_datetime(index, dayfirst=dayfirst)
+
 def has_value(val): 
 	return not (pd.isna(val) or str(val).strip() == "")
 
@@ -160,13 +172,13 @@ logger.info('Emissions constraints:'+', '.join(ListPollutants))
 
 # get dates
 dates=pd.Series()
-beginTS=pd.to_datetime(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
+beginTS=parse_datetime_index(cfg['Calendar']['BeginTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCBeginData']=pd.Timestamp(year=beginTS.year,month=beginTS.month,day=beginTS.day,hour=beginTS.hour,minute=beginTS.minute)
-beginDS=pd.to_datetime(cfg['Calendar']['BeginDataset'],dayfirst=cfg['Calendar']['dayfirst'])
+beginDS=parse_datetime_index(cfg['Calendar']['BeginDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCBegin']=pd.Timestamp(year=beginDS.year,month=beginDS.month,day=beginDS.day,hour=beginDS.hour,minute=beginDS.minute)
-endTS=pd.to_datetime(cfg['Calendar']['EndTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
+endTS=parse_datetime_index(cfg['Calendar']['EndTimeSeries'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEndData']=pd.Timestamp(year=endTS.year,month=endTS.month,day=endTS.day,hour=endTS.hour,minute=endTS.minute)
-endDS=pd.to_datetime(cfg['Calendar']['EndDataset'],dayfirst=cfg['Calendar']['dayfirst'])
+endDS=parse_datetime_index(cfg['Calendar']['EndDataset'],dayfirst=cfg['Calendar']['dayfirst'])
 dates['UCEnd']=pd.Timestamp(year=endDS.year,month=endDS.month,day=endDS.day,hour=endDS.hour,minute=endDS.minute)
 logger.info('dates: timeseries start: '+str(dates['UCBeginData'])+' end: '+str(dates['UCEndData']))
 logger.info('plan4res dataset start : '+str(dates['UCBegin'])+' end: '+str(dates['UCEnd']))
@@ -788,7 +800,7 @@ def read_deterministic_timeseries(IsDT):
 	if IsDT:
 		DeterministicTS=read_input_timeseries(cfg, cfg['ParametersFormat']['DeterministicTimeSeries'], skiprows=0,index_col=0)
 																												
-		DeterministicTS.index=pd.to_datetime(DeterministicTS.index,dayfirst=cfg['Calendar']['dayfirst'])
+		DeterministicTS.index=parse_datetime_index(DeterministicTS.index,dayfirst=cfg['Calendar']['dayfirst'])
 	
 		DeterministicTS=ExtendAndResample('DET',DeterministicTS)
 
@@ -797,7 +809,7 @@ def read_deterministic_timeseries(IsDT):
 		DeterministicTS['Zero']=0.0
 	else:
 		DeterministicTS=pd.DataFrame(index=datesData['start'])
-		DeterministicTS.index=pd.to_datetime(DeterministicTS.index)
+		DeterministicTS.index=parse_datetime_index(DeterministicTS.index)
 		DeterministicTS['One']=1.0
 		DeterministicTS['Zero']=0.0
 		DeterministicTS=ExtendAndResample('DET',DeterministicTS)
@@ -827,7 +839,7 @@ def create_demand_scenarios():
 				TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
 				if len(TS.columns)==1: isDeterministic=True # the serie is deterministic
 					
-				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+				TS.index=parse_datetime_index(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
 				if firstPart:
@@ -872,7 +884,7 @@ def create_inflows_scenarios():
 			for col in ListScenarios: InflowsScenarios.loc[reservoir][col]=(valTS/cfg['ParametersFormat']['NumberHoursInYear'])*DeterministicTimeSeries['One'] # valTS is an energy per year
 		elif '.csv' in nameTS:  # stochastic series
 			TS=read_input_timeseries(cfg, nameTS, index_col=0)
-			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+			TS.index=parse_datetime_index(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
 				InflowsScenarios[reservoir]=pd.DataFrame(index=TS.index,columns=TS.columns)
@@ -912,7 +924,7 @@ def create_res_scenarios():
 		# read timeserie 
 		if '.csv' in nameTS:  # stochastic series
 			TS=read_input_timeseries(cfg, nameTS, skiprows=0,index_col=0)
-			TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+			TS.index=parse_datetime_index(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 			TS=ExtendAndResample(nameTS,TS,isEnergy)
 			if len(TS.columns) > 1: # stochastic serie
 				ResScenarios[res]=pd.DataFrame(index=TS.index,columns=TS.columns)
@@ -949,7 +961,7 @@ def create_thermal_scenarios():
 				# read timeserie 
 				if '.csv' in nameTS:  # stochastic series
 					TS=read_input_timeseries(cfg, nameTS,skiprows=0,index_col=0)
-					TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+					TS.index=parse_datetime_index(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 					TS=ExtendAndResample(nameTS,TS,isEnergy)
 					
 					if len(TS.columns) > 1: # stochastic serie
@@ -969,7 +981,7 @@ def create_thermal_scenarios():
 			# read timeserie 
 			if '.csv' in nameTS:  # stochastic series
 				TS=read_input_timeseries(cfg,nameTS,skiprows=0,index_col=0)
-				TS.index=pd.to_datetime(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
+				TS.index=parse_datetime_index(TS.index,dayfirst=cfg['Calendar']['dayfirst'])
 				TS=ExtendAndResample(nameTS,TS)
 				
 				if len(TS.columns) > 1: # stochastic serie
@@ -1356,7 +1368,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 					if BVfile!='':
 						logger.info('Add Bellman values from file')
 						BVdata=read_input_timeseries(cfg,BVfile,'inputpath',index_col=0,skiprows=skip)
-						BVdata.index=pd.to_datetime(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
+						BVdata.index=parse_datetime_index(BVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 						# keep only data included in the period of the block
 						BVdata=BVdata[ (BVdata.index >=start) & (BVdata.index <=end)   ]
 						
@@ -1418,7 +1430,7 @@ def addHydroUnitBlocks(Block,indexUnitBlock,scenario,start,end,id):
 				WVdata['new_index'] = datesSSV['start'].iloc[WVdata.index].values
 				WVdata.set_index('new_index', inplace=True)
 								
-				WVdata.index=pd.to_datetime(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
+				WVdata.index=parse_datetime_index(WVdata.index,dayfirst=cfg['Calendar']['dayfirst'])
 				# keep only data included in the period of the block
 				WVdata=WVdata[ (WVdata.index >=start) & (WVdata.index <=end)   ]
 				# keep only the last date within this pediod
@@ -2362,7 +2374,6 @@ def createSDDPBlock(filename):
 	# a subblock can include more than 1 scenario ; there cannot be more subblocks than the number of scenarios
 	numberSubBlocks= 1
 	
-	
 	# compute list of scenarios per subblock
 	ListScenariosPerSubBlock=pd.Series( [[] for _ in range(numberSubBlocks)] )
 	MeanNumberScenariosPerSubBlock=len(ListScenarios) // numberSubBlocks
@@ -2413,7 +2424,6 @@ def createSDDPBlock(filename):
 	logger.info('fill scenarios')
 	Scenarios=Block.createVariable("Scenarios",np.double,("NumberScenarios","ScenarioSize"))
 	indexScenario=0
-	#for scenario in ListScenariosPerSubBlock.loc[subblock]:
 	for scenario in ListScenarios:
 		logger.info('scenario '+scenario)
 		ScenarioData=pd.Series(index=range( NumberSSVTimeSteps ),dtype=object)
@@ -2514,7 +2524,6 @@ def createSDDPBlock(filename):
 		# create subblocks
 		for subblock in range(numberSubBlocks):
 			logger.debug(f'\t\tsubblock = {subblock}')
-			# create a subblock at SSvTimestep indexSSV corresponding to scenarios ListScenariosPerSubBlock[indexSubBlocks]
 			StochasticBlocks=Block.createGroup("StochasticBlock_"+str(indexSubBlock))
 			StochasticBlocks.type="StochasticBlock"
 			StochasticBlocks.createDimension("NumberDataMappings",NumberDataMappings)

@@ -109,7 +109,9 @@ if isPrimary: partitionPrimary=cfg['CouplingConstraints']['PrimaryDemand']['Part
 if isSecondary: partitionSecondary=cfg['CouplingConstraints']['SecondaryDemand']['Partition']
 
 isInvest= cfg['ParametersCreate']['invest']
-
+if isInvest and 'CapacityExpansion' not in cfg['ParametersCreate']:
+	logger.warning(f'/!\ Cannot create investment dataset as subsection CapacityExpansion is missing in section ParametersCreate of settingsCreateInputPlan4res.yml')
+	log_and_exit(1, os.getcwd())
 
 def log_debug(msg):
 	if 'debug' in cfg['ParametersCreate']:
@@ -1339,6 +1341,9 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					SS=pd.concat([SS, data], axis=1)
 					if isGlobal: SS[variable]=Global
 							
+			if 'MaxPower' not in SS.columns:
+				SS['MaxPower']=0
+			SS = SS.drop(SS[SS.MaxPower < cfg['ParametersCreate']['reservoir']['minpowerMWh']].index)
 			if len(SS)>0:
 				# case when no maxvolume is provides
 				isMaxVolume=False
@@ -1347,7 +1352,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				else:
 					multfactor = None
 				if 'Volume2CapacityRatio' in cfg['ParametersCreate'].keys():
-					multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+					if oetechno in cfg['ParametersCreate']['Volume2CapacityRatio']:
+						multfactor=cfg['ParametersCreate']['Volume2CapacityRatio'][oetechno]
+					else:
+						logger.error(f'Error: no VolumeRate data for {oetechno}. Please provide a default value in setting file using ParametersCreate>Volume2CapacityRatio>{oetechno}.')
+						log_and_exit(2, cfg['path'])
 				if 'VolumeRate' not in SS.columns or SS['VolumeRate'].isna().any():
 					if 'Volume2CapacityRatio' in cfg['ParametersCreate'].keys():
 						logger.warning(f'Warning: no VolumeRate data for {oetechno}. Using value {multfactor} provided in setting file at ParametersCreate>Volume2CapacityRatio>{oetechno}.')
@@ -1364,7 +1373,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					logger.info('no Max Storage for '+oetechno+' replaced by MaxPower*VolumeRate')
 				
 				# replace low capacities with 0
-				SS.loc[ SS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
+				if 'MaxPower' in SS.columns:
+					SS.loc[ SS['MaxPower'] < cfg['ParametersCreate']['zerocapacity'], 'MaxPower' ]=0
 			
 				# include inflows profiles: include timeseries names from TimeSeries dictionnary
 				SS['InflowsProfile']=''
@@ -1397,7 +1407,11 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 									Rate=Rate/N
 								SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*Rate
 						elif (SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['ParametersCreate']['reservoir']['minpowerMWh']):
-							SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['ParametersCreate']['InitialFillingrate'][row]
+							if 'InitialFillingrate' in cfg['ParametersCreate'] and isinstance(cfg['ParametersCreate']['InitialFillingrate'],dict) and str(row) in cfg['ParametersCreate']['InitialFillingrate']:
+								SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['ParametersCreate']['InitialFillingrate'][row]
+							else:
+								logger.warning(f'Error: no InitialVolume data for {oetechno} {row}. Using 1.')
+								SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']
 					elif (SS.loc[row,'MaxVolume']>0 and SS.loc[row,'MaxPower']>cfg['ParametersCreate']['reservoir']['minpowerMWh']):
 						SS.loc[row,'InitialVolume']=SS.loc[row,'MaxVolume']*cfg['ParametersCreate']['InitialFillingrate'][row]
 							
@@ -1438,14 +1452,13 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				# create df for addedcapacity
 				AddedCapa=SS[SS.AddPumpedStorage >0]
 				
-			# remove rows where MaxVolume=0 or where MaxPower < minPowerMWh	
-			SS=SS.fillna(0)
-			RowsToDelete = SS[ SS['MaxPower'] == 0 ].index
-			SS=SS.drop(RowsToDelete)			
-			SS = SS.drop(SS[SS.MaxVolume == 0].index)
-			SS = SS.drop(SS[SS.AddPumpedStorage > 0].index)
-			SS = SS.drop(SS[SS.MaxPower < cfg['ParametersCreate']['reservoir']['minpowerMWh']].index)
-			
+				# remove rows where MaxVolume=0 or where MaxPower < minPowerMWh	
+				SS=SS.fillna(0)
+				RowsToDelete = SS[ SS['MaxPower'] == 0 ].index
+				SS=SS.drop(RowsToDelete)			
+				SS = SS.drop(SS[SS.MaxVolume == 0].index)
+				SS = SS.drop(SS[SS.AddPumpedStorage > 0].index)
+				SS = SS.drop(SS[SS.MaxPower < cfg['ParametersCreate']['reservoir']['minpowerMWh']].index)
 			# if SS is empty (=no seasonal storage) and requested in settings=> add a fake seasonal storage
 			if len(SS)==0 and 'reservoir' in cfg['ParametersCreate'] and 'fakeunit' in cfg['ParametersCreate']['reservoir']:
 				logger.info('Adding fictive reservoir')
@@ -1461,10 +1474,12 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 					maxvolfake=cfg['ParametersCreate']['reservoir']['fakeunit']['MaxVolume']
 				else:
 					maxvolfake=100
-				FakeSS=pd.DataFrame(index=[fakereg],columns=['Maxpower,MaxVolume','NumberUnits','InflowsProfile'],data=[[maxpowerfake,maxvolumsfake,1,""]])
+				FakeSS=pd.DataFrame(
+					columns=['Name','Zone','MaxPower','MaxVolume','NumberUnits','InflowsProfile','HydroSystem','MinPower','MinVolume','InitialVolume','TurbineEfficiency','PumpingEfficiency','AddPumpedStorage'],
+					data=[[oetechno,regfake,maxpowerfake,maxvolfake,1,"",0,0,0,0,0,0,0]])
 				SS=pd.concat([SS,FakeSS],axis=0)
 			
-			SS=SS.fillna(value=0.0)			
+			SS=SS.fillna(value=0)			
 			BigSS=pd.concat([BigSS,SS])
 		
 		listSS=BigSS.columns.tolist()
@@ -1489,6 +1504,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 			BigSS=BigSS[ BigSS['Zone'].isin(cfg['partition'][partitionDemand]) ]
 		if BigSS.empty:
 			BigSS=pd.DataFrame(columns=['Name','Zone'])
+		BigSS['HydroSystem'] = BigSS['HydroSystem'].astype(int)
+		BigSS['NumberUnits'] = BigSS['NumberUnits'].astype(int)
 		BigSS.to_csv(os.path.join(outputdir, cfg['csvfiles']['SS_SeasonalStorage']), index=False)
 
 	# filling sheet STS_ShortTermStorage

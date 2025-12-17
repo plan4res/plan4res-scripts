@@ -586,7 +586,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for asset in listInvestedAssets:
 			techno=asset[1]
 			region=asset[0]
-			#invest_factor_by_asset[(region, techno)] = sol[0].loc[indexSol]
 			if LoopCem:
 				if ( (region in InstalledCapacityLastLoopCem.index) and (techno in InstalledCapacityLastLoopCem.columns) ):
 					added=InstalledCapacityLastLoopCem[techno].loc[region]*sol[0].loc[indexSol]-InstalledCapacityLastLoopCem[techno].loc[region]
@@ -614,7 +613,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		InvestedCapacity=InvestedCapacity.fillna(0.0)
 		for line in listLinesInDataset:
 			if IsInvestedLine.loc[line]:
-				#invest_factor_by_asset[line] = sol[0].loc[indexSol]
 				
 				if LoopCem:
 					if line in LineCapacityLastLoopCem.index:
@@ -785,7 +783,6 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	for i in range(listscen[0],listscen[0]+len(listscen)): 
 		ScenarioIndex=ScenarioIndex+[i]
 		
-	#FailureCost=cfg['CouplingConstraints']['ActivePowerDemand']['Cost']
 	
 	if cfg['map']:
 		####################################################################################################
@@ -1326,7 +1323,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		l1=Serie.plot(kind='line',ax=axes,legend=False)
 		axes.legend()
 		axes.set_ylabel(ylabel)
-		axes.set_ylim([Y_min,MaxCmar+Y_max])
+		axes.set_ylim([Y_min,Y_max])
 		axes.set_title(title,fontsize=12)			
 		plt.tight_layout()
 		plt.savefig(cfg['dirIMG']+namefigpng)
@@ -2890,7 +2887,10 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 								SMSAggrPowerCountry[techno]=SMSAggrPowerCountry[techno].abs()
 							if techno in cfg['pump']:
 								SMSAggrPowerCountry[techno]=-1*SMSAggrPowerCountry[techno].abs()
-						
+					
+					namefigpng='Scenario_'+str(NumScen)+'_StackedActivePower_'+country+'.jpeg'					
+					P4Rtitle=country
+					StackedGraph(SMSAggrPowerCountry,SMSDemand[country],P4Rtitle,'Demand',CountryColors,CountryTechnos, namefigpng)
 
 					if 'periods' in cfg['PostTreat']['SpecificPeriods']:
 					################################################################################################
@@ -2957,9 +2957,8 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					namefigpng='Scenario_'+str(NumScen)+'_MarginalCostDemand_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
 					logger.info('        for Active Power')
 					# graphs for demand marginal costs
-					MaxCmar=SMSCMarAPD[ (SMSCMarAPD<cfg['marginalcostlimits']['max']) & (SMSCMarAPD>cfg['marginalcostlimits']['min']) ].max().iloc[0]	
-					MinCmar=SMSCMarAPD[ (SMSCMarAPD<cfg['marginalcostlimits']['max']) & (SMSCMarAPD>cfg['marginalcostlimits']['min']) ].min().iloc[0]
-
+					MaxCmar=np.nan_to_num(SMSCMarAPD[ (SMSCMarAPD<=cfg['marginalcostlimits']['max']) & (SMSCMarAPD>=cfg['marginalcostlimits']['min']) ].max().iloc[0], nan=cfg['marginalcostlimits']['max'])	
+					MinCmar=np.nan_to_num(SMSCMarAPD[ (SMSCMarAPD<=cfg['marginalcostlimits']['max']) & (SMSCMarAPD>=cfg['marginalcostlimits']['min']) ].min().iloc[0], nan=cfg['marginalcostlimits']['min'])
 					title='Demand Marginal Cost ' + country  
 					Curve(SMSCMarAPD[country],MinCmar,MaxCmar,title,'Marginal Cost Euro/MWh',namefigpng)
 					
