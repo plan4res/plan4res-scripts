@@ -1328,14 +1328,16 @@ if treatHourly:
 		logger.info('  sheet '+sheetname)
 		df=pd.read_excel(osp.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['timeseries']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
 		df=df.reset_index()
-		if sheetname in cfg['TimeSeriesFactor']:
-			multfactor=(1/cfg['TimeSeriesFactor'][sheetname])
-		else:
-			multfactor=1.0
-		logger.info('  sheetname '+str(sheetname)+' mult '+str(multfactor)) 
 		# create plan4res time series related to variable sheetname
 		for region in df.columns:
 			if not region=='HOUR':
+				if sheetname in cfg['TimeSeriesFactor']:
+					if isinstance(cfg['TimeSeriesFactor'][sheetname], str) and cfg['TimeSeriesFactor'][sheetname].lower() == 'normalize':
+						multfactor = 1/df[region].sum()
+					else:
+						multfactor = cfg['TimeSeriesFactor'][sheetname]
+				else:
+					multfactor=1.0
 				timeseries = pd.DataFrame({'Timestamp [UTC]': TimeSeriesTemplate['Timestamp [UTC]'],'Base':df[region]*multfactor})
 				for scenario in cfg['AdditionnalScenarios']:
 					if sheet in cfg['AdditionnalScenarios'][scenario]:
