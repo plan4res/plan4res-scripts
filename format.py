@@ -2292,7 +2292,6 @@ def createUCBlock(filename,id,scenario,start,end):
 					if data[1]=='HSSS':
 						for i in range(NbUnits):
 							PollutantRhoData=np.append(PollutantRhoData,0.0)
-							PollutantRhoData=np.append(PollutantRhoData,0.0)
 					elif p in data[0].columns:
 						pollutantrho=data[0][p][unit]
 						for i in range(NbUnits):
@@ -3043,3 +3042,4 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 log_and_exit(0, cfg['path'])
+
