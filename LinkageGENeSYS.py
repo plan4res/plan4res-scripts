@@ -1318,8 +1318,10 @@ if treatHourly:
 	TimeSeriesTemplate=pd.read_csv(osp.join(cfg['timeseriespath'],'Example.csv'))
 	
 	# read genesys-mod timeseries and create plan4res timeseries
-	NumberScenarios=1+len(cfg['AdditionnalScenarios'])
-	AddScenarios=[elem for elem in cfg['AdditionnalScenarios']]
+	if 'AdditionalScenarios' not in cfg.keys():
+		cfg['AdditionalScenarios'] = list()
+	NumberScenarios=1+len(cfg['AdditionalScenarios'])
+	AddScenarios=[elem for elem in cfg['AdditionalScenarios']]
 	Scenarios=['Base']+AddScenarios
 	logger.info('Scenarios:')
 	logger.info(Scenarios) 
@@ -1339,9 +1341,9 @@ if treatHourly:
 				else:
 					multfactor=1.0
 				timeseries = pd.DataFrame({'Timestamp [UTC]': TimeSeriesTemplate['Timestamp [UTC]'],'Base':df[region]*multfactor})
-				for scenario in cfg['AdditionnalScenarios']:
-					if sheet in cfg['AdditionnalScenarios'][scenario]:
-						timeseries[scenario]=timeseries['Base']*cfg['AdditionnalScenarios'][scenario][sheet]
+				for scenario in cfg['AdditionalScenarios']:
+					if sheet in cfg['AdditionalScenarios'][scenario]:
+						timeseries[scenario]=timeseries['Base']*cfg['AdditionalScenarios'][scenario][sheet]
 					else:
 						timeseries[scenario]=timeseries['Base']
 				nameserie=sheetname+'_'+region+'.csv'
