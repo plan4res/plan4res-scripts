@@ -1209,26 +1209,27 @@ if treatFix:
 		print(out['Variable'].unique())
 	out=out[ colsKeep ]
 	
-	# change country names from iso2 to real names
-	with open(osp.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
-		countries=yaml.safe_load(nutsreg)
-	iso2_to_country = {}
-	for country in countries[0]['Countries']:
-		for country_name, details in country.items():
-			iso2_to_country[details['iso2']] = country_name
-			if 'iso2_alt' in details:
-				iso2_to_country[details['iso2_alt']] = country_name
-	for reg in cfg['Add_Map_Region']:
-		iso2_to_country[reg]=cfg['Add_Map_Region'][reg]
-	iso2_to_country2={}
-	for reg1 in iso2_to_country:
-		for reg2 in iso2_to_country:
-			iso2_to_country2[reg1+'>'+reg2]=iso2_to_country[reg1]+'>'+iso2_to_country[reg2]
-			iso2_to_country2[reg2+'>'+reg1]=iso2_to_country[reg2]+'>'+iso2_to_country[reg1]
-	iso2_to_country={**iso2_to_country, **iso2_to_country2}
-	
-	out['Region'] = out['Region'].map(lambda _ : _ if _ not in iso2_to_country.keys() else _)
-	out.to_csv(cfg['outputpath']+cfg['outputfile'],index=False)	
+	if "Map_Region" in cfg and cfg["Map_Region"]:
+		# change country names from iso2 to real names
+		with open(osp.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
+			countries=yaml.safe_load(nutsreg)
+		iso2_to_country = {}
+		for country in countries[0]['Countries']:
+			for country_name, details in country.items():
+				iso2_to_country[details['iso2']] = country_name
+				if 'iso2_alt' in details:
+					iso2_to_country[details['iso2_alt']] = country_name
+		for reg in cfg['Add_Map_Region']:
+			iso2_to_country[reg]=cfg['Add_Map_Region'][reg]
+		iso2_to_country2={}
+		for reg1 in iso2_to_country:
+			for reg2 in iso2_to_country:
+				iso2_to_country2[reg1+'>'+reg2]=iso2_to_country[reg1]+'>'+iso2_to_country[reg2]
+				iso2_to_country2[reg2+'>'+reg1]=iso2_to_country[reg2]+'>'+iso2_to_country[reg1]
+		iso2_to_country={**iso2_to_country, **iso2_to_country2}
+		
+		out['Region'] = out['Region'].map(lambda _ : iso2_to_country.get(_,_))
+		out.to_csv(cfg['outputpath']+cfg['outputfile'],index=False)	
 
 	# check for duplicated and output synthesis of data
 	logger.info('scenarios in data '+', '.join([str(_) for _ in out['Scenario'].unique()]))
