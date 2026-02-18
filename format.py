@@ -86,9 +86,11 @@ if 'RecomputeCSV' in cfg['ParametersFormat']:
 		if os.path.isfile(cfg['resultspath']+'Solution_OUT.csv'):
 			CreateDataPostInvest=True
 		logger.info('CreateDataPostInvest:'+str(CreateDataPostInvest))
-
 		
-if 'timeseriespath' not in cfg: cfg['timeseriespath']=os.path.join(cfg['path'],'TimeSeries/')
+if 'timeseriespath' in cfg: 
+	cfg['timeseriespath']=os.path.join(path,'data', cfg['timeseriespath']+'/')
+else: 
+	cfg['timeseriespath']=os.path.join(cfg['path'],'TimeSeries/')
 
 number_threads=1
 if nbargs>4:
@@ -3042,4 +3044,5 @@ elif cfg['FormatMode']=='INVESTandSDDPandUC':
 		createUCBlock(cfg['outputpath']+'Block_'+str(i)+'.nc4',i,ListScenarios[0],datesSSV.loc[i]['start'],datesSSV.loc[i]['end'])
 
 log_and_exit(0, cfg['path'])
+
 
