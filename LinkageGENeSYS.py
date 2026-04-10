@@ -482,7 +482,7 @@ if treatFix:
 						logger.warning(non_mapped_values)
 						logger.warning("############")
 				elif 'columns' in cfg['variables'][var]['rules'][rulecat]:
-					vardata=vardata[ vardata[colmaps[0]].isin(list(fullmapping.index[0])) ]				
+					vardata=vardata[ vardata[colmaps[0]].isin(list(fullmapping.index.levels[0])) ]				
 				if debug: 
 					print('\n in select andmap after  mapping')
 					print(vardata.columns)
