@@ -114,6 +114,10 @@ cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
 cfg['pythonDir']=os.path.join(p4rpath,'scripts/python/plan4res-scripts/settings/')
 logger.info('results in:'+cfg['dir'])
 logger.info('dataset in:'+cfg['inputpath'])
+
+if 'ReservoirName' not in cfg:
+	cfg['ReservoirName']='Reservoir'
+
 # define latex functions
 ############################
 isLatex=cfg['PostTreat']['Volume']['latex']+cfg['PostTreat']['Flows']['latex']\
@@ -721,7 +725,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if os.path.isfile(os.path.join(cfg['dirSto'], cfg['PostTreat']['Volume']['Dir'], 'Volume'+ScenIndex+'.csv')):
 		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+ScenIndex+'.csv',index_col=0)
 		for elem in df.columns:
-			if 'Reservoir' in elem:
+			if cfg['ReservoirName'] in elem:
 				cfg['ReservoirRegions'].append(elem.split('_')[1])
 	
 	for region in cfg['ReservoirRegions']:
