@@ -311,7 +311,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for region in list_regions:
 			filtre = (InputData['Type'] == 'CostActivePowerDemand') & (InputData['Zone'] == region)
 			if not InputData[filtre].empty:
-				InputVarCost.loc['SlackUnit',region] = InputData.loc[filtre, 'value'].iloc[0]
+				InputVarCost.loc[region,'SlackUnit'] = InputData.loc[filtre, 'value'].iloc[0]
 
 	# seasonal storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['SS_SeasonalStorage'])):
@@ -1829,7 +1829,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
 			   
 			SlackCmarReg.columns=listscen
-			if not(InputVarCost.loc['SlackUnit',reg] in SlackCmarReg.index): 
+			if not(InputVarCost.loc[reg,'SlackUnit'] in SlackCmarReg.index): 
 				logger.info('       no non-served energy for zone '+reg)
 				nbHoursSlack.loc[reg]=0
 			else:
