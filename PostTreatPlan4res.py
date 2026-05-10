@@ -1488,7 +1488,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if scen==listscen[0]:
 				reservoirs=[]
 				for col in df.columns:
-					if 'Reservoir' in col:
+					if cfg['ReservoirName'] in col:
 						reg=col.split('_')[1]
 						reservoirs.append(reg)
 			newreservoirs=[]
@@ -3066,7 +3066,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 					if cfg['PostTreat']['SpecificPeriods']['latex']:				
 						for hydrotech in cfg['graphVolumes']:
 							namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
-							if (hydrotech == 'Reservoir' and country in cfg['ReservoirRegions']) or (not hydrotech == 'Reservoir'):
+							if (hydrotech == cfg['ReservoirName'] and country in cfg['ReservoirRegions']) or (not hydrotech == cfg['ReservoirName']):
 								bodylatex_Det=bodylatex_Det+"\\subsubsection{"+cfg['graphVolumes'][hydrotech]['Name']+ \
 									" Storages}\n"+figure(cfg['dirIMGLatex']+namefigpng,hydrotech+' storage level in '+country+' (MWh)',namefigpng)
 						
