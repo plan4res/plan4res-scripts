@@ -3028,40 +3028,41 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 									fig, axes = plt.subplots(figsize=(10,3*nbrows),nrows=nbrows, ncols=nbcols)
 								x=0
 								y=0
-								for tech in cfg['graphVolumes'][hydrotech]['Technos']:
-									Cols=[elem for elem in SMSVolCountry if tech in elem]
-									SMSVolCountryHydroTech=SMSVolCountry[ Cols ]
-									if len(Cols)>0:
-										MaxVol=SMSVolCountryHydroTech.max().iloc[0]
-										MinVol=SMSVolCountryHydroTech.min().iloc[0]
-										if nbcols==1 and nbrows==1:
-											axes.plot(SMSVolCountryHydroTech)
-											axes.set_title('Storage '+tech,fontsize=20)
-											axes.set_xticklabels([])
-											axes.set_yticklabels([])
-											axes.set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-										elif nbcols==1 or nbrows==1:
-											axes[x].plot(SMSVolCountryHydroTech)
-											axes[x].set_title('Storage '+tech,fontsize=20)
-											axes[x].set_xticklabels([])
-											axes[x].set_yticklabels([])
-											axes[x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-											x=x+1
-										else:
-											axes[y][x].plot(SMSVolCountryHydroTech)
-											axes[y][x].set_title('Storage '+tech,fontsize=20)
-											axes[y][x].set_xticklabels([])
-											axes[y][x].set_yticklabels([])
-											axes[y][x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-											if x<nbcols-1: x=x+1
+								if nbtechs>0:
+									for tech in cfg['graphVolumes'][hydrotech]['Technos']:
+										Cols=[elem for elem in SMSVolCountry if tech in elem]
+										SMSVolCountryHydroTech=SMSVolCountry[ Cols ]
+										if len(Cols)>0:
+											MaxVol=SMSVolCountryHydroTech.max().iloc[0]
+											MinVol=SMSVolCountryHydroTech.min().iloc[0]
+											if nbcols==1 and nbrows==1:
+												axes.plot(SMSVolCountryHydroTech)
+												axes.set_title('Storage '+tech,fontsize=20)
+												axes.set_xticklabels([])
+												axes.set_yticklabels([])
+												axes.set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+											elif nbcols==1 or nbrows==1:
+												axes[x].plot(SMSVolCountryHydroTech)
+												axes[x].set_title('Storage '+tech,fontsize=20)
+												axes[x].set_xticklabels([])
+												axes[x].set_yticklabels([])
+												axes[x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+												x=x+1
 											else:
-												x=0
-												y=y+1
-									
-								fig.tight_layout()
-								namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
-								plt.savefig(cfg['dirIMG']+namefigpng)
-								plt.close()
+												axes[y][x].plot(SMSVolCountryHydroTech)
+												axes[y][x].set_title('Storage '+tech,fontsize=20)
+												axes[y][x].set_xticklabels([])
+												axes[y][x].set_yticklabels([])
+												axes[y][x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+												if x<nbcols-1: x=x+1
+												else:
+													x=0
+													y=y+1
+										
+									fig.tight_layout()
+									namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
+									plt.savefig(cfg['dirIMG']+namefigpng)
+									plt.close()
 								
 					if cfg['PostTreat']['SpecificPeriods']['latex']:				
 						for hydrotech in cfg['graphVolumes']:
