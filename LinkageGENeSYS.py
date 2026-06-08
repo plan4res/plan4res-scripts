@@ -257,6 +257,7 @@ if treatFix:
 			query_input('InteractiveMode' in cfg and cfg['InteractiveMode'])
 			continue
 		df=pd.read_excel(xls,sheet_name=sheet)
+		df=df[[c for c in df.columns if not c.startswith('Unnamed')]]
 		if pd.isna(data['input_'+sheet]):
 			data['input_'+sheet]=df
 		else:
@@ -1143,9 +1144,9 @@ if treatFix:
 
 		if not vardata.empty:
 			vardata=vardata[ vardata['Scenario']==cfg['Scenario'] ]
-            if debug:
-                print('after slicing scenario')
-                print(vardata)
+			if debug:
+				print('after slicing scenario')
+				print(vardata)
 			if 'Year' not in vardata.columns:
 				print('duplicating data on all years') 
 				firstYear=True
@@ -1334,6 +1335,8 @@ if treatHourly:
 		sheetname=cfg['genesys_datafiles']['timeseries']['sheets'][sheet]
 		logger.info('  sheet '+sheetname)
 		df=pd.read_excel(osp.join(cfg['genesys_inputpath'],cfg['genesys_datafiles']['timeseries']['xlsx']),sheet_name=sheetname,index_col=0).fillna(0)
+		df=df[[c for c in df.columns if not c.startswith('Unnamed')]]
+		df=df.loc[df.index.dropna()]
 		df=df.reset_index()
 		# create plan4res time series related to variable sheetname
 		for region in df.columns:
