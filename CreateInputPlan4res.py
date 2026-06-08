@@ -1101,7 +1101,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						TreatVar=False
 					
 				if TreatVar:
-					log_debug('variable '+varname + ' is in dataset')
+					log_debug('variable '+varname + ' is in dataset - variable = '+variable)
 					
 					isGlobal=False
 					Global=0
@@ -1129,7 +1129,6 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 							log_debug('variable '+variable+' '+varname+' is global for region '+globalvars[vardict['Input']['VarTU'][variable]+fuel]+' fuel '+fuel)
 							isGlobal=True
 							Global=dataTU[globalvars[vardict['Input']['VarTU'][variable]+fuel] ]
-					
 					if isGlobal:
 						new_dataTU=pd.Series(index=TU.index,name=dataTU.name)
 						for reg in TU.index:
@@ -1775,7 +1774,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 						BAT['InvestmentCost']=BAT['CapitalCost']
 					if 'AnnualFixedCost' in BAT.columns:
 						BAT['InvestmentCost']=BAT['InvestmentCost']+BAT['AnnualFixedCost']
-					
+                        
 				# case with investment
 				if isInvest and 'battery' in cfg['ParametersCreate']['CapacityExpansion']:
 					if 'InvestmentCost' not in BAT.columns: # if no investment cost given use value from config file	
@@ -1820,7 +1819,7 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				BAT['Zone']=BAT.index
 				BAT['NumberUnits']=1	
 				BAT['Inflows']=0	
-									
+                
 				# case where Maximum Charge is not in the data
 				if 'MinPower' not in BAT.columns or ('MinPower'  in BAT.columns and (BAT==0).all()['MinPower']): 
 					BAT['MinPower']=-1*BAT['MaxPower']
@@ -1837,7 +1836,8 @@ for current_scenario, current_year, current_option in product(cfg['scenarios'],c
 				BAT['MaxPowerCoef']=1.0
 				
 				RowsToDelete=[]
-				RowsToDelete = BAT[ BAT['MaxPower'] == 0 ].index
+				if not isInvest:
+					RowsToDelete = BAT[ BAT['MaxPower'] == 0 ].index
 				#if isMaxVolume: RowsToDelete = BAT[ BAT['MaxVolume'] == 0 ].index
 				# Delete row with 0 capacity
 				BAT=BAT.drop(RowsToDelete)
