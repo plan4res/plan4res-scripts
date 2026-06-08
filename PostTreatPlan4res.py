@@ -114,6 +114,10 @@ cfg['BeginDataset']=cfg['Calendar']['BeginDataset']
 cfg['pythonDir']=os.path.join(p4rpath,'scripts/python/plan4res-scripts/settings/')
 logger.info('results in:'+cfg['dir'])
 logger.info('dataset in:'+cfg['inputpath'])
+
+if 'ReservoirName' not in cfg:
+	cfg['ReservoirName']='Reservoir'
+
 # define latex functions
 ############################
 isLatex=cfg['PostTreat']['Volume']['latex']+cfg['PostTreat']['Flows']['latex']\
@@ -311,7 +315,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 		for region in list_regions:
 			filtre = (InputData['Type'] == 'CostActivePowerDemand') & (InputData['Zone'] == region)
 			if not InputData[filtre].empty:
-				InputVarCost.loc['SlackUnit',region] = InputData.loc[filtre, 'value'].iloc[0]
+				InputVarCost.loc[region,'SlackUnit'] = InputData.loc[filtre, 'value'].iloc[0]
 
 	# seasonal storage mix
 	if os.path.isfile(os.path.join(cfg['inputpath'], cfg['csvfiles']['SS_SeasonalStorage'])):
@@ -721,7 +725,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 	if os.path.isfile(os.path.join(cfg['dirSto'], cfg['PostTreat']['Volume']['Dir'], 'Volume'+ScenIndex+'.csv')):
 		df=pd.read_csv(cfg['dirSto']+cfg['PostTreat']['Volume']['Dir']+'Volume'+ScenIndex+'.csv',index_col=0)
 		for elem in df.columns:
-			if 'Reservoir' in elem:
+			if cfg['ReservoirName'] in elem:
 				cfg['ReservoirRegions'].append(elem.split('_')[1])
 	
 	for region in cfg['ReservoirRegions']:
@@ -1484,7 +1488,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			if scen==listscen[0]:
 				reservoirs=[]
 				for col in df.columns:
-					if 'Reservoir' in col:
+					if cfg['ReservoirName'] in col:
 						reg=col.split('_')[1]
 						reservoirs.append(reg)
 			newreservoirs=[]
@@ -1829,7 +1833,7 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 			SlackCmarReg=(MargCosts[index].value_counts().sort_index()).tail(1).fillna(0.0)
 			   
 			SlackCmarReg.columns=listscen
-			if not(InputVarCost.loc['SlackUnit',reg] in SlackCmarReg.index): 
+			if not(InputVarCost.loc[reg,'SlackUnit'] in SlackCmarReg.index): 
 				logger.info('       no non-served energy for zone '+reg)
 				nbHoursSlack.loc[reg]=0
 			else:
@@ -3024,45 +3028,46 @@ for variant,option,year in product(cfg['variants'],cfg['option'],cfg['years']):
 									fig, axes = plt.subplots(figsize=(10,3*nbrows),nrows=nbrows, ncols=nbcols)
 								x=0
 								y=0
-								for tech in cfg['graphVolumes'][hydrotech]['Technos']:
-									Cols=[elem for elem in SMSVolCountry if tech in elem]
-									SMSVolCountryHydroTech=SMSVolCountry[ Cols ]
-									if len(Cols)>0:
-										MaxVol=SMSVolCountryHydroTech.max().iloc[0]
-										MinVol=SMSVolCountryHydroTech.min().iloc[0]
-										if nbcols==1 and nbrows==1:
-											axes.plot(SMSVolCountryHydroTech)
-											axes.set_title('Storage '+tech,fontsize=20)
-											axes.set_xticklabels([])
-											axes.set_yticklabels([])
-											axes.set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-										elif nbcols==1 or nbrows==1:
-											axes[x].plot(SMSVolCountryHydroTech)
-											axes[x].set_title('Storage '+tech,fontsize=20)
-											axes[x].set_xticklabels([])
-											axes[x].set_yticklabels([])
-											axes[x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-											x=x+1
-										else:
-											axes[y][x].plot(SMSVolCountryHydroTech)
-											axes[y][x].set_title('Storage '+tech,fontsize=20)
-											axes[y][x].set_xticklabels([])
-											axes[y][x].set_yticklabels([])
-											axes[y][x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
-											if x<nbcols-1: x=x+1
+								if nbtechs>0:
+									for tech in cfg['graphVolumes'][hydrotech]['Technos']:
+										Cols=[elem for elem in SMSVolCountry if tech in elem]
+										SMSVolCountryHydroTech=SMSVolCountry[ Cols ]
+										if len(Cols)>0:
+											MaxVol=SMSVolCountryHydroTech.max().iloc[0]
+											MinVol=SMSVolCountryHydroTech.min().iloc[0]
+											if nbcols==1 and nbrows==1:
+												axes.plot(SMSVolCountryHydroTech)
+												axes.set_title('Storage '+tech,fontsize=20)
+												axes.set_xticklabels([])
+												axes.set_yticklabels([])
+												axes.set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+											elif nbcols==1 or nbrows==1:
+												axes[x].plot(SMSVolCountryHydroTech)
+												axes[x].set_title('Storage '+tech,fontsize=20)
+												axes[x].set_xticklabels([])
+												axes[x].set_yticklabels([])
+												axes[x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+												x=x+1
 											else:
-												x=0
-												y=y+1
-									
-								fig.tight_layout()
-								namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
-								plt.savefig(cfg['dirIMG']+namefigpng)
-								plt.close()
+												axes[y][x].plot(SMSVolCountryHydroTech)
+												axes[y][x].set_title('Storage '+tech,fontsize=20)
+												axes[y][x].set_xticklabels([])
+												axes[y][x].set_yticklabels([])
+												axes[y][x].set_ylim([MinVol-0.1*MinVol,MaxVol+0.1*MaxVol])
+												if x<nbcols-1: x=x+1
+												else:
+													x=0
+													y=y+1
+										
+									fig.tight_layout()
+									namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
+									plt.savefig(cfg['dirIMG']+namefigpng)
+									plt.close()
 								
 					if cfg['PostTreat']['SpecificPeriods']['latex']:				
 						for hydrotech in cfg['graphVolumes']:
 							namefigpng='Scenario_'+str(NumScen)+'_Volume_'+hydrotech+'_'+country+start_week.strftime('%Y-%m-%d')+'.jpeg'
-							if (hydrotech == 'Reservoir' and country in cfg['ReservoirRegions']) or (not hydrotech == 'Reservoir'):
+							if (hydrotech == cfg['ReservoirName'] and country in cfg['ReservoirRegions']) or (not hydrotech == cfg['ReservoirName']):
 								bodylatex_Det=bodylatex_Det+"\\subsubsection{"+cfg['graphVolumes'][hydrotech]['Name']+ \
 									" Storages}\n"+figure(cfg['dirIMGLatex']+namefigpng,hydrotech+' storage level in '+country+' (MWh)',namefigpng)
 						

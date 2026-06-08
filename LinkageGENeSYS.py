@@ -1212,7 +1212,7 @@ if treatFix:
 		print(out['Variable'].unique())
 	out=out[ colsKeep ]
 	
-	if "Map_Region" in cfg and cfg["Map_Region"]:
+	if "Add_Map_Region" in cfg and cfg["Add_Map_Region"]:
 		# change country names from iso2 to real names
 		with open(osp.join(cfg['nomenclatureDir'], "region/countries.yaml"),"r",encoding='UTF-8') as nutsreg:
 			countries=yaml.safe_load(nutsreg)
